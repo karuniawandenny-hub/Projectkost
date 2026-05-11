@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { hashPassword, normalizeEmail, isValidEmail } from "@/lib/password";
+import { createSession } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
-import { generateOtp, hashOtp, sendOtp } from "@/lib/otp";
-import { setDevOtpHint } from "@/lib/devOtpCookie";
+import type { Role } from "@/lib/enums";
 
 export type RegisterState = { error?: string };
 
@@ -13,42 +14,53 @@ export async function registerAction(
   formData: FormData
 ): Promise<RegisterState> {
   const name = String(formData.get("name") ?? "").trim();
-  const phoneRaw = String(formData.get("phone") ?? "");
+  const emailRaw = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
   const role = String(formData.get("role") ?? "");
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
 
   if (name.length < 2) return { error: "Nama wajib diisi (min 2 karakter)." };
   if (role !== "OWNER" && role !== "TENANT") {
     return { error: "Pilih peran terlebih dahulu." };
   }
-  const phone = normalizePhone(phoneRaw);
-  if (!phone) return { error: "Nomor HP tidak valid." };
 
-  const existing = await prisma.user.findUnique({ where: { phone } });
-  if (existing) {
-    return { error: "Nomor HP sudah terdaftar. Silakan masuk." };
+  const email = normalizeEmail(emailRaw);
+  if (!isValidEmail(email)) return { error: "Email tidak valid." };
+  if (password.length < 8) {
+    return { error: "Password minimal 8 karakter." };
+  }
+  if (password !== confirm) {
+    return { error: "Konfirmasi password tidak cocok." };
   }
 
-  const otp = generateOtp(6);
-  const otpHash = await hashOtp(otp);
-  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  let phone: string | null = null;
+  if (phoneRaw) {
+    const norm = normalizePhone(phoneRaw);
+    if (!norm) return { error: "Nomor HP tidak valid. Kosongkan atau gunakan format 08xx." };
+    phone = norm;
+  }
 
-  await prisma.user.create({
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return { error: "Email sudah terdaftar. Silakan masuk." };
+  }
+
+  const passwordHash = await hashPassword(password);
+  const user = await prisma.user.create({
     data: {
-      phone,
+      email,
+      passwordHash,
       name,
       role,
-      otpHash,
-      otpExpiresAt,
+      phone,
     },
   });
 
-  const send = await sendOtp(phone, otp);
-  if (send.devOtp) setDevOtpHint(phone, send.devOtp);
-  if (!send.delivered && !send.devOtp) {
-    return {
-      error: `Gagal mengirim OTP: ${send.error ?? "konfigurasi gateway tidak lengkap"}.`,
-    };
-  }
+  await createSession({ userId: user.id, role: user.role as Role });
 
-  redirect(`/verify?phone=${encodeURIComponent(phone)}&intent=register`);
+  if (user.role === "TENANT") {
+    redirect("/onboarding");
+  }
+  redirect("/dashboard");
 }

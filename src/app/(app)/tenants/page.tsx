@@ -49,7 +49,10 @@ export default async function TenantsPage() {
                 )}
                 <div>
                   <div className="font-semibold">{t.tenant.name}</div>
-                  <div className="text-sm text-slate-600">{t.tenant.phone}</div>
+                  <div className="text-sm text-slate-600">{t.tenant.email}</div>
+                  {t.tenant.phone && (
+                    <div className="text-xs text-slate-500">HP: {t.tenant.phone}</div>
+                  )}
                   <div className="text-sm text-slate-500">
                     {t.room.kos.name} • Kamar {t.room.name}
                   </div>

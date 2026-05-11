@@ -10,7 +10,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button className="btn-primary w-full" type="submit" disabled={pending}>
-      {pending ? "Mengirim OTP…" : "Kirim OTP"}
+      {pending ? "Masuk…" : "Masuk"}
     </button>
   );
 }
@@ -22,21 +22,35 @@ export default function LoginPage() {
     <div className="card">
       <h1 className="text-2xl font-semibold">Masuk</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Masukkan nomor HP yang terdaftar. Kami akan mengirim OTP.
+        Masuk dengan email dan password Anda.
       </p>
       <form action={formAction} className="mt-6 space-y-4">
         <div>
-          <label className="label" htmlFor="phone">
-            Nomor HP
+          <label className="label" htmlFor="email">
+            Email
           </label>
           <input
-            id="phone"
-            name="phone"
+            id="email"
+            name="email"
+            type="email"
             className="input"
-            placeholder="08xxxxxxxxxx"
+            placeholder="anda@email.com"
             required
-            inputMode="tel"
             autoFocus
+            autoComplete="email"
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="password">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="input"
+            required
+            autoComplete="current-password"
           />
         </div>
         {state.error && (

@@ -10,7 +10,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
   return (
     <button className="btn-primary w-full" type="submit" disabled={pending}>
-      {pending ? "Mengirim OTP…" : "Daftar & kirim OTP"}
+      {pending ? "Memproses…" : "Daftar"}
     </button>
   );
 }
@@ -32,20 +32,59 @@ export default function RegisterPage() {
           <input id="name" name="name" className="input" required minLength={2} />
         </div>
         <div>
+          <label className="label" htmlFor="email">
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            className="input"
+            placeholder="anda@email.com"
+            required
+            autoComplete="email"
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="password">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className="input"
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+          <p className="mt-1 text-xs text-slate-500">Minimal 8 karakter.</p>
+        </div>
+        <div>
+          <label className="label" htmlFor="confirm">
+            Konfirmasi password
+          </label>
+          <input
+            id="confirm"
+            name="confirm"
+            type="password"
+            className="input"
+            required
+            minLength={8}
+            autoComplete="new-password"
+          />
+        </div>
+        <div>
           <label className="label" htmlFor="phone">
-            Nomor HP (WhatsApp aktif)
+            Nomor HP <span className="text-slate-400">(opsional)</span>
           </label>
           <input
             id="phone"
             name="phone"
             className="input"
             placeholder="08xxxxxxxxxx"
-            required
             inputMode="tel"
           />
-          <p className="mt-1 text-xs text-slate-500">
-            OTP akan dikirim ke nomor ini. Format: 08xx atau +62…
-          </p>
         </div>
         <div>
           <span className="label">Saya adalah</span>

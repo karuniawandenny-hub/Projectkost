@@ -2,9 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { normalizePhone } from "@/lib/phone";
-import { generateOtp, hashOtp, sendOtp } from "@/lib/otp";
-import { setDevOtpHint } from "@/lib/devOtpCookie";
+import { normalizeEmail, isValidEmail, verifyPassword } from "@/lib/password";
+import { createSession } from "@/lib/session";
+import type { Role } from "@/lib/enums";
 
 export type LoginState = { error?: string };
 
@@ -12,31 +12,24 @@ export async function loginAction(
   _prev: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const phoneRaw = String(formData.get("phone") ?? "");
-  const phone = normalizePhone(phoneRaw);
-  if (!phone) return { error: "Nomor HP tidak valid." };
+  const emailRaw = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
 
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user) {
-    return { error: "Nomor HP belum terdaftar. Silakan daftar terlebih dahulu." };
+  const email = normalizeEmail(emailRaw);
+  if (!isValidEmail(email)) return { error: "Email tidak valid." };
+  if (password.length === 0) return { error: "Password wajib diisi." };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  // Jangan beri tahu apakah email ada atau tidak — untuk mencegah enumerasi.
+  if (!user) return { error: "Email atau password salah." };
+
+  const ok = await verifyPassword(password, user.passwordHash);
+  if (!ok) return { error: "Email atau password salah." };
+
+  await createSession({ userId: user.id, role: user.role as Role });
+
+  if (user.role === "TENANT" && !user.onboardedAt) {
+    redirect("/onboarding");
   }
-
-  const otp = generateOtp(6);
-  const otpHash = await hashOtp(otp);
-  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { otpHash, otpExpiresAt },
-  });
-
-  const send = await sendOtp(phone, otp);
-  if (send.devOtp) setDevOtpHint(phone, send.devOtp);
-  if (!send.delivered && !send.devOtp) {
-    return {
-      error: `Gagal mengirim OTP: ${send.error ?? "konfigurasi gateway tidak lengkap"}.`,
-    };
-  }
-
-  redirect(`/verify?phone=${encodeURIComponent(phone)}&intent=login`);
+  redirect("/dashboard");
 }

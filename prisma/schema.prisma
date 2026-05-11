@@ -13,17 +13,16 @@ datasource db {
 
 model User {
   id              String    @id @default(cuid())
-  phone           String    @unique
+  email           String    @unique
+  passwordHash    String
   name            String
+  phone           String?
   role            String    // "OWNER" | "TENANT"
   ktpPhotoUrl     String?
   selfiePhotoUrl  String?
   onboardedAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-
-  otpHash         String?
-  otpExpiresAt    DateTime?
 
   ownedKos        Kos[]          @relation("OwnerKos")
   tenancies       Tenancy[]

@@ -6,11 +6,11 @@ bukti pembayaran bulanan, dan membuat komplain dengan foto — semua langsung da
 
 ## Fitur utama
 
-- **Auth via nomor HP + OTP** (mode `dev` mencetak OTP di console; mode produksi siap
-  integrasi gateway WhatsApp/SMS).
+- **Auth email + password** — sederhana, langsung jalan tanpa setup eksternal.
 - **Onboarding wajib** untuk penghuni: foto/scan KTP + foto diri (selfie) — bisa
   langsung ambil dari kamera HP.
-- **Manajemen kos & kamar** untuk pemilik (multi-kos), assign penghuni ke kamar.
+- **Manajemen kos & kamar** untuk pemilik (multi-kos), assign penghuni ke kamar
+  via email.
 - **Pembayaran bulanan**: penghuni upload bukti transfer (file atau foto kamera);
   pemilik verifikasi / tolak dengan catatan.
 - **Komplain dengan foto**: penghuni lampirkan foto (file atau kamera);
@@ -23,7 +23,7 @@ bukti pembayaran bulanan, dan membuat komplain dengan foto — semua langsung da
 - Next.js 14 (App Router) + TypeScript
 - Tailwind CSS
 - Prisma + SQLite (mudah migrasi ke PostgreSQL untuk produksi)
-- Auth: `jose` (JWT) + cookie HttpOnly
+- Auth: `bcryptjs` (password hashing) + `jose` (JWT cookie HttpOnly)
 - File storage: local `public/uploads/` (siap migrasi ke S3/Supabase Storage)
 
 ## Menjalankan secara lokal
@@ -35,6 +35,7 @@ npm install
 # 2) Salin env example & sesuaikan
 cp .env.example .env
 # Edit .env: pastikan JWT_SECRET diisi string acak panjang.
+# Generate cepat: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
 # 3) Inisialisasi database
 npx prisma db push
@@ -44,39 +45,16 @@ npm run dev
 # Buka http://localhost:3000
 ```
 
-> **OTP dev**: pada mode `OTP_MODE=dev`, OTP **tidak dikirim ke nomor HP** —
-> cek terminal server, OTP tercetak di sana untuk pengujian.
+## Flow pendaftaran
 
-## Integrasi WhatsApp/SMS
-
-Default `OTP_MODE=dev`: OTP tidak dikirim ke HP, tetapi otomatis ditampilkan
-di halaman verifikasi dalam banner kuning (mudah untuk testing). Tidak perlu
-buka terminal.
-
-### Pakai Fonnte (paling cepat untuk Indonesia)
-
-1. Daftar gratis di https://fonnte.com.
-2. Pindai QR untuk menghubungkan WhatsApp device Anda.
-3. Salin **Device Token** dari dashboard Fonnte.
-4. Set di `.env`:
-   ```
-   OTP_MODE=fonnte
-   WA_GATEWAY_TOKEN=<device-token-anda>
-   ```
-5. Restart `npm run dev`. Daftar/login → OTP akan benar-benar dikirim ke
-   WhatsApp Anda.
-
-### Pakai gateway lain (Twilio, WaSenderApi, dll)
-
-Set:
-```
-OTP_MODE=generic
-WA_GATEWAY_URL=<endpoint>
-WA_GATEWAY_TOKEN=<token bearer>
-```
-Aplikasi akan POST JSON `{ phone, message }` dengan header
-`Authorization: Bearer <token>`. Untuk gateway dengan skema berbeda,
-edit fungsi di `src/lib/otp.ts`.
+1. Buka `/register` → isi nama, email, password (min 8 karakter), pilih peran
+   (Pemilik atau Penghuni). Nomor HP opsional.
+2. Setelah submit → otomatis masuk dashboard. Tidak ada OTP, tidak ada verifikasi
+   email eksternal — auth sepenuhnya internal.
+3. **Penghuni** akan diarahkan ke halaman onboarding (upload KTP + selfie) sebelum
+   bisa mengakses fitur lain.
+4. **Pemilik** bisa langsung tambah kos & kamar, lalu assign penghuni ke kamar
+   menggunakan email penghuni yang sudah terdaftar.
 
 ## Migrasi ke produksi
 
@@ -84,15 +62,16 @@ edit fungsi di `src/lib/otp.ts`.
   lalu `npx prisma migrate deploy`.
 - File upload local → S3/Supabase Storage: ganti implementasi `saveUploadedFile` di
   `src/lib/upload.ts`.
-- Set cookie `secure` (sudah otomatis di production).
-- Tambahkan rate-limit di endpoint OTP & cron untuk reminder jatuh tempo.
+- Cookie `secure=true` sudah otomatis aktif saat `NODE_ENV=production`.
+- Tambahkan rate-limit di endpoint login/register untuk mencegah brute force.
+- Pertimbangkan email verification atau 2FA bila dibutuhkan keamanan ekstra.
 
 ## Struktur folder
 
 ```
 src/
   app/
-    (auth)/        # login, register, verify OTP, logout
+    (auth)/        # login, register, logout
     (app)/         # halaman dengan layout aplikasi (butuh login)
       dashboard/
       kos/
@@ -103,7 +82,7 @@ src/
       profile/
     onboarding/    # wajib untuk penghuni baru (KTP + selfie)
   components/      # Shell, NotifBell, CameraInput
-  lib/             # prisma, session, otp, phone, upload, notify
+  lib/             # prisma, session, password, phone, upload, notify
 prisma/
   schema.prisma
 public/uploads/    # disimpan di sini (di-gitignore)

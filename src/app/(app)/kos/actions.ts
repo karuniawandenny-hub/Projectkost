@@ -64,7 +64,7 @@ export async function assignTenant(
   if (user.role !== "OWNER") return { error: "Tidak diizinkan." };
 
   const roomId = String(formData.get("roomId") ?? "");
-  const tenantPhone = String(formData.get("tenantPhone") ?? "");
+  const tenantEmailRaw = String(formData.get("tenantEmail") ?? "");
 
   const room = await prisma.room.findFirst({
     where: { id: roomId, kos: { ownerId: user.id } },
@@ -72,20 +72,19 @@ export async function assignTenant(
   if (!room) return { error: "Kamar tidak ditemukan." };
   if (room.status === "OCCUPIED") return { error: "Kamar sudah terisi." };
 
-  // Normalize phone
-  const { normalizePhone } = await import("@/lib/phone");
-  const phone = normalizePhone(tenantPhone);
-  if (!phone) return { error: "Nomor HP penghuni tidak valid." };
+  const { normalizeEmail, isValidEmail } = await import("@/lib/password");
+  const email = normalizeEmail(tenantEmailRaw);
+  if (!isValidEmail(email)) return { error: "Email penghuni tidak valid." };
 
-  const tenant = await prisma.user.findUnique({ where: { phone } });
+  const tenant = await prisma.user.findUnique({ where: { email } });
   if (!tenant) {
     return {
       error:
-        "Penghuni dengan nomor tersebut belum terdaftar. Minta mereka daftar terlebih dahulu.",
+        "Penghuni dengan email tersebut belum terdaftar. Minta mereka daftar terlebih dahulu.",
     };
   }
   if (tenant.role !== "TENANT") {
-    return { error: "Nomor tersebut bukan akun penghuni." };
+    return { error: "Email tersebut bukan akun penghuni." };
   }
 
   const active = await prisma.tenancy.findFirst({

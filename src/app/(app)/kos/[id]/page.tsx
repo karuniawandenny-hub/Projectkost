@@ -26,7 +26,7 @@ export default async function KosDetailPage({
         include: {
           tenancies: {
             where: { status: "ACTIVE" },
-            include: { tenant: { select: { name: true, phone: true } } },
+            include: { tenant: { select: { name: true, email: true } } },
           },
         },
       },
@@ -75,7 +75,7 @@ export default async function KosDetailPage({
                   <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm">
                     <span className="text-slate-500">Penghuni:</span>{" "}
                     <span className="font-medium">{active.tenant.name}</span>{" "}
-                    <span className="text-slate-500">({active.tenant.phone})</span>
+                    <span className="text-slate-500">({active.tenant.email})</span>
                   </div>
                 ) : (
                   <div className="mt-3">

@@ -24,7 +24,10 @@ export default async function ProfilePage() {
           )}
           <div>
             <div className="text-lg font-semibold">{user.name}</div>
-            <div className="text-sm text-slate-600">{user.phone}</div>
+            <div className="text-sm text-slate-600">{user.email}</div>
+            {user.phone && (
+              <div className="text-xs text-slate-500">{user.phone}</div>
+            )}
             <div className="text-xs text-slate-500 mt-1">
               {user.role === "OWNER" ? "Pemilik kos" : "Penghuni"}
             </div>

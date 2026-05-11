@@ -20,12 +20,12 @@ export function AssignTenantForm({ roomId }: { roomId: string }) {
     <form action={formAction} className="flex flex-wrap items-end gap-2">
       <input type="hidden" name="roomId" value={roomId} />
       <div className="flex-1 min-w-[200px]">
-        <label className="label">Nomor HP penghuni</label>
+        <label className="label">Email penghuni</label>
         <input
-          name="tenantPhone"
+          name="tenantEmail"
+          type="email"
           className="input"
-          placeholder="08xxxxxxxxxx"
-          inputMode="tel"
+          placeholder="penghuni@email.com"
           required
         />
       </div>
