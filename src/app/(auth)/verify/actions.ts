@@ -6,8 +6,13 @@ import { normalizePhone } from "@/lib/phone";
 import { verifyOtp, generateOtp, hashOtp, sendOtp } from "@/lib/otp";
 import { createSession } from "@/lib/session";
 import type { Role } from "@/lib/enums";
+import {
+  setDevOtpHint,
+  clearDevOtpHint,
+  readDevOtpHint,
+} from "@/lib/devOtpCookie";
 
-export type VerifyState = { error?: string; info?: string };
+export type VerifyState = { error?: string; info?: string; devOtp?: string };
 
 export async function verifyAction(
   _prev: VerifyState,
@@ -34,6 +39,7 @@ export async function verifyAction(
     where: { id: user.id },
     data: { otpHash: null, otpExpiresAt: null },
   });
+  clearDevOtpHint();
 
   await createSession({ userId: user.id, role: user.role as Role });
 
@@ -59,7 +65,22 @@ export async function resendOtpAction(formData: FormData): Promise<VerifyState> 
     where: { id: user.id },
     data: { otpHash, otpExpiresAt },
   });
-  await sendOtp(phone, otp);
+  const send = await sendOtp(phone, otp);
+  if (send.devOtp) setDevOtpHint(phone, send.devOtp);
+  if (!send.delivered && !send.devOtp) {
+    return {
+      error: `Gagal mengirim OTP: ${send.error ?? "konfigurasi gateway tidak lengkap"}.`,
+    };
+  }
 
-  return { info: "OTP baru telah dikirim." };
+  return {
+    info: send.devOtp
+      ? "OTP baru telah dibuat (mode dev — lihat di bawah)."
+      : "OTP baru telah dikirim ke nomor Anda.",
+    devOtp: send.devOtp,
+  };
+}
+
+export async function getDevOtpForPhone(phone: string): Promise<string | null> {
+  return readDevOtpHint(phone);
 }

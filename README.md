@@ -47,17 +47,36 @@ npm run dev
 > **OTP dev**: pada mode `OTP_MODE=dev`, OTP **tidak dikirim ke nomor HP** —
 > cek terminal server, OTP tercetak di sana untuk pengujian.
 
-## Integrasi WhatsApp/SMS (produksi)
+## Integrasi WhatsApp/SMS
 
-Set di `.env`:
+Default `OTP_MODE=dev`: OTP tidak dikirim ke HP, tetapi otomatis ditampilkan
+di halaman verifikasi dalam banner kuning (mudah untuk testing). Tidak perlu
+buka terminal.
+
+### Pakai Fonnte (paling cepat untuk Indonesia)
+
+1. Daftar gratis di https://fonnte.com.
+2. Pindai QR untuk menghubungkan WhatsApp device Anda.
+3. Salin **Device Token** dari dashboard Fonnte.
+4. Set di `.env`:
+   ```
+   OTP_MODE=fonnte
+   WA_GATEWAY_TOKEN=<device-token-anda>
+   ```
+5. Restart `npm run dev`. Daftar/login → OTP akan benar-benar dikirim ke
+   WhatsApp Anda.
+
+### Pakai gateway lain (Twilio, WaSenderApi, dll)
+
+Set:
 ```
-OTP_MODE=production
-WA_GATEWAY_URL=<endpoint gateway>
-WA_GATEWAY_TOKEN=<bearer token>
+OTP_MODE=generic
+WA_GATEWAY_URL=<endpoint>
+WA_GATEWAY_TOKEN=<token bearer>
 ```
-Implementasi default mengirim POST JSON `{ phone, message }` dengan
-`Authorization: Bearer <token>` — sesuaikan di `src/lib/otp.ts` bila gateway
-yang dipakai punya skema berbeda (Fonnte, WaSenderApi, Twilio, dsb).
+Aplikasi akan POST JSON `{ phone, message }` dengan header
+`Authorization: Bearer <token>`. Untuk gateway dengan skema berbeda,
+edit fungsi di `src/lib/otp.ts`.
 
 ## Migrasi ke produksi
 

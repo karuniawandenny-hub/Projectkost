@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { generateOtp, hashOtp, sendOtp } from "@/lib/otp";
+import { setDevOtpHint } from "@/lib/devOtpCookie";
 
 export type RegisterState = { error?: string };
 
@@ -41,7 +42,13 @@ export async function registerAction(
     },
   });
 
-  await sendOtp(phone, otp);
+  const send = await sendOtp(phone, otp);
+  if (send.devOtp) setDevOtpHint(phone, send.devOtp);
+  if (!send.delivered && !send.devOtp) {
+    return {
+      error: `Gagal mengirim OTP: ${send.error ?? "konfigurasi gateway tidak lengkap"}.`,
+    };
+  }
 
   redirect(`/verify?phone=${encodeURIComponent(phone)}&intent=register`);
 }
