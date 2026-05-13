@@ -20,21 +20,47 @@ export default async function KosDetailPage({
   if (!user) redirect("/login");
   if (user.role !== "OWNER") redirect("/dashboard");
 
-  const kos = await prisma.kos.findFirst({
-    where: { id: params.id, ownerId: user.id },
-    include: {
-      rooms: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          tenancies: {
-            where: { status: "ACTIVE" },
-            include: { tenant: { select: { name: true, email: true } } },
+  const [kos, availableTenants] = await Promise.all([
+    prisma.kos.findFirst({
+      where: { id: params.id, ownerId: user.id },
+      include: {
+        rooms: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            tenancies: {
+              where: { status: "ACTIVE" },
+              include: { tenant: { select: { name: true, email: true } } },
+            },
           },
         },
       },
-    },
-  });
+    }),
+    // Penghuni siap di-assign:
+    //   - role TENANT, status ACTIVE
+    //   - belum punya tenancy aktif
+    prisma.user.findMany({
+      where: {
+        role: "TENANT",
+        status: "ACTIVE",
+        tenancies: { none: { status: "ACTIVE" } },
+      },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        onboardedAt: true,
+      },
+    }),
+  ]);
   if (!kos) notFound();
+
+  const tenantOptions = availableTenants.map((t) => ({
+    id: t.id,
+    name: t.name,
+    email: t.email,
+    onboarded: !!t.onboardedAt,
+  }));
 
   return (
     <div className="space-y-6">
@@ -99,7 +125,7 @@ export default async function KosDetailPage({
                   </div>
                 ) : (
                   <div className="mt-3">
-                    <AssignTenantForm roomId={r.id} />
+                    <AssignTenantForm roomId={r.id} tenants={tenantOptions} />
                   </div>
                 )}
               </div>

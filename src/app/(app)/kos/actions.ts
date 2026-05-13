@@ -121,7 +121,7 @@ export async function updateRoom(
   return { success: true };
 }
 
-export type AssignState = { error?: string };
+export type AssignState = { error?: string; success?: string };
 
 export async function assignTenant(
   _prev: AssignState,
@@ -131,34 +131,30 @@ export async function assignTenant(
   if (user.role !== "OWNER") return { error: "Tidak diizinkan." };
 
   const roomId = String(formData.get("roomId") ?? "");
-  const tenantEmailRaw = String(formData.get("tenantEmail") ?? "");
+  const tenantId = String(formData.get("tenantId") ?? "");
+  if (!tenantId) return { error: "Pilih penghuni terlebih dahulu." };
 
   const room = await prisma.room.findFirst({
     where: { id: roomId, kos: { ownerId: user.id } },
+    include: { kos: { select: { name: true } } },
   });
   if (!room) return { error: "Kamar tidak ditemukan." };
   if (room.status === "OCCUPIED") return { error: "Kamar sudah terisi." };
 
-  const { normalizeEmail, isValidEmail } = await import("@/lib/password");
-  const email = normalizeEmail(tenantEmailRaw);
-  if (!isValidEmail(email)) return { error: "Email penghuni tidak valid." };
-
-  const tenant = await prisma.user.findUnique({ where: { email } });
-  if (!tenant) {
-    return {
-      error:
-        "Penghuni dengan email tersebut belum terdaftar. Minta mereka daftar terlebih dahulu.",
-    };
-  }
+  const tenant = await prisma.user.findUnique({ where: { id: tenantId } });
+  if (!tenant) return { error: "Penghuni tidak ditemukan." };
   if (tenant.role !== "TENANT") {
-    return { error: "Email tersebut bukan akun penghuni." };
+    return { error: "Akun yang dipilih bukan penghuni." };
+  }
+  if (tenant.status !== "ACTIVE") {
+    return { error: "Akun penghuni belum aktif (masih menunggu approval)." };
   }
 
   const active = await prisma.tenancy.findFirst({
     where: { tenantId: tenant.id, status: "ACTIVE" },
   });
   if (active) {
-    return { error: "Penghuni masih punya tenancy aktif. Akhiri dulu sebelumnya." };
+    return { error: "Penghuni sudah punya tenancy aktif. Akhiri dulu sebelumnya." };
   }
 
   await prisma.$transaction([
@@ -170,16 +166,17 @@ export async function assignTenant(
       data: {
         userId: tenant.id,
         type: "TENANCY_ASSIGNED",
-        title: "Anda diassign ke kamar baru",
-        message: `Anda di-assign ke kamar ${room.name}.`,
+        title: "Anda di-assign ke kamar baru",
+        message: `Anda di-assign ke ${room.kos.name} - Kamar ${room.name}.`,
         link: "/dashboard",
       },
     }),
   ]);
 
   revalidatePath(`/kos`);
+  revalidatePath(`/kos/${room.kosId}`);
   revalidatePath(`/tenants`);
-  return {};
+  return { success: `${tenant.name} di-assign ke kamar ${room.name}.` };
 }
 
 export async function endTenancy(formData: FormData) {
