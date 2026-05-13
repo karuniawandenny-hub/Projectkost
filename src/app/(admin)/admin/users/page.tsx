@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { approveOwner, rejectOwner, setUserStatus } from "../../actions";
+import { approveUser, rejectUser, setUserStatus } from "../../actions";
 
 type SearchParams = {
   role?: string;
@@ -122,22 +122,23 @@ export default async function AdminUsersPage({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {u.role === "OWNER" && u.status === "PENDING" && (
-                  <>
-                    <form action={approveOwner}>
-                      <input type="hidden" name="userId" value={u.id} />
-                      <button type="submit" className="btn-success">
-                        Setujui
-                      </button>
-                    </form>
-                    <form action={rejectOwner}>
-                      <input type="hidden" name="userId" value={u.id} />
-                      <button type="submit" className="btn-danger">
-                        Tolak
-                      </button>
-                    </form>
-                  </>
-                )}
+                {u.status === "PENDING" &&
+                  (u.role === "OWNER" || u.role === "TENANT") && (
+                    <>
+                      <form action={approveUser}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <button type="submit" className="btn-success">
+                          Setujui
+                        </button>
+                      </form>
+                      <form action={rejectUser}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <button type="submit" className="btn-danger">
+                          Tolak
+                        </button>
+                      </form>
+                    </>
+                  )}
                 {u.status === "ACTIVE" && u.role !== "ADMIN" && (
                   <form action={setUserStatus}>
                     <input type="hidden" name="userId" value={u.id} />

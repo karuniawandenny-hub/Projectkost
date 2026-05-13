@@ -9,18 +9,31 @@ export default async function TenantsPage() {
   if (!user) redirect("/login");
   if (user.role !== "OWNER") redirect("/dashboard");
 
-  const tenancies = await prisma.tenancy.findMany({
-    where: { status: "ACTIVE", room: { kos: { ownerId: user.id } } },
-    include: {
-      tenant: true,
-      room: { include: { kos: true } },
-    },
-    orderBy: { startDate: "desc" },
-  });
+  const [tenancies, pendingCount] = await Promise.all([
+    prisma.tenancy.findMany({
+      where: { status: "ACTIVE", room: { kos: { ownerId: user.id } } },
+      include: { tenant: true, room: { include: { kos: true } } },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.user.count({ where: { role: "TENANT", status: "PENDING" } }),
+  ]);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Penghuni aktif</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-2xl font-bold">Penghuni aktif</h1>
+        <Link
+          href="/tenants/pending"
+          className="btn-secondary inline-flex items-center gap-2"
+        >
+          Pengajuan menunggu
+          {pendingCount > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+              {pendingCount}
+            </span>
+          )}
+        </Link>
+      </div>
       <div className="space-y-3">
         {tenancies.length === 0 && (
           <div className="card text-sm text-slate-500">

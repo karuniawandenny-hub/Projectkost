@@ -39,10 +39,15 @@ export async function loginAction(
   if (!ok) return { error: "Email/username atau password salah." };
 
   if (user.status === "PENDING") {
-    return {
-      error:
-        "Akun pemilik Anda sedang menunggu persetujuan admin. Silakan coba lagi nanti.",
-    };
+    // TENANT yang PENDING masih boleh login agar bisa onboarding / lihat
+    // halaman menunggu persetujuan; akses ke fitur lain dibatasi di
+    // (app)/layout. OWNER PENDING tidak bisa login sama sekali.
+    if (user.role === "OWNER") {
+      return {
+        error:
+          "Akun pemilik Anda sedang menunggu persetujuan admin. Silakan coba lagi nanti.",
+      };
+    }
   }
   if (user.status === "SUSPENDED") {
     return {

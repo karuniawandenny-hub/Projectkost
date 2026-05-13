@@ -49,9 +49,12 @@ export async function registerAction(
 
   const passwordHash = await hashPassword(password);
 
-  // OWNER butuh persetujuan admin -> status PENDING, tidak auto-login.
-  // TENANT bisa langsung pakai aplikasi -> status ACTIVE + auto-login.
-  const status = role === "OWNER" ? "PENDING" : "ACTIVE";
+  // Status PENDING untuk OWNER dan TENANT.
+  // - OWNER: tidak auto-login, menunggu persetujuan admin.
+  // - TENANT: auto-login agar bisa langsung onboarding (KTP + selfie).
+  //   Setelah onboarding, (app)/layout akan mengarahkannya ke halaman
+  //   "menunggu persetujuan" sampai owner/admin menyetujui.
+  const status = "PENDING";
 
   const user = await prisma.user.create({
     data: {
@@ -64,26 +67,51 @@ export async function registerAction(
     },
   });
 
+  // Beritahu admin agar bisa segera meninjau.
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", status: "ACTIVE" },
+    select: { id: true },
+  });
+  await Promise.all(
+    admins.map((a) =>
+      notify({
+        userId: a.id,
+        type: role === "OWNER" ? "OWNER_PENDING" : "TENANT_PENDING",
+        title:
+          role === "OWNER"
+            ? "Pendaftaran pemilik baru"
+            : "Pendaftaran penghuni baru",
+        message: `${user.name} (${user.email}) mengajukan akun ${
+          role === "OWNER" ? "pemilik kos" : "penghuni"
+        }.`,
+        link: "/admin/users",
+      })
+    )
+  );
+
   if (role === "OWNER") {
-    // Beritahu semua admin agar bisa segera meninjau.
-    const admins = await prisma.user.findMany({
-      where: { role: "ADMIN", status: "ACTIVE" },
-      select: { id: true },
-    });
-    await Promise.all(
-      admins.map((a) =>
-        notify({
-          userId: a.id,
-          type: "OWNER_PENDING",
-          title: "Pendaftaran pemilik baru",
-          message: `${user.name} (${user.email}) mengajukan akun pemilik kos.`,
-          link: "/admin/users",
-        })
-      )
-    );
+    // Owner: tidak ada session, langsung ke halaman menunggu.
     redirect("/register/pending");
   }
 
+  // Beritahu semua owner aktif agar tahu ada calon penghuni baru.
+  const owners = await prisma.user.findMany({
+    where: { role: "OWNER", status: "ACTIVE" },
+    select: { id: true },
+  });
+  await Promise.all(
+    owners.map((o) =>
+      notify({
+        userId: o.id,
+        type: "TENANT_PENDING",
+        title: "Calon penghuni baru",
+        message: `${user.name} mendaftar sebagai penghuni dan menunggu persetujuan.`,
+        link: "/tenants/pending",
+      })
+    )
+  );
+
+  // Tenant: auto-login agar bisa onboarding.
   await createSession({ userId: user.id, role: user.role as Role });
   redirect("/onboarding");
 }

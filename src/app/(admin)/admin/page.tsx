@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { approveOwner, rejectOwner } from "../actions";
+import { approveUser, rejectUser } from "../actions";
 
 export default async function AdminDashboardPage() {
   const [
     totalUsers,
     pendingOwners,
+    pendingTenants,
     activeOwners,
     activeTenants,
     totalKos,
@@ -16,6 +17,7 @@ export default async function AdminDashboardPage() {
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: "OWNER", status: "PENDING" } }),
+    prisma.user.count({ where: { role: "TENANT", status: "PENDING" } }),
     prisma.user.count({ where: { role: "OWNER", status: "ACTIVE" } }),
     prisma.user.count({ where: { role: "TENANT", status: "ACTIVE" } }),
     prisma.kos.count(),
@@ -23,9 +25,9 @@ export default async function AdminDashboardPage() {
     prisma.payment.count({ where: { status: "PENDING" } }),
     prisma.complaint.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
     prisma.user.findMany({
-      where: { role: "OWNER", status: "PENDING" },
+      where: { role: { in: ["OWNER", "TENANT"] }, status: "PENDING" },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 8,
     }),
   ]);
 
@@ -42,7 +44,13 @@ export default async function AdminDashboardPage() {
           label="Pemilik menunggu approval"
           value={pendingOwners}
           highlight={pendingOwners > 0}
-          href="/admin/users?status=PENDING"
+          href="/admin/users?role=OWNER&status=PENDING"
+        />
+        <Stat
+          label="Penghuni menunggu approval"
+          value={pendingTenants}
+          highlight={pendingTenants > 0}
+          href="/admin/users?role=TENANT&status=PENDING"
         />
         <Stat label="Pemilik aktif" value={activeOwners} />
         <Stat label="Penghuni aktif" value={activeTenants} />
@@ -62,7 +70,7 @@ export default async function AdminDashboardPage() {
 
       <div className="card">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Pengajuan pemilik terbaru</h2>
+          <h2 className="font-semibold">Pengajuan akun terbaru</h2>
           <Link href="/admin/users?status=PENDING" className="text-sm text-brand-700 hover:underline">
             Lihat semua
           </Link>
@@ -76,20 +84,29 @@ export default async function AdminDashboardPage() {
             {recentPending.map((u) => (
               <div key={u.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
                 <div>
-                  <div className="font-medium">{u.name}</div>
+                  <div className="font-medium">
+                    {u.name}{" "}
+                    <span
+                      className={
+                        u.role === "OWNER" ? "badge-green" : "badge-slate"
+                      }
+                    >
+                      {u.role === "OWNER" ? "Pemilik" : "Penghuni"}
+                    </span>
+                  </div>
                   <div className="text-xs text-slate-500">
                     {u.email}
                     {u.phone ? ` • ${u.phone}` : ""}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <form action={approveOwner}>
+                  <form action={approveUser}>
                     <input type="hidden" name="userId" value={u.id} />
                     <button type="submit" className="btn-success">
                       Setujui
                     </button>
                   </form>
-                  <form action={rejectOwner}>
+                  <form action={rejectUser}>
                     <input type="hidden" name="userId" value={u.id} />
                     <button type="submit" className="btn-danger">
                       Tolak

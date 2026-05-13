@@ -9,18 +9,28 @@ type Props = {
   children: ReactNode;
 };
 
-export default async function Shell({ user, children }: Props) {
-  const unread = await prisma.notification.count({
-    where: { userId: user.id, read: false },
-  });
+type NavItem = { href: string; label: string; badge?: number };
 
+export default async function Shell({ user, children }: Props) {
   const isOwner = user.role === "OWNER";
 
-  const nav = isOwner
+  const [unread, pendingTenants] = await Promise.all([
+    prisma.notification.count({ where: { userId: user.id, read: false } }),
+    isOwner
+      ? prisma.user.count({ where: { role: "TENANT", status: "PENDING" } })
+      : Promise.resolve(0),
+  ]);
+
+  const nav: NavItem[] = isOwner
     ? [
         { href: "/dashboard", label: "Dashboard" },
         { href: "/kos", label: "Kos & Kamar" },
         { href: "/tenants", label: "Penghuni" },
+        {
+          href: "/tenants/pending",
+          label: "Pengajuan",
+          badge: pendingTenants || undefined,
+        },
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
       ]
@@ -47,9 +57,14 @@ export default async function Shell({ user, children }: Props) {
               <Link
                 key={n.href}
                 href={n.href}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap"
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1"
               >
-                {n.label}
+                <span>{n.label}</span>
+                {n.badge ? (
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+                    {n.badge}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>

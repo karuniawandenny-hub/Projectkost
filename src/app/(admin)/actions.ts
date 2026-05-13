@@ -11,14 +11,20 @@ async function requireAdmin() {
   return user;
 }
 
-export async function approveOwner(formData: FormData) {
+/**
+ * Setujui user PENDING (role OWNER atau TENANT) -> ACTIVE.
+ */
+export async function approveUser(formData: FormData) {
   await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   if (!userId) throw new Error("BAD_INPUT");
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) throw new Error("NOT_FOUND");
-  if (target.role !== "OWNER") throw new Error("BAD_ROLE");
+  if (target.role !== "OWNER" && target.role !== "TENANT") {
+    throw new Error("BAD_ROLE");
+  }
+  if (target.status === "ACTIVE") return;
 
   await prisma.user.update({
     where: { id: target.id },
@@ -26,10 +32,15 @@ export async function approveOwner(formData: FormData) {
   });
   await notify({
     userId: target.id,
-    type: "OWNER_APPROVED",
-    title: "Akun pemilik Anda disetujui",
+    type: target.role === "OWNER" ? "OWNER_APPROVED" : "TENANT_APPROVED",
+    title:
+      target.role === "OWNER"
+        ? "Akun pemilik Anda disetujui"
+        : "Akun penghuni Anda disetujui",
     message:
-      "Selamat! Akun pemilik Anda telah disetujui. Silakan masuk untuk mulai mengelola kos.",
+      target.role === "OWNER"
+        ? "Selamat! Akun pemilik Anda telah disetujui. Silakan masuk untuk mulai mengelola kos."
+        : "Akun penghuni Anda telah disetujui oleh administrator. Silakan login & akses dashboard.",
     link: "/login",
   });
 
@@ -38,14 +49,20 @@ export async function approveOwner(formData: FormData) {
   revalidatePath(`/admin/users/${target.id}`);
 }
 
-export async function rejectOwner(formData: FormData) {
+/**
+ * Tolak user PENDING -> SUSPENDED.
+ */
+export async function rejectUser(formData: FormData) {
   await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   if (!userId) throw new Error("BAD_INPUT");
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) throw new Error("NOT_FOUND");
-  if (target.role !== "OWNER" || target.status !== "PENDING") {
+  if (
+    (target.role !== "OWNER" && target.role !== "TENANT") ||
+    target.status !== "PENDING"
+  ) {
     throw new Error("BAD_STATE");
   }
 
@@ -55,10 +72,12 @@ export async function rejectOwner(formData: FormData) {
   });
   await notify({
     userId: target.id,
-    type: "OWNER_REJECTED",
-    title: "Pengajuan akun pemilik ditolak",
+    type: target.role === "OWNER" ? "OWNER_REJECTED" : "TENANT_REJECTED",
+    title: "Pengajuan akun ditolak",
     message:
-      "Mohon maaf, pengajuan akun pemilik Anda tidak disetujui. Silakan hubungi administrator untuk informasi lebih lanjut.",
+      target.role === "OWNER"
+        ? "Mohon maaf, pengajuan akun pemilik Anda tidak disetujui. Silakan hubungi administrator untuk informasi lebih lanjut."
+        : "Mohon maaf, pengajuan akun penghuni Anda tidak disetujui.",
     link: "/login",
   });
   revalidatePath("/admin/users");

@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { getCurrentUser } from "@/lib/session";
 
-export default function RegisterPendingPage() {
+export default async function RegisterPendingPage() {
+  const user = await getCurrentUser();
+  const isTenant = user?.role === "TENANT";
+
   return (
     <div className="card">
       <div className="flex items-start gap-3">
@@ -18,22 +22,51 @@ export default function RegisterPendingPage() {
           </svg>
         </div>
         <div>
-          <h1 className="text-2xl font-semibold">Pendaftaran terkirim</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Terima kasih. Akun <span className="font-medium">pemilik kos</span> Anda
-            sedang menunggu persetujuan administrator. Anda akan bisa masuk setelah
-            akun disetujui.
-          </p>
-          <p className="mt-3 text-sm text-slate-600">
-            Setelah disetujui, gunakan email & password yang baru Anda buat untuk
-            masuk di halaman login.
-          </p>
+          <h1 className="text-2xl font-semibold">
+            {isTenant
+              ? "Menunggu persetujuan"
+              : "Pendaftaran terkirim"}
+          </h1>
+          {isTenant ? (
+            <>
+              <p className="mt-1 text-sm text-slate-600">
+                Terima kasih, <span className="font-medium">{user?.name}</span>.
+                Data Anda — termasuk foto KTP & selfie — telah dikirim ke pemilik
+                kos / administrator untuk diverifikasi.
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Setelah disetujui, dashboard Anda akan otomatis aktif dan pemilik
+                kos akan mengassign Anda ke kamar yang sesuai. Anda akan menerima
+                notifikasi begitu prosesnya selesai.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-slate-600">
+                Akun <span className="font-medium">pemilik kos</span> Anda sedang
+                menunggu persetujuan administrator. Anda akan bisa masuk setelah
+                akun disetujui.
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Setelah disetujui, gunakan email & password yang baru Anda buat
+                untuk masuk di halaman login.
+              </p>
+            </>
+          )}
         </div>
       </div>
       <div className="mt-6 flex gap-2">
-        <Link href="/login" className="btn-primary">
-          Ke halaman login
-        </Link>
+        {user ? (
+          <form action="/logout" method="POST">
+            <button type="submit" className="btn-secondary">
+              Keluar
+            </button>
+          </form>
+        ) : (
+          <Link href="/login" className="btn-primary">
+            Ke halaman login
+          </Link>
+        )}
         <Link href="/" className="btn-secondary">
           Kembali ke beranda
         </Link>
