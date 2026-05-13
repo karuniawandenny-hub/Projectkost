@@ -46,7 +46,8 @@ export async function readSession(): Promise<SessionPayload | null> {
     const { payload } = await jwtVerify(token, getSecret());
     if (
       typeof payload.userId === "string" &&
-      (payload.role === "OWNER" || payload.role === "TENANT")
+      typeof payload.role === "string" &&
+      ["OWNER", "TENANT", "ADMIN"].includes(payload.role)
     ) {
       return { userId: payload.userId, role: payload.role as Role };
     }

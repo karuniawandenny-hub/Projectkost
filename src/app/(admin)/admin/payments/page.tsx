@@ -1,0 +1,97 @@
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+
+const MONTHS = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "PENDING") return <span className="badge-yellow">Menunggu</span>;
+  if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
+  return <span className="badge-red">Ditolak</span>;
+}
+
+export default async function AdminPaymentsPage({
+  searchParams,
+}: {
+  searchParams: { status?: string };
+}) {
+  const where: Record<string, unknown> = {};
+  if (
+    searchParams.status &&
+    ["PENDING", "VERIFIED", "REJECTED"].includes(searchParams.status)
+  ) {
+    where.status = searchParams.status;
+  }
+  const payments = await prisma.payment.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    include: {
+      tenancy: {
+        include: {
+          tenant: { select: { name: true, email: true } },
+          room: { include: { kos: { include: { owner: { select: { name: true } } } } } },
+        },
+      },
+    },
+  });
+
+  const filters = [
+    { href: "/admin/payments", label: "Semua" },
+    { href: "/admin/payments?status=PENDING", label: "Menunggu" },
+    { href: "/admin/payments?status=VERIFIED", label: "Lunas" },
+    { href: "/admin/payments?status=REJECTED", label: "Ditolak" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold">Pembayaran (sistem)</h1>
+      <div className="flex flex-wrap gap-2">
+        {filters.map((f) => (
+          <Link
+            key={f.href}
+            href={f.href}
+            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
+          >
+            {f.label}
+          </Link>
+        ))}
+      </div>
+      <div className="space-y-2">
+        {payments.length === 0 && (
+          <div className="card text-sm text-slate-500">Tidak ada data.</div>
+        )}
+        {payments.map((p) => (
+          <div key={p.id} className="card">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <div className="font-semibold">
+                  {p.tenancy.tenant.name} → {p.tenancy.room.kos.name} / Kamar{" "}
+                  {p.tenancy.room.name}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Pemilik: {p.tenancy.room.kos.owner.name} • Periode{" "}
+                  {MONTHS[p.periodMonth - 1]} {p.periodYear} • Rp{" "}
+                  {p.amount.toLocaleString("id-ID")}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <StatusBadge status={p.status} />
+                <a
+                  href={p.proofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-brand-700 hover:underline"
+                >
+                  Bukti
+                </a>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

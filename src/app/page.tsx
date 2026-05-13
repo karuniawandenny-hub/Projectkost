@@ -4,7 +4,9 @@ import { readSession } from "@/lib/session";
 
 export default async function HomePage() {
   const session = await readSession();
-  if (session) redirect("/dashboard");
+  if (session) {
+    redirect(session.role === "ADMIN" ? "/admin" : "/dashboard");
+  }
 
   return (
     <main className="min-h-screen">

@@ -14,10 +14,12 @@ datasource db {
 model User {
   id              String    @id @default(cuid())
   email           String    @unique
+  username        String?   @unique
   passwordHash    String
   name            String
   phone           String?
-  role            String    // "OWNER" | "TENANT"
+  role            String    // "OWNER" | "TENANT" | "ADMIN"
+  status          String    @default("ACTIVE") // "ACTIVE" | "PENDING" | "SUSPENDED"
   ktpPhotoUrl     String?
   selfiePhotoUrl  String?
   onboardedAt     DateTime?

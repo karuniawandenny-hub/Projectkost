@@ -3,8 +3,16 @@
 export const Role = {
   OWNER: "OWNER",
   TENANT: "TENANT",
+  ADMIN: "ADMIN",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+export const UserStatus = {
+  ACTIVE: "ACTIVE",
+  PENDING: "PENDING",
+  SUSPENDED: "SUSPENDED",
+} as const;
+export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
 
 export const RoomStatus = {
   AVAILABLE: "AVAILABLE",

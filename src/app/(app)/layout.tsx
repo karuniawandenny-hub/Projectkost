@@ -9,5 +9,10 @@ export default async function AppLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.role === "ADMIN") redirect("/admin");
+  if (user.status !== "ACTIVE") {
+    // Akun PENDING/SUSPENDED tidak boleh masuk halaman aplikasi.
+    redirect("/login");
+  }
   return <Shell user={user}>{children}</Shell>;
 }

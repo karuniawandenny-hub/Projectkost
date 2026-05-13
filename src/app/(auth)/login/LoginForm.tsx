@@ -20,18 +20,18 @@ export function LoginForm() {
   return (
     <form action={formAction} className="mt-6 space-y-4">
       <div>
-        <label className="label" htmlFor="email">
-          Email
+        <label className="label" htmlFor="identifier">
+          Email atau username
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
+          id="identifier"
+          name="identifier"
+          type="text"
           className="input"
-          placeholder="anda@email.com"
+          placeholder="anda@email.com / admin"
           required
           autoFocus
-          autoComplete="email"
+          autoComplete="username"
         />
       </div>
       <div>

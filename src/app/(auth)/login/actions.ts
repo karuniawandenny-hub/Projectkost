@@ -12,22 +12,49 @@ export async function loginAction(
   _prev: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const emailRaw = String(formData.get("email") ?? "");
+  const identifierRaw = String(formData.get("identifier") ?? "");
   const password = String(formData.get("password") ?? "");
 
-  const email = normalizeEmail(emailRaw);
-  if (!isValidEmail(email)) return { error: "Email tidak valid." };
+  const identifier = identifierRaw.trim();
+  if (!identifier) return { error: "Email atau username wajib diisi." };
   if (password.length === 0) return { error: "Password wajib diisi." };
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  // Jangan beri tahu apakah email ada atau tidak — untuk mencegah enumerasi.
-  if (!user) return { error: "Email atau password salah." };
+  // Kalau mengandung "@" -> anggap email. Selain itu -> anggap username.
+  const isEmail = identifier.includes("@");
+  let user;
+  if (isEmail) {
+    const email = normalizeEmail(identifier);
+    if (!isValidEmail(email)) return { error: "Email tidak valid." };
+    user = await prisma.user.findUnique({ where: { email } });
+  } else {
+    user = await prisma.user.findUnique({
+      where: { username: identifier.toLowerCase() },
+    });
+  }
+
+  // Jangan beritahu apakah identifier ada — cegah enumerasi akun.
+  if (!user) return { error: "Email/username atau password salah." };
 
   const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return { error: "Email atau password salah." };
+  if (!ok) return { error: "Email/username atau password salah." };
+
+  if (user.status === "PENDING") {
+    return {
+      error:
+        "Akun pemilik Anda sedang menunggu persetujuan admin. Silakan coba lagi nanti.",
+    };
+  }
+  if (user.status === "SUSPENDED") {
+    return {
+      error: "Akun Anda dinonaktifkan. Hubungi administrator.",
+    };
+  }
 
   await createSession({ userId: user.id, role: user.role as Role });
 
+  if (user.role === "ADMIN") {
+    redirect("/admin");
+  }
   if (user.role === "TENANT" && !user.onboardedAt) {
     redirect("/onboarding");
   }

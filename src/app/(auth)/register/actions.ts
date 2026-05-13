@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, normalizeEmail, isValidEmail } from "@/lib/password";
 import { createSession } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
+import { notify } from "@/lib/notify";
 import type { Role } from "@/lib/enums";
 
 export type RegisterState = { error?: string };
@@ -47,20 +48,42 @@ export async function registerAction(
   }
 
   const passwordHash = await hashPassword(password);
+
+  // OWNER butuh persetujuan admin -> status PENDING, tidak auto-login.
+  // TENANT bisa langsung pakai aplikasi -> status ACTIVE + auto-login.
+  const status = role === "OWNER" ? "PENDING" : "ACTIVE";
+
   const user = await prisma.user.create({
     data: {
       email,
       passwordHash,
       name,
       role,
+      status,
       phone,
     },
   });
 
-  await createSession({ userId: user.id, role: user.role as Role });
-
-  if (user.role === "TENANT") {
-    redirect("/onboarding");
+  if (role === "OWNER") {
+    // Beritahu semua admin agar bisa segera meninjau.
+    const admins = await prisma.user.findMany({
+      where: { role: "ADMIN", status: "ACTIVE" },
+      select: { id: true },
+    });
+    await Promise.all(
+      admins.map((a) =>
+        notify({
+          userId: a.id,
+          type: "OWNER_PENDING",
+          title: "Pendaftaran pemilik baru",
+          message: `${user.name} (${user.email}) mengajukan akun pemilik kos.`,
+          link: "/admin/users",
+        })
+      )
+    );
+    redirect("/register/pending");
   }
-  redirect("/dashboard");
+
+  await createSession({ userId: user.id, role: user.role as Role });
+  redirect("/onboarding");
 }

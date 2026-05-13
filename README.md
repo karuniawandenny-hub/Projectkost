@@ -37,13 +37,39 @@ cp .env.example .env
 # Edit .env: pastikan JWT_SECRET diisi string acak panjang.
 # Generate cepat: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 
-# 3) Inisialisasi database
-npx prisma db push
+# 3) Inisialisasi database + seed akun admin
+npm run db:setup
 
 # 4) Jalankan dev server
 npm run dev
 # Buka http://localhost:3000
 ```
+
+### Akun admin default
+
+Saat `npm run db:setup` (atau `npm run db:seed`) dijalankan, akun admin
+otomatis dibuat:
+
+| Field    | Nilai                 |
+|----------|-----------------------|
+| Username | `admin`               |
+| Password | `d111284k`            |
+| Email    | `admin@kelolakos.local` |
+
+Login sebagai admin dari halaman `/login` (boleh isi username atau email) →
+otomatis diarahkan ke modul admin `/admin`. **Segera ganti password admin
+default ini sebelum deploy ke produksi.**
+
+## Peran & hak akses
+
+- **Admin** (`/admin`): kelola seluruh user (approve pemilik, ubah peran,
+  nonaktifkan akun, reset password), lihat semua kos / pembayaran / komplain
+  di sistem.
+- **Pemilik kos**: kelola kos & kamar miliknya, verifikasi pembayaran,
+  tanggapi komplain. **Pendaftaran pemilik membutuhkan persetujuan admin**
+  (status `PENDING` saat baru daftar, tidak bisa login sampai disetujui).
+- **Penghuni**: daftar langsung aktif, wajib onboarding KTP + selfie,
+  bisa upload bukti pembayaran & komplain di kamar yang di-assign.
 
 ## Reset password (Lupa password)
 
