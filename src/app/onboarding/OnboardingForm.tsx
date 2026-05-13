@@ -34,9 +34,9 @@ export function OnboardingForm() {
         helper="Foto wajah Anda dengan pencahayaan baik."
       />
 
-      {state.error && (
+      {state?.error && (
         <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {state.error}
+          {state?.error}
         </div>
       )}
 
