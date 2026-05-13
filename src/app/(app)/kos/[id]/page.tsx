@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { CreateRoomForm } from "./CreateRoomForm";
 import { AssignTenantForm } from "./AssignTenantForm";
 import { EditKosForm } from "./EditKosForm";
+import { EditRoomForm } from "./EditRoomForm";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -79,11 +80,16 @@ export default async function KosDetailPage({
                       {rupiah(r.monthlyPrice)} / bulan
                     </div>
                   </div>
-                  {r.status === "OCCUPIED" ? (
-                    <span className="badge-green">Terisi</span>
-                  ) : (
-                    <span className="badge-slate">Kosong</span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {r.status === "OCCUPIED" ? (
+                      <span className="badge-green">Terisi</span>
+                    ) : (
+                      <span className="badge-slate">Kosong</span>
+                    )}
+                    <EditRoomForm
+                      room={{ id: r.id, name: r.name, monthlyPrice: r.monthlyPrice }}
+                    />
+                  </div>
                 </div>
                 {active ? (
                   <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm">

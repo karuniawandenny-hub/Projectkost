@@ -87,6 +87,40 @@ export async function createRoom(
   return {};
 }
 
+export type UpdateRoomState = { error?: string; success?: boolean };
+
+export async function updateRoom(
+  _prev: UpdateRoomState,
+  formData: FormData
+): Promise<UpdateRoomState> {
+  const user = await requireUser();
+  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa mengubah kamar." };
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const priceRaw = String(formData.get("monthlyPrice") ?? "");
+  const monthlyPrice = parseInt(priceRaw.replace(/\D/g, ""), 10);
+
+  if (!id) return { error: "ID kamar tidak ditemukan." };
+  if (name.length < 1) return { error: "Nama/nomor kamar wajib diisi." };
+  if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) {
+    return { error: "Harga bulanan tidak valid." };
+  }
+
+  const room = await prisma.room.findFirst({
+    where: { id, kos: { ownerId: user.id } },
+    select: { id: true, kosId: true },
+  });
+  if (!room) return { error: "Kamar tidak ditemukan." };
+
+  await prisma.room.update({
+    where: { id },
+    data: { name, monthlyPrice },
+  });
+  revalidatePath(`/kos/${room.kosId}`);
+  return { success: true };
+}
+
 export type AssignState = { error?: string };
 
 export async function assignTenant(
