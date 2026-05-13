@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { CreateRoomForm } from "./CreateRoomForm";
 import { AssignTenantForm } from "./AssignTenantForm";
+import { EditKosForm } from "./EditKosForm";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -36,14 +37,27 @@ export default async function KosDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <Link href="/kos" className="text-sm text-brand-700 hover:underline">
             ← Daftar kos
           </Link>
           <h1 className="text-2xl font-bold mt-1">{kos.name}</h1>
           <div className="text-sm text-slate-600">{kos.address}</div>
+          {kos.description && (
+            <div className="text-sm text-slate-500 mt-1 whitespace-pre-wrap">
+              {kos.description}
+            </div>
+          )}
         </div>
+        <EditKosForm
+          kos={{
+            id: kos.id,
+            name: kos.name,
+            address: kos.address,
+            description: kos.description,
+          }}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

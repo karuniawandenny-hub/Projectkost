@@ -28,6 +28,39 @@ export async function createKos(
   redirect("/kos");
 }
 
+export type UpdateKosState = { error?: string; success?: boolean };
+
+export async function updateKos(
+  _prev: UpdateKosState,
+  formData: FormData
+): Promise<UpdateKosState> {
+  const user = await requireUser();
+  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa mengubah kos." };
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+
+  if (!id) return { error: "ID kos tidak ditemukan." };
+  if (name.length < 2) return { error: "Nama kos wajib diisi." };
+  if (address.length < 5) return { error: "Alamat tidak valid." };
+
+  const kos = await prisma.kos.findFirst({
+    where: { id, ownerId: user.id },
+    select: { id: true },
+  });
+  if (!kos) return { error: "Kos tidak ditemukan." };
+
+  await prisma.kos.update({
+    where: { id },
+    data: { name, address, description },
+  });
+  revalidatePath(`/kos/${id}`);
+  revalidatePath("/kos");
+  return { success: true };
+}
+
 export type RoomState = { error?: string };
 
 export async function createRoom(
