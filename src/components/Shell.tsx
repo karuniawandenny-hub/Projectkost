@@ -25,10 +25,9 @@ export default async function Shell({ user, children }: Props) {
     ? [
         { href: "/dashboard", label: "Dashboard" },
         { href: "/kos", label: "Kos & Kamar" },
-        { href: "/tenants", label: "Penghuni" },
         {
-          href: "/tenants/pending",
-          label: "Pengajuan",
+          href: "/tenants",
+          label: "Penghuni",
           badge: pendingTenants || undefined,
         },
         { href: "/payments", label: "Pembayaran" },

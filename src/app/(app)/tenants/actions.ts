@@ -46,7 +46,6 @@ export async function approveTenant(
   });
 
   revalidatePath("/tenants");
-  revalidatePath("/tenants/pending");
   revalidatePath("/admin/users");
   return { success: `${target.name} disetujui.` };
 }
@@ -113,7 +112,6 @@ export async function approveAndAssignTenant(
   });
 
   revalidatePath("/tenants");
-  revalidatePath("/tenants/pending");
   revalidatePath(`/kos/${room.kosId}`);
   revalidatePath("/kos");
   revalidatePath("/admin/users");
@@ -148,7 +146,7 @@ export async function rejectTenant(
       "Mohon maaf, pengajuan akun penghuni Anda tidak disetujui. Silakan hubungi administrator / pemilik kos.",
     link: "/login",
   });
-  revalidatePath("/tenants/pending");
+  revalidatePath("/tenants");
   revalidatePath("/admin/users");
   return { success: `${target.name} ditolak.` };
 }

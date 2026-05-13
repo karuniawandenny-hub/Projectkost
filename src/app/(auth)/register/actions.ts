@@ -106,7 +106,7 @@ export async function registerAction(
         type: "TENANT_PENDING",
         title: "Calon penghuni baru",
         message: `${user.name} mendaftar sebagai penghuni dan menunggu persetujuan.`,
-        link: "/tenants/pending",
+        link: "/tenants",
       })
     )
   );

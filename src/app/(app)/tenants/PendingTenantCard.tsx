@@ -1,12 +1,13 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
+import { useMemo, useState } from "react";
 import {
   approveAndAssignTenant,
   approveTenant,
   rejectTenant,
   type ApproveTenantState,
-} from "../actions";
+} from "./actions";
 
 const initial: ApproveTenantState = {};
 
@@ -20,6 +21,16 @@ type Tenant = {
   onboardedAt: string | null;
   createdAt: string;
 };
+
+export type KosOption = {
+  id: string;
+  name: string;
+  rooms: { id: string; name: string; monthlyPrice: number }[];
+};
+
+function rupiah(n: number) {
+  return "Rp " + n.toLocaleString("id-ID");
+}
 
 function ApproveButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -41,10 +52,10 @@ function RejectButton() {
 
 export function PendingTenantCard({
   tenant,
-  rooms,
+  kosOptions,
 }: {
   tenant: Tenant;
-  rooms: { id: string; label: string }[];
+  kosOptions: KosOption[];
 }) {
   const [assignState, assignAction] = useFormState(
     approveAndAssignTenant,
@@ -53,12 +64,19 @@ export function PendingTenantCard({
   const [approveState, approveActionForm] = useFormState(approveTenant, initial);
   const [rejectState, rejectActionForm] = useFormState(rejectTenant, initial);
 
+  // Cascade: pilih kos -> kamar yang ditampilkan terfilter berdasarkan kos itu.
+  const [selectedKosId, setSelectedKosId] = useState<string>("");
+  const rooms = useMemo(() => {
+    const k = kosOptions.find((x) => x.id === selectedKosId);
+    return k?.rooms ?? [];
+  }, [selectedKosId, kosOptions]);
+
   const onboarded = !!tenant.onboardedAt;
+  const hasAnyAvailable = kosOptions.some((k) => k.rooms.length > 0);
 
   return (
     <div className="card">
       <div className="flex items-start gap-4 flex-wrap">
-        {/* Foto selfie */}
         {tenant.selfiePhotoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -107,29 +125,56 @@ export function PendingTenantCard({
         </div>
       </div>
 
-      {/* Form: setujui & assign */}
-      <form action={assignAction} className="mt-4 grid gap-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      {/* Form: setujui & assign — cascade kos -> kamar */}
+      <form
+        action={assignAction}
+        className="mt-4 grid gap-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 sm:grid-cols-2"
+      >
         <input type="hidden" name="userId" value={tenant.id} />
         <div>
-          <label className="label">Setujui & assign langsung ke kamar</label>
-          <select name="roomId" className="input" required defaultValue="">
+          <label className="label">1. Lokasi kos</label>
+          <select
+            value={selectedKosId}
+            onChange={(e) => setSelectedKosId(e.target.value)}
+            className="input"
+            required
+          >
             <option value="" disabled>
-              Pilih kamar kosong…
+              Pilih kos…
             </option>
-            {rooms.length === 0 ? (
-              <option value="" disabled>
-                Belum ada kamar kosong di kos Anda
+            {kosOptions.map((k) => (
+              <option key={k.id} value={k.id} disabled={k.rooms.length === 0}>
+                {k.name}{" "}
+                {k.rooms.length === 0
+                  ? "(tidak ada kamar kosong)"
+                  : `(${k.rooms.length} kamar kosong)`}
               </option>
-            ) : (
-              rooms.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))
-            )}
+            ))}
           </select>
         </div>
-        <ApproveButton label="Setujui & assign" />
+        <div>
+          <label className="label">2. Kamar</label>
+          <select name="roomId" className="input" required defaultValue="">
+            <option value="" disabled>
+              {selectedKosId ? "Pilih kamar…" : "Pilih kos dulu"}
+            </option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                Kamar {r.name} — {rupiah(r.monthlyPrice)}/bulan
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="sm:col-span-2 flex justify-end">
+          <ApproveButton label="Setujui & assign ke kamar" />
+        </div>
+        {!hasAnyAvailable && (
+          <div className="sm:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Anda belum punya kamar kosong di kos manapun. Tambah kamar lewat
+            menu <span className="font-medium">Kos & Kamar</span> dulu, atau
+            pakai opsi &quot;Setujui saja&quot; di bawah.
+          </div>
+        )}
         {assignState?.error && (
           <div className="sm:col-span-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {assignState?.error}
@@ -142,7 +187,6 @@ export function PendingTenantCard({
         )}
       </form>
 
-      {/* Form: setujui saja / tolak */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-xs text-slate-500">Tindakan lain:</span>
         <form action={approveActionForm}>
