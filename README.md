@@ -45,6 +45,32 @@ npm run dev
 # Buka http://localhost:3000
 ```
 
+## Reset password (Lupa password)
+
+User mengeklik "Lupa password?" di halaman login → masukkan email → terima
+link reset 1 jam → buat password baru → otomatis diarahkan ke login.
+
+### Mode dev (default, `EMAIL_MODE=dev`)
+
+Tidak benar-benar mengirim email. Setelah submit, link reset ditampilkan
+langsung di halaman dalam banner kuning untuk testing.
+
+### Mode produksi (`EMAIL_MODE=resend`)
+
+Pakai [Resend](https://resend.com) — paling cepat (gratis 3000 email/bulan
+tanpa kartu kredit):
+
+1. Daftar di https://resend.com → buat API Key.
+2. (Opsional, untuk domain custom) verifikasi domain Anda di dashboard.
+3. Set di `.env`:
+   ```
+   EMAIL_MODE=resend
+   RESEND_API_KEY=re_xxxxxxxxxxxxxxx
+   EMAIL_FROM="Kelola Kos <noreply@yourdomain.com>"
+   ```
+   Tanpa domain verified, Resend hanya mengizinkan kirim ke email yang
+   sama dengan akun Anda — cukup untuk testing.
+
 ## Flow pendaftaran
 
 1. Buka `/register` → isi nama, email, password (min 8 karakter), pilih peran
