@@ -142,7 +142,7 @@ type ModalProps = {
   onCapture: (file: File) => void;
 };
 
-function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
+export function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);

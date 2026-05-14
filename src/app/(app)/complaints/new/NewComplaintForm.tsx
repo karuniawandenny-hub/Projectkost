@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { submitComplaint, type ComplaintSubmitState } from "../actions";
+import { CameraModal } from "@/components/CameraInput";
 
 const initial: ComplaintSubmitState = {};
+const MAX_PHOTOS = 4;
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -17,17 +19,79 @@ function SubmitButton() {
 
 export function NewComplaintForm() {
   const [state, formAction] = useFormState(submitComplaint, initial);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const camRef = useRef<HTMLInputElement>(null);
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraSupported, setCameraSupported] = useState(true);
 
-  function onFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    const urls = files
-      .filter((f) => f.type.startsWith("image/"))
-      .map((f) => URL.createObjectURL(f));
+  useEffect(() => {
+    // Cek dukungan kamera (akan false di context non-secure / tidak ada kamera).
+    const has =
+      typeof navigator !== "undefined" &&
+      !!navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === "function";
+    setCameraSupported(has);
+  }, []);
+
+  // Sinkronisasi state -> object URLs untuk preview + hidden input (FormData submit).
+  useEffect(() => {
+    const urls = photos.map((f) => URL.createObjectURL(f));
     setPreviews(urls);
+    if (filesInputRef.current) {
+      const dt = new DataTransfer();
+      photos.forEach((f) => dt.items.add(f));
+      filesInputRef.current.files = dt.files;
+    }
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [photos]);
+
+  function addFiles(newFiles: File[]) {
+    setPhotos((prev) => {
+      const merged = [...prev, ...newFiles].slice(0, MAX_PHOTOS);
+      return merged;
+    });
   }
+
+  function removeAt(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function openCamera() {
+    if (photos.length >= MAX_PHOTOS) return;
+    if (!cameraSupported) {
+      // Fallback: trigger native picker dengan capture attr untuk HP.
+      const el = pickerRef.current;
+      if (el) {
+        el.setAttribute("capture", "environment");
+        el.click();
+      }
+      return;
+    }
+    setShowCamera(true);
+  }
+
+  function openFilePicker() {
+    if (photos.length >= MAX_PHOTOS) return;
+    const el = pickerRef.current;
+    if (!el) return;
+    el.removeAttribute("capture");
+    el.click();
+  }
+
+  function onPicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = e.target.files;
+    if (!list || list.length === 0) return;
+    const arr = Array.from(list).slice(0, MAX_PHOTOS - photos.length);
+    addFiles(arr);
+    // Reset picker agar bisa pilih file sama berkali-kali.
+    e.target.value = "";
+  }
+
+  const slotsLeft = MAX_PHOTOS - photos.length;
 
   return (
     <form action={formAction} className="space-y-4">
@@ -54,58 +118,75 @@ export function NewComplaintForm() {
       </div>
 
       <div>
-        <span className="label">Foto (opsional, maks 4)</span>
+        <span className="label">
+          Foto (opsional, maks {MAX_PHOTOS}) — {photos.length}/{MAX_PHOTOS}
+        </span>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="btn-primary"
-            onClick={() => camRef.current?.click()}
+            onClick={openCamera}
+            disabled={slotsLeft === 0}
           >
             Ambil foto
           </button>
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => fileRef.current?.click()}
+            onClick={openFilePicker}
+            disabled={slotsLeft === 0}
           >
             Pilih dari file
           </button>
         </div>
-        {/*
-          Dua input file tetap mengirim semua file ke FormData (`photos`),
-          kita merge keduanya di server action.
-        */}
+
+        {/* Hidden input yang mengirim semua foto saat submit form */}
         <input
-          ref={camRef}
-          type="file"
-          name="photos"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={onFilesChange}
-          className="hidden"
-        />
-        <input
-          ref={fileRef}
+          ref={filesInputRef}
           type="file"
           name="photos"
           accept="image/*"
           multiple
-          onChange={onFilesChange}
           className="hidden"
+          tabIndex={-1}
         />
+        {/* Hidden picker untuk dialog pilih file / kamera native (fallback) */}
+        <input
+          ref={pickerRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onPicked}
+          className="hidden"
+          tabIndex={-1}
+        />
+
         {previews.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {previews.map((src, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={src}
-                alt={`foto ${i + 1}`}
-                className="h-24 w-24 rounded-md object-cover border"
-              />
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt={`foto ${i + 1}`}
+                  className="h-24 w-24 rounded-md object-cover border"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeAt(i)}
+                  className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs font-bold text-white shadow-md hover:bg-red-700"
+                  aria-label={`Hapus foto ${i + 1}`}
+                >
+                  ✕
+                </button>
+              </div>
             ))}
           </div>
+        )}
+        {slotsLeft === 0 && (
+          <p className="mt-2 text-xs text-amber-700">
+            Maksimal {MAX_PHOTOS} foto. Hapus salah satu untuk menambah yang lain.
+          </p>
         )}
       </div>
 
@@ -115,6 +196,17 @@ export function NewComplaintForm() {
         </div>
       )}
       <SubmitButton />
+
+      {showCamera && (
+        <CameraModal
+          facingMode="environment"
+          onCancel={() => setShowCamera(false)}
+          onCapture={(file) => {
+            addFiles([file]);
+            setShowCamera(false);
+          }}
+        />
+      )}
     </form>
   );
 }
