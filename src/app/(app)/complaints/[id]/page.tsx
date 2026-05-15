@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { replyComplaint } from "../actions";
+import { removeResolutionPhoto } from "../actions";
+import { OwnerReplyForm } from "./OwnerReplyForm";
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "OPEN") return <span className="badge-yellow">Terbuka</span>;
@@ -36,6 +37,9 @@ export default async function ComplaintDetailPage({
   if (!isOwner && !isTenant) redirect("/complaints");
 
   const photos: string[] = c.photoUrls ? JSON.parse(c.photoUrls) : [];
+  const resolutionPhotos: string[] = c.resolutionPhotoUrls
+    ? JSON.parse(c.resolutionPhotoUrls)
+    : [];
 
   return (
     <div className="space-y-4">
@@ -65,32 +69,78 @@ export default async function ComplaintDetailPage({
         </p>
 
         {photos.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {photos.map((src, i) => (
-              <a
-                key={i}
-                href={src}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src}
-                  alt={`foto ${i + 1}`}
-                  className="h-32 w-32 rounded-md object-cover border hover:opacity-90"
-                />
-              </a>
-            ))}
+          <div className="mt-4">
+            <div className="text-xs font-semibold text-slate-500 mb-2">
+              Foto dari penghuni
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {photos.map((src, i) => (
+                <a
+                  key={i}
+                  href={src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`foto ${i + 1}`}
+                    className="h-32 w-32 rounded-md object-cover border hover:opacity-90"
+                  />
+                </a>
+              ))}
+            </div>
           </div>
         )}
 
-        {c.ownerReply && (
+        {(c.ownerReply || resolutionPhotos.length > 0) && (
           <div className="mt-5 rounded-lg bg-brand-50 p-4">
             <div className="text-xs font-semibold text-brand-800">
-              Balasan pemilik
+              Balasan & bukti dari pemilik
             </div>
-            <p className="mt-1 text-sm whitespace-pre-wrap">{c.ownerReply}</p>
+            {c.ownerReply && (
+              <p className="mt-1 text-sm whitespace-pre-wrap">{c.ownerReply}</p>
+            )}
+            {resolutionPhotos.length > 0 && (
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-brand-800 mb-2">
+                  Foto bukti dukung ({resolutionPhotos.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {resolutionPhotos.map((src, i) => (
+                    <div key={i} className="relative">
+                      <a
+                        href={src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={src}
+                          alt={`bukti ${i + 1}`}
+                          className="h-32 w-32 rounded-md object-cover border hover:opacity-90"
+                        />
+                      </a>
+                      {isOwner && (
+                        <form action={removeResolutionPhoto}>
+                          <input type="hidden" name="complaintId" value={c.id} />
+                          <input type="hidden" name="url" value={src} />
+                          <button
+                            type="submit"
+                            className="absolute -top-2 -right-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs font-bold text-white shadow-md hover:bg-red-700"
+                            aria-label={`Hapus bukti ${i + 1}`}
+                          >
+                            ✕
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -98,47 +148,18 @@ export default async function ComplaintDetailPage({
       {isOwner && (
         <div className="card">
           <h2 className="font-semibold">Tanggapi komplain</h2>
-          <form action={replyComplaint} className="mt-3 space-y-3">
-            <input type="hidden" name="complaintId" value={c.id} />
-            <div>
-              <label className="label">Balasan untuk penghuni</label>
-              <textarea
-                name="ownerReply"
-                rows={3}
-                className="input"
-                defaultValue={c.ownerReply ?? ""}
-                placeholder="Mis. baik, tukang akan datang besok pagi."
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                name="action"
-                value="IN_PROGRESS"
-                type="submit"
-                className="btn-secondary"
-              >
-                Tandai diproses
-              </button>
-              <button
-                name="action"
-                value="RESOLVED"
-                type="submit"
-                className="btn-success"
-              >
-                Tandai selesai
-              </button>
-              {c.status !== "OPEN" && (
-                <button
-                  name="action"
-                  value="REOPEN"
-                  type="submit"
-                  className="btn-secondary"
-                >
-                  Buka ulang
-                </button>
-              )}
-            </div>
-          </form>
+          <p className="mt-1 text-sm text-slate-600">
+            Tulis balasan untuk penghuni dan lampirkan foto bukti jika sudah
+            diselesaikan (mis. hasil perbaikan, kondisi setelah ditangani).
+          </p>
+          <div className="mt-3">
+            <OwnerReplyForm
+              complaintId={c.id}
+              currentReply={c.ownerReply}
+              currentStatus={c.status}
+              existingResolutionPhotos={resolutionPhotos.length}
+            />
+          </div>
         </div>
       )}
     </div>

@@ -66,7 +66,14 @@ export async function submitComplaint(
   redirect(`/complaints/${complaint.id}`);
 }
 
-export async function replyComplaint(formData: FormData) {
+export type ReplyComplaintState = { error?: string; success?: string };
+
+const MAX_RESOLUTION_PHOTOS = 6;
+
+export async function replyComplaint(
+  _prev: ReplyComplaintState,
+  formData: FormData
+): Promise<ReplyComplaintState> {
   const user = await requireUser();
   const complaintId = String(formData.get("complaintId") ?? "");
   const action = String(formData.get("action") ?? "");
@@ -76,10 +83,9 @@ export async function replyComplaint(formData: FormData) {
     where: { id: complaintId },
     include: { tenancy: { include: { tenant: true, room: { include: { kos: true } } } } },
   });
-  if (!complaint) throw new Error("NOT_FOUND");
-  // Hanya owner kos terkait yang boleh.
+  if (!complaint) return { error: "Komplain tidak ditemukan." };
   if (user.role !== "OWNER" || complaint.tenancy.room.kos.ownerId !== user.id) {
-    throw new Error("FORBIDDEN");
+    return { error: "Anda tidak punya akses untuk membalas komplain ini." };
   }
 
   let newStatus: string = complaint.status;
@@ -87,26 +93,87 @@ export async function replyComplaint(formData: FormData) {
   else if (action === "RESOLVED") newStatus = "RESOLVED";
   else if (action === "REOPEN") newStatus = "OPEN";
 
+  // File bukti dukung dari pemilik. Diakumulasi ke array yang sudah ada.
+  const existing: string[] = complaint.resolutionPhotoUrls
+    ? JSON.parse(complaint.resolutionPhotoUrls)
+    : [];
+  const files = formData
+    .getAll("resolutionPhotos")
+    .filter((f): f is File => f instanceof File && f.size > 0)
+    .slice(0, MAX_RESOLUTION_PHOTOS - existing.length);
+
+  const newUrls: string[] = [];
+  for (const f of files) {
+    try {
+      const url = await saveUploadedFile(f, `complaints/${complaint.tenancyId}/resolution`);
+      newUrls.push(url);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Gagal unggah foto bukti." };
+    }
+  }
+
+  const mergedUrls = [...existing, ...newUrls];
+
   await prisma.complaint.update({
     where: { id: complaint.id },
     data: {
       ownerReply: reply ?? complaint.ownerReply,
       status: newStatus,
+      resolutionPhotoUrls:
+        mergedUrls.length > 0 ? JSON.stringify(mergedUrls) : null,
       resolvedAt: newStatus === "RESOLVED" ? new Date() : null,
     },
   });
 
-  if (newStatus !== complaint.status || reply) {
+  if (newStatus !== complaint.status || reply || newUrls.length > 0) {
+    const note =
+      newUrls.length > 0
+        ? ` (+${newUrls.length} foto bukti)`
+        : "";
     await notify({
       userId: complaint.tenancy.tenantId,
       type: "COMPLAINT_UPDATE",
       title: "Update komplain Anda",
-      message: `Status komplain "${complaint.title}" diubah menjadi ${labelStatus(newStatus)}.`,
+      message: `Status komplain "${complaint.title}" diubah menjadi ${labelStatus(newStatus)}${note}.`,
       link: `/complaints/${complaint.id}`,
     });
   }
 
   revalidatePath("/complaints");
+  revalidatePath(`/complaints/${complaint.id}`);
+  return {
+    success:
+      newUrls.length > 0
+        ? `Balasan tersimpan (+${newUrls.length} foto bukti).`
+        : "Balasan tersimpan.",
+  };
+}
+
+export async function removeResolutionPhoto(formData: FormData) {
+  const user = await requireUser();
+  const complaintId = String(formData.get("complaintId") ?? "");
+  const url = String(formData.get("url") ?? "");
+  if (!complaintId || !url) return;
+
+  const complaint = await prisma.complaint.findUnique({
+    where: { id: complaintId },
+    include: { tenancy: { include: { room: { include: { kos: true } } } } },
+  });
+  if (!complaint) return;
+  if (user.role !== "OWNER" || complaint.tenancy.room.kos.ownerId !== user.id) {
+    return;
+  }
+
+  const list: string[] = complaint.resolutionPhotoUrls
+    ? JSON.parse(complaint.resolutionPhotoUrls)
+    : [];
+  const next = list.filter((u) => u !== url);
+  await prisma.complaint.update({
+    where: { id: complaint.id },
+    data: {
+      resolutionPhotoUrls: next.length > 0 ? JSON.stringify(next) : null,
+    },
+  });
   revalidatePath(`/complaints/${complaint.id}`);
 }
 
