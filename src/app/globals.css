@@ -59,3 +59,32 @@ body {
     @apply badge bg-slate-100 text-slate-700;
   }
 }
+
+/* Print-friendly: sembunyikan navigasi/tombol; layout single-column. */
+@media print {
+  header,
+  nav,
+  .no-print,
+  details {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  .card {
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+  table {
+    page-break-inside: auto;
+    font-size: 11px;
+  }
+  tr {
+    page-break-inside: avoid;
+  }
+}
