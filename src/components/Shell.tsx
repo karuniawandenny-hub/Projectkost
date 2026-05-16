@@ -14,12 +14,21 @@ type NavItem = { href: string; label: string; badge?: number };
 export default async function Shell({ user, children }: Props) {
   const isOwner = user.role === "OWNER";
 
-  const [unread, pendingTenants] = await Promise.all([
+  const [unread, pendingTenants, pendingMoveOwner] = await Promise.all([
     prisma.notification.count({ where: { userId: user.id, read: false } }),
     isOwner
       ? prisma.user.count({ where: { role: "TENANT", status: "PENDING" } })
       : Promise.resolve(0),
+    isOwner
+      ? prisma.roomMoveRequest.count({
+          where: { status: "PENDING", toRoom: { kos: { ownerId: user.id } } },
+        })
+      : Promise.resolve(0),
   ]);
+
+  // Gabungkan badge "Penghuni": pengajuan akun + permintaan pindah.
+  const ownerTenantsBadge =
+    (pendingTenants || 0) + (pendingMoveOwner || 0) || undefined;
 
   const nav: NavItem[] = isOwner
     ? [
@@ -28,7 +37,7 @@ export default async function Shell({ user, children }: Props) {
         {
           href: "/tenants",
           label: "Penghuni",
-          badge: pendingTenants || undefined,
+          badge: ownerTenantsBadge,
         },
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
@@ -36,6 +45,7 @@ export default async function Shell({ user, children }: Props) {
       ]
     : [
         { href: "/dashboard", label: "Dashboard" },
+        { href: "/move-request", label: "Pindah Kamar" },
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
         { href: "/profile", label: "Profil" },

@@ -3,6 +3,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { endTenancy } from "../kos/actions";
+import {
+  approveMoveRequest,
+  rejectMoveRequest,
+} from "../move-request/actions";
 import { PendingTenantCard, type KosOption } from "./PendingTenantCard";
 
 export default async function TenantsPage() {
@@ -10,7 +14,7 @@ export default async function TenantsPage() {
   if (!user) redirect("/login");
   if (user.role !== "OWNER") redirect("/dashboard");
 
-  const [tenancies, pendingTenants, kosWithRooms] = await Promise.all([
+  const [tenancies, pendingTenants, kosWithRooms, moveRequests] = await Promise.all([
     prisma.tenancy.findMany({
       where: { status: "ACTIVE", room: { kos: { ownerId: user.id } } },
       include: { tenant: true, room: { include: { kos: true } } },
@@ -29,6 +33,18 @@ export default async function TenantsPage() {
           orderBy: { name: "asc" },
           select: { id: true, name: true, monthlyPrice: true },
         },
+      },
+    }),
+    prisma.roomMoveRequest.findMany({
+      where: {
+        status: "PENDING",
+        toRoom: { kos: { ownerId: user.id } },
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        tenancy: { include: { tenant: { select: { name: true, email: true } } } },
+        fromRoom: { include: { kos: { select: { name: true } } } },
+        toRoom: { include: { kos: { select: { name: true } } } },
       },
     }),
   ]);
@@ -93,6 +109,71 @@ export default async function TenantsPage() {
           </div>
         )}
       </section>
+
+      {/* ===== Section: Permintaan pindah kamar ===== */}
+      {moveRequests.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">
+            Permintaan pindah kamar
+            <span className="ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-bold text-slate-900">
+              {moveRequests.length}
+            </span>
+          </h2>
+          <div className="space-y-3">
+            {moveRequests.map((r) => (
+              <div key={r.id} className="card">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div className="font-semibold">
+                      {r.tenancy.tenant.name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {r.tenancy.tenant.email}
+                    </div>
+                    <div className="mt-2 text-sm">
+                      {r.fromRoom.kos.name} • Kamar{" "}
+                      <strong>{r.fromRoom.name}</strong>
+                      <span className="mx-2 text-slate-400">→</span>
+                      Kamar <strong>{r.toRoom.name}</strong>
+                    </div>
+                    {r.reason && (
+                      <div className="mt-1 text-xs text-slate-600">
+                        Alasan: {r.reason}
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-500 mt-1">
+                      Dikirim: {new Date(r.createdAt).toLocaleString("id-ID")}
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <form action={approveMoveRequest}>
+                      <input type="hidden" name="requestId" value={r.id} />
+                      <button type="submit" className="btn-success">
+                        Setujui pindah
+                      </button>
+                    </form>
+                    <form action={rejectMoveRequest} className="flex gap-2">
+                      <input type="hidden" name="requestId" value={r.id} />
+                      <input
+                        name="ownerNote"
+                        className="input"
+                        placeholder="Catatan (opsional)"
+                      />
+                      <button
+                        type="submit"
+                        className="btn-danger"
+                        formNoValidate
+                      >
+                        Tolak
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ===== Section: Penghuni aktif ===== */}
       <section className="space-y-3">

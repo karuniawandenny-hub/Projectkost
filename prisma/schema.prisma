@@ -72,6 +72,8 @@ model Room {
 
   kos           Kos       @relation(fields: [kosId], references: [id], onDelete: Cascade)
   tenancies     Tenancy[]
+  movesFrom     RoomMoveRequest[] @relation("FromMove")
+  movesTo       RoomMoveRequest[] @relation("ToMove")
 
   @@index([kosId])
 }
@@ -90,6 +92,7 @@ model Tenancy {
   room       Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
   payments   Payment[]
   complaints Complaint[]
+  moveRequests RoomMoveRequest[]
 
   @@index([tenantId])
   @@index([roomId])
@@ -129,6 +132,25 @@ model Complaint {
   updatedAt           DateTime @updatedAt
 
   tenancy             Tenancy  @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+
+  @@index([tenancyId])
+  @@index([status])
+}
+
+model RoomMoveRequest {
+  id         String    @id @default(cuid())
+  tenancyId  String
+  fromRoomId String
+  toRoomId   String
+  reason     String?
+  status     String    @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  ownerNote  String?
+  createdAt  DateTime  @default(now())
+  decidedAt  DateTime?
+
+  tenancy    Tenancy   @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+  fromRoom   Room      @relation("FromMove", fields: [fromRoomId], references: [id], onDelete: Cascade)
+  toRoom     Room      @relation("ToMove", fields: [toRoomId], references: [id], onDelete: Cascade)
 
   @@index([tenancyId])
   @@index([status])
