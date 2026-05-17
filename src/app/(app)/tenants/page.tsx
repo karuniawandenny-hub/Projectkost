@@ -8,6 +8,7 @@ import {
   rejectMoveRequest,
 } from "../move-request/actions";
 import { PendingTenantCard, type KosOption } from "./PendingTenantCard";
+import { EditStartDateForm } from "./EditStartDateForm";
 
 export default async function TenantsPage() {
   const user = await getCurrentUser();
@@ -228,7 +229,7 @@ export default async function TenantsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {t.tenant.ktpPhotoUrl && (
                       <a
                         href={t.tenant.ktpPhotoUrl}
@@ -239,6 +240,10 @@ export default async function TenantsPage() {
                         Lihat KTP
                       </a>
                     )}
+                    <EditStartDateForm
+                      tenancyId={t.id}
+                      currentStartDate={t.startDate.toISOString()}
+                    />
                     <form action={endTenancy}>
                       <input type="hidden" name="tenancyId" value={t.id} />
                       <button

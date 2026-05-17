@@ -139,6 +139,81 @@ export async function approveAndAssignTenant(
   return { success: `${target.name} disetujui & ditempatkan di kamar ${room.name}.` };
 }
 
+export type UpdateStartDateState = { error?: string; success?: string };
+
+/**
+ * Pemilik/admin memperbarui tanggal mulai sewa pada tenancy yang sudah ada.
+ * Otomatis revalidate halaman terkait sehingga dashboard penghuni ikut
+ * ter-update tanpa reload manual.
+ */
+export async function updateTenancyStartDate(
+  _prev: UpdateStartDateState,
+  formData: FormData
+): Promise<UpdateStartDateState> {
+  const me = await requireOwnerOrAdmin();
+  const tenancyId = String(formData.get("tenancyId") ?? "");
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
+
+  if (!tenancyId) return { error: "ID tenancy tidak ditemukan." };
+  if (!startDateRaw) return { error: "Tanggal mulai wajib diisi." };
+
+  const parsed = new Date(startDateRaw);
+  if (isNaN(parsed.getTime())) {
+    return { error: "Format tanggal tidak valid." };
+  }
+  const startDate = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate()
+  );
+
+  const tenancy = await prisma.tenancy.findUnique({
+    where: { id: tenancyId },
+    include: {
+      tenant: { select: { id: true, name: true } },
+      room: { include: { kos: true } },
+    },
+  });
+  if (!tenancy) return { error: "Tenancy tidak ditemukan." };
+
+  // OWNER hanya boleh edit tenancy di kos miliknya.
+  if (me.role === "OWNER" && tenancy.room.kos.ownerId !== me.id) {
+    return { error: "Anda tidak punya akses untuk mengubah penghuni ini." };
+  }
+
+  // Validasi: tanggal mulai tidak boleh setelah endDate (jika tenancy ENDED).
+  if (tenancy.endDate && startDate > tenancy.endDate) {
+    return {
+      error: "Tanggal mulai tidak boleh setelah tanggal akhir sewa.",
+    };
+  }
+
+  await prisma.tenancy.update({
+    where: { id: tenancy.id },
+    data: { startDate },
+  });
+
+  // Notifikasi ke penghuni — agar mereka tahu jatuh tempo bulanan berubah.
+  const startStr = startDate.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  await notify({
+    userId: tenancy.tenant.id,
+    type: "TENANCY_START_UPDATED",
+    title: "Tanggal mulai sewa diperbarui",
+    message: `Pemilik memperbarui tanggal mulai sewa Anda menjadi ${startStr}. Jatuh tempo bulanan akan mengikuti tanggal ini.`,
+    link: "/dashboard",
+  });
+
+  revalidatePath("/tenants");
+  revalidatePath("/dashboard");
+  revalidatePath("/kos");
+  revalidatePath(`/kos/${tenancy.room.kosId}`);
+  return { success: `Tanggal mulai sewa ${tenancy.tenant.name} diperbarui ke ${startStr}.` };
+}
+
 /**
  * Tolak pengajuan penghuni (status PENDING -> SUSPENDED).
  */
