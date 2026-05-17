@@ -134,7 +134,7 @@ async function OwnerDashboard({
   /* ---------- 1) Pie: status kamar ---------- */
   const roomsPie: Segment[] = [
     { label: "Terisi", value: occupied, color: PALETTE.emerald },
-    { label: "Kosong", value: available, color: PALETTE.slate },
+    { label: "Kosong", value: available, color: PALETTE.red },
   ];
 
   /* ---------- 2) Bar: pendapatan masuk (VERIFIED) per bulan 6 bln ---------- */
