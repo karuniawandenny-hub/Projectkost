@@ -62,8 +62,24 @@ export async function approveAndAssignTenant(
   const me = await requireOwnerOrAdmin();
   const userId = String(formData.get("userId") ?? "");
   const roomId = String(formData.get("roomId") ?? "");
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
   if (!userId) return { error: "User tidak ditemukan." };
   if (!roomId) return { error: "Pilih kamar terlebih dahulu." };
+
+  // Parse tanggal mulai (YYYY-MM-DD). Default: hari ini.
+  let startDate = new Date();
+  if (startDateRaw) {
+    const parsed = new Date(startDateRaw);
+    if (isNaN(parsed.getTime())) {
+      return { error: "Format tanggal mulai tidak valid." };
+    }
+    // Lock ke jam 00:00 local time supaya konsisten dengan logika billing.
+    startDate = new Date(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      parsed.getDate()
+    );
+  }
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) return { error: "User tidak ditemukan." };
@@ -95,7 +111,7 @@ export async function approveAndAssignTenant(
       data: { status: "ACTIVE" },
     }),
     prisma.tenancy.create({
-      data: { tenantId: target.id, roomId: room.id },
+      data: { tenantId: target.id, roomId: room.id, startDate },
     }),
     prisma.room.update({
       where: { id: room.id },
@@ -103,11 +119,16 @@ export async function approveAndAssignTenant(
     }),
   ]);
 
+  const startStr = startDate.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
   await notify({
     userId: target.id,
     type: "TENANT_APPROVED_ASSIGNED",
     title: "Akun disetujui & kamar di-assign",
-    message: `${me.name} menyetujui akun Anda dan menempatkan Anda di ${room.kos.name} - Kamar ${room.name}.`,
+    message: `${me.name} menyetujui akun Anda dan menempatkan Anda di ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startStr}.`,
     link: "/dashboard",
   });
 

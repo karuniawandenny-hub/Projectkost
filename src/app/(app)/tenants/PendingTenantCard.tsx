@@ -31,6 +31,12 @@ export type KosOption = {
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
 }
+function today() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
 function ApproveButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -165,8 +171,23 @@ export function PendingTenantCard({
             ))}
           </select>
         </div>
-        <div className="sm:col-span-2 flex justify-end">
-          <ApproveButton label="Setujui & assign ke kamar" />
+        <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">3. Tanggal mulai masuk</label>
+            <input
+              type="date"
+              name="startDate"
+              className="input"
+              required
+              defaultValue={today()}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Jatuh tempo bulanan otomatis = tanggal yang sama tiap bulan.
+            </p>
+          </div>
+          <div className="flex items-end justify-end">
+            <ApproveButton label="Setujui & assign ke kamar" />
+          </div>
         </div>
         {!hasAnyAvailable && (
           <div className="sm:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">

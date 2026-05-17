@@ -6,6 +6,13 @@ import { assignTenant, type AssignState } from "../actions";
 
 const initial: AssignState = {};
 
+function today() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 export type AvailableTenant = {
   id: string;
   name: string;
@@ -72,6 +79,17 @@ export function AssignTenantForm({
             agar muncul di sini.
           </p>
         )}
+      </div>
+      <div className="min-w-[160px]">
+        <label className="label">Tanggal mulai</label>
+        <input
+          type="date"
+          name="startDate"
+          className="input"
+          required
+          defaultValue={today()}
+          disabled={empty}
+        />
       </div>
       <SubmitButton disabled={empty} />
       {state?.error && (

@@ -132,7 +132,21 @@ export async function assignTenant(
 
   const roomId = String(formData.get("roomId") ?? "");
   const tenantId = String(formData.get("tenantId") ?? "");
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
   if (!tenantId) return { error: "Pilih penghuni terlebih dahulu." };
+
+  let startDate = new Date();
+  if (startDateRaw) {
+    const parsed = new Date(startDateRaw);
+    if (isNaN(parsed.getTime())) {
+      return { error: "Format tanggal mulai tidak valid." };
+    }
+    startDate = new Date(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      parsed.getDate()
+    );
+  }
 
   const room = await prisma.room.findFirst({
     where: { id: roomId, kos: { ownerId: user.id } },
@@ -159,7 +173,7 @@ export async function assignTenant(
 
   await prisma.$transaction([
     prisma.tenancy.create({
-      data: { tenantId: tenant.id, roomId: room.id },
+      data: { tenantId: tenant.id, roomId: room.id, startDate },
     }),
     prisma.room.update({ where: { id: room.id }, data: { status: "OCCUPIED" } }),
     prisma.notification.create({
@@ -167,7 +181,10 @@ export async function assignTenant(
         userId: tenant.id,
         type: "TENANCY_ASSIGNED",
         title: "Anda di-assign ke kamar baru",
-        message: `Anda di-assign ke ${room.kos.name} - Kamar ${room.name}.`,
+        message: `Anda di-assign ke ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startDate.toLocaleDateString(
+          "id-ID",
+          { day: "2-digit", month: "long", year: "numeric" }
+        )}.`,
         link: "/dashboard",
       },
     }),

@@ -10,6 +10,7 @@ import {
   type Segment,
   type StackedBarPoint,
 } from "@/components/charts";
+import { billingSnapshot, formatDateID } from "@/lib/billing";
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
@@ -385,17 +386,26 @@ async function TenantDashboard({
       </div>
 
       {tenancy ? (
-        <div className="card">
-          <div className="text-sm text-slate-500">Kos & kamar Anda</div>
-          <div className="mt-1 text-lg font-semibold">{tenancy.room.kos.name}</div>
-          <div className="text-sm text-slate-600">
-            Kamar <span className="font-medium">{tenancy.room.name}</span> •{" "}
-            {rupiah(tenancy.room.monthlyPrice)}/bulan
+        <>
+          <div className="card">
+            <div className="text-sm text-slate-500">Kos & kamar Anda</div>
+            <div className="mt-1 text-lg font-semibold">{tenancy.room.kos.name}</div>
+            <div className="text-sm text-slate-600">
+              Kamar <span className="font-medium">{tenancy.room.name}</span> •{" "}
+              {rupiah(tenancy.room.monthlyPrice)}/bulan
+            </div>
+            <div className="text-sm text-slate-500 mt-1">
+              {tenancy.room.kos.address}
+            </div>
+            <div className="text-xs text-slate-500 mt-2">
+              Mulai sewa:{" "}
+              <span className="font-medium text-slate-700">
+                {formatDateID(tenancy.startDate)}
+              </span>
+            </div>
           </div>
-          <div className="text-sm text-slate-500 mt-1">
-            {tenancy.room.kos.address}
-          </div>
-        </div>
+          <BillingCard tenancy={tenancy} payments={payments} />
+        </>
       ) : (
         <div className="card border-amber-300 bg-amber-50">
           <div className="font-medium text-amber-800">
@@ -504,4 +514,133 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "PENDING") return <span className="badge-yellow">Menunggu</span>;
   if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
   return <span className="badge-red">Ditolak</span>;
+}
+
+/**
+ * Kartu informasi pembayaran untuk dashboard penghuni.
+ * Menghitung status periode saat ini (dari startDate) dan jatuh tempo
+ * periode berikutnya. Banner pengingat muncul saat ada tagihan belum
+ * dibayar / lewat jatuh tempo.
+ */
+function BillingCard({
+  tenancy,
+  payments,
+}: {
+  tenancy: { startDate: Date };
+  payments: { status: string; periodMonth: number; periodYear: number }[];
+}) {
+  const snap = billingSnapshot(tenancy.startDate);
+  const currentPayment = snap.current
+    ? payments.find(
+        (p) =>
+          p.periodMonth === snap.current!.month &&
+          p.periodYear === snap.current!.year
+      )
+    : null;
+  const nextPayment = payments.find(
+    (p) => p.periodMonth === snap.next.month && p.periodYear === snap.next.year
+  );
+
+  // Banner pengingat: TERLAMBAT bayar untuk periode current (kalau ada,
+  // belum punya record VERIFIED), atau dekat jatuh tempo (≤7 hari) tanpa
+  // upload bukti.
+  const showBanner =
+    !!snap.current &&
+    snap.current.isLate &&
+    (!currentPayment || currentPayment.status !== "VERIFIED");
+
+  const monthLabel = (m: number) => MONTH_LABELS[m - 1];
+
+  return (
+    <>
+      {showBanner && snap.current && (
+        <div className="card border-red-300 bg-red-50">
+          <div className="flex items-start gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-100 text-red-700">
+              !
+            </div>
+            <div className="flex-1">
+              <div className="font-semibold text-red-800">
+                Tagihan periode {monthLabel(snap.current.month)} {snap.current.year}{" "}
+                terlambat {snap.current.daysLate} hari
+              </div>
+              <p className="mt-1 text-sm text-red-800/90">
+                Jatuh tempo {formatDateID(snap.current.dueDate)}.{" "}
+                {currentPayment
+                  ? currentPayment.status === "PENDING"
+                    ? "Bukti pembayaran Anda menunggu verifikasi pemilik."
+                    : "Pembayaran Anda ditolak, silakan upload ulang."
+                  : "Segera upload bukti pembayaran."}
+              </p>
+            </div>
+            <Link href="/payments/new" className="btn-danger no-print">
+              Upload bukti
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="text-sm text-slate-500">Informasi pembayaran</div>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div>
+            <div className="text-xs text-slate-500">Periode saat ini</div>
+            {snap.current ? (
+              <>
+                <div className="mt-0.5 font-semibold">
+                  {monthLabel(snap.current.month)} {snap.current.year}
+                </div>
+                <div className="text-xs text-slate-500">
+                  Jatuh tempo: {formatDateID(snap.current.dueDate)}
+                </div>
+                <div className="mt-1">
+                  {currentPayment ? (
+                    <StatusBadge status={currentPayment.status} />
+                  ) : snap.current.isLate ? (
+                    <span className="badge-red">
+                      Terlambat {snap.current.daysLate} hari
+                    </span>
+                  ) : (
+                    <span className="badge-yellow">Belum dibayar</span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="mt-0.5 text-sm text-slate-500">
+                Belum ada periode tagihan aktif.
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-xs text-slate-500">Jatuh tempo berikutnya</div>
+            <div className="mt-0.5 font-semibold">
+              {formatDateID(snap.next.dueDate)}
+            </div>
+            <div className="text-xs text-slate-500">
+              {snap.next.daysUntil > 0
+                ? `${snap.next.daysUntil} hari lagi`
+                : snap.next.daysUntil === 0
+                  ? "Hari ini"
+                  : "Sudah lewat"}{" "}
+              · Periode {monthLabel(snap.next.month)} {snap.next.year}
+            </div>
+            <div className="mt-1">
+              {nextPayment ? (
+                <StatusBadge status={nextPayment.status} />
+              ) : (
+                <span className="badge-slate">Belum dibayar</span>
+              )}
+            </div>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Tagihan jatuh tempo setiap tanggal{" "}
+          <span className="font-medium text-slate-700">
+            {snap.anniversaryDay}
+          </span>{" "}
+          tiap bulan (mengikuti tanggal mulai sewa).
+        </p>
+      </div>
+    </>
+  );
 }
