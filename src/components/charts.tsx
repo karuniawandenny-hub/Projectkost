@@ -48,10 +48,16 @@ export function PieChart({
   data,
   size = 180,
   emptyLabel = "Tidak ada data",
+  variant = "donut",
+  showSliceLabel = true,
 }: {
   data: Segment[];
   size?: number;
   emptyLabel?: string;
+  /** "donut" tampilkan lubang dengan total di tengah; "pie" potongan solid. */
+  variant?: "donut" | "pie";
+  /** Tampilkan label persentase langsung di tiap potongan (untuk variant pie). */
+  showSliceLabel?: boolean;
 }) {
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total === 0) {
@@ -64,7 +70,22 @@ export function PieChart({
   const cx = size / 2;
   const cy = size / 2;
   const r = size / 2 - 4;
+  // Untuk posisi label, gunakan jari-jari sedikit lebih dalam.
+  const labelR = r * 0.62;
   let cur = 0;
+
+  // Pre-compute angle & posisi label per segmen sebelum render (karena
+  // `cur` di-mutasi di dalam map).
+  const segmentsCalc = data.map((d) => {
+    if (d.value <= 0) return null;
+    const startAngle = cur;
+    const angle = (d.value / total) * 360;
+    const endAngle = startAngle + angle;
+    cur += angle;
+    const mid = startAngle + angle / 2;
+    const labelPos = polar(cx, cy, labelR, mid);
+    return { d, startAngle, endAngle, angle, mid, labelPos };
+  });
 
   return (
     <div className="flex items-center gap-4 flex-wrap">
@@ -76,39 +97,78 @@ export function PieChart({
         role="img"
         aria-label="Pie chart"
       >
-        {data.map((d, i) => {
-          const value = d.value;
-          if (value <= 0) return null;
-          const angle = (value / total) * 360;
+        {segmentsCalc.map((seg, i) => {
+          if (!seg) return null;
+          const { d, startAngle, endAngle, angle } = seg;
           // SVG arcs tidak handle full circle 360 — kalau hanya 1 segmen,
           // gambar lingkaran penuh saja.
           if (angle >= 359.99) {
             return <circle key={i} cx={cx} cy={cy} r={r} fill={d.color} />;
           }
-          const path = describeArc(cx, cy, r, cur, cur + angle);
-          cur += angle;
-          return <path key={i} d={path} fill={d.color} />;
+          const path = describeArc(cx, cy, r, startAngle, endAngle);
+          return (
+            <path
+              key={i}
+              d={path}
+              fill={d.color}
+              stroke="#fff"
+              strokeWidth="1.5"
+            />
+          );
         })}
-        {/* Donut hole */}
-        <circle cx={cx} cy={cy} r={r * 0.55} fill="#fff" />
-        <text
-          x={cx}
-          y={cy - 2}
-          textAnchor="middle"
-          className="fill-slate-900"
-          style={{ fontSize: 18, fontWeight: 700 }}
-        >
-          {total}
-        </text>
-        <text
-          x={cx}
-          y={cy + 14}
-          textAnchor="middle"
-          className="fill-slate-500"
-          style={{ fontSize: 10 }}
-        >
-          total
-        </text>
+
+        {variant === "donut" ? (
+          <>
+            {/* Donut hole */}
+            <circle cx={cx} cy={cy} r={r * 0.55} fill="#fff" />
+            <text
+              x={cx}
+              y={cy - 2}
+              textAnchor="middle"
+              className="fill-slate-900"
+              style={{ fontSize: 18, fontWeight: 700 }}
+            >
+              {total}
+            </text>
+            <text
+              x={cx}
+              y={cy + 14}
+              textAnchor="middle"
+              className="fill-slate-500"
+              style={{ fontSize: 10 }}
+            >
+              total
+            </text>
+          </>
+        ) : (
+          // Variant: pie murni — opsional label persentase di tiap potongan.
+          showSliceLabel &&
+          segmentsCalc.map((seg, i) => {
+            if (!seg) return null;
+            const pct = (seg.d.value / total) * 100;
+            // Hanya tampilkan label di potongan yang cukup besar (>7%).
+            if (pct < 7) return null;
+            return (
+              <text
+                key={`l-${i}`}
+                x={seg.labelPos.x}
+                y={seg.labelPos.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="#fff"
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  paintOrder: "stroke",
+                  stroke: "rgba(0,0,0,0.25)",
+                  strokeWidth: 2,
+                }}
+              >
+                {Math.round(pct)}%
+              </text>
+            );
+          })
+        )}
       </svg>
       <ul className="space-y-1.5 text-sm">
         {data.map((d, i) => {

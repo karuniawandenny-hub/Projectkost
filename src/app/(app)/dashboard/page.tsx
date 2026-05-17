@@ -215,7 +215,7 @@ async function OwnerDashboard({
           title="Hunian kamar"
           subtitle={`${occupied} terisi · ${available} kosong dari ${rooms.length} kamar`}
         >
-          <PieChart data={roomsPie} />
+          <PieChart data={roomsPie} variant="pie" />
         </ChartCard>
 
         <ChartCard
