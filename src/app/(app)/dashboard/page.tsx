@@ -336,14 +336,25 @@ async function TenantDashboard({
 
   /* ---------- Chart 1: jadwal pembayaran 6 bulan SEJAK tenant masuk ---------- */
   //  - Bulan-bulan yang ditampilkan: 6 bulan berurutan mulai dari bulan
-  //    Tenancy.startDate (atau bulan ini bila tidak ada tenancy aktif).
+  //    yang lebih besar antara Tenancy.startDate dan Tenancy.createdAt
+  //    (= saat owner meng-assign & menyetujui). Pakai createdAt sebagai
+  //    floor agar chart tidak menampilkan periode SEBELUM owner approve
+  //    walaupun startDate di-input lebih awal (mis. default 'hari ini'
+  //    yang ternyata bulan sebelumnya, atau backdate).
   //  - Jatuh tempo tiap bulan = anniversary day di bulan tersebut.
   //  - Status:
   //      * VERIFIED/PENDING/REJECTED jika ada Payment record untuk periode itu
   //      * UNPAID jika periode sudah lewat jatuh tempo & belum ada payment
   //      * UPCOMING jika periode belum sampai jatuh tempo
   const today = new Date();
-  const seed = tenancy ? new Date(tenancy.startDate) : new Date();
+  const seed = tenancy
+    ? new Date(
+        Math.max(
+          new Date(tenancy.startDate).getTime(),
+          new Date(tenancy.createdAt).getTime()
+        )
+      )
+    : new Date();
   const baseYear = seed.getFullYear();
   const baseMonth = seed.getMonth();
 
