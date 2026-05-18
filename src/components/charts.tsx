@@ -339,13 +339,15 @@ export function StackedBarChart({
 /**
  * Timeline status per bulan untuk dashboard penghuni.
  * Setiap bulan ditampilkan sebagai kartu kecil dengan warna sesuai status
- * (Lunas / Menunggu / Ditolak / Belum bayar) plus nominal yang dibayar
- * (kalau ada record pembayaran).
+ * (Lunas / Menunggu / Ditolak / Belum bayar / Akan datang) plus nominal
+ * yang dibayar (kalau ada record pembayaran).
  */
 export type MonthStatusItem = {
   label: string;       // "Mei 26"
-  status: "VERIFIED" | "PENDING" | "REJECTED" | "UNPAID";
+  status: "VERIFIED" | "PENDING" | "REJECTED" | "UNPAID" | "UPCOMING";
   amount: number | null;
+  /** Optional: tanggal jatuh tempo periode ini (untuk tooltip / sub-text). */
+  dueLabel?: string;
 };
 
 export function MonthStatusTimeline({
@@ -387,6 +389,14 @@ export function MonthStatusTimeline({
         label: "Ditolak",
         text: "text-red-800",
       };
+    if (status === "UPCOMING")
+      return {
+        bg: "bg-blue-50",
+        border: "border-blue-200",
+        accent: PALETTE.blue,
+        label: "Akan datang",
+        text: "text-blue-800",
+      };
     return {
       bg: "bg-slate-100/60",
       border: "border-slate-200",
@@ -426,6 +436,11 @@ export function MonthStatusTimeline({
             <div className="text-[11px] text-slate-600">
               {d.amount !== null ? rupiahShort(d.amount) : "—"}
             </div>
+            {d.dueLabel && (
+              <div className="mt-0.5 text-[10px] text-slate-500">
+                Jth tempo {d.dueLabel}
+              </div>
+            )}
           </div>
         );
       })}

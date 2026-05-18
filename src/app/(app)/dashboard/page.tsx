@@ -12,7 +12,11 @@ import {
   type StackedBarPoint,
   type MonthStatusItem,
 } from "@/components/charts";
-import { billingSnapshot, formatDateID } from "@/lib/billing";
+import {
+  billingSnapshot,
+  formatDateID,
+  anniversaryInMonth,
+} from "@/lib/billing";
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
@@ -330,19 +334,51 @@ async function TenantDashboard({
     }),
   ]);
 
-  /* ---------- Chart 1: timeline status pembayaran 6 bulan ---------- */
-  const paymentTimeline: MonthStatusItem[] = months.map(({ m, y, label }) => {
-    const p = payments.find((x) => x.periodMonth === m && x.periodYear === y);
-    const status: MonthStatusItem["status"] = p
-      ? (p.status as "VERIFIED" | "PENDING" | "REJECTED")
-      : "UNPAID";
-    return { label, status, amount: p?.amount ?? null };
-  });
-  const verified6m = paymentTimeline.filter((x) => x.status === "VERIFIED").length;
-  const pending6m = paymentTimeline.filter((x) => x.status === "PENDING").length;
-  const rejected6m = paymentTimeline.filter((x) => x.status === "REJECTED").length;
-  const unpaid6m = paymentTimeline.filter((x) => x.status === "UNPAID").length;
-  const totalPaid6m = paymentTimeline
+  /* ---------- Chart 1: jadwal pembayaran 6 bulan SEJAK tenant masuk ---------- */
+  //  - Bulan-bulan yang ditampilkan: 6 bulan berurutan mulai dari bulan
+  //    Tenancy.startDate (atau bulan ini bila tidak ada tenancy aktif).
+  //  - Jatuh tempo tiap bulan = anniversary day di bulan tersebut.
+  //  - Status:
+  //      * VERIFIED/PENDING/REJECTED jika ada Payment record untuk periode itu
+  //      * UNPAID jika periode sudah lewat jatuh tempo & belum ada payment
+  //      * UPCOMING jika periode belum sampai jatuh tempo
+  const today = new Date();
+  const seed = tenancy ? new Date(tenancy.startDate) : new Date();
+  const baseYear = seed.getFullYear();
+  const baseMonth = seed.getMonth();
+
+  const paymentTimeline: MonthStatusItem[] = Array.from({ length: 6 }).map(
+    (_, i) => {
+      const y = baseYear + Math.floor((baseMonth + i) / 12);
+      const m0 = (baseMonth + i) % 12; // 0-11
+      const m = m0 + 1; // 1-12
+      const label = `${MONTH_LABELS[m0]} ${String(y).slice(2)}`;
+      const due = tenancy
+        ? anniversaryInMonth(new Date(tenancy.startDate), y, m0)
+        : new Date(y, m0, 1);
+      const p = payments.find((x) => x.periodMonth === m && x.periodYear === y);
+      let status: MonthStatusItem["status"];
+      if (p) {
+        status = p.status as "VERIFIED" | "PENDING" | "REJECTED";
+      } else if (due.getTime() > today.getTime()) {
+        status = "UPCOMING";
+      } else {
+        status = "UNPAID";
+      }
+      const dueLabel = due.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+      });
+      return { label, status, amount: p?.amount ?? null, dueLabel };
+    }
+  );
+
+  const verifiedTL = paymentTimeline.filter((x) => x.status === "VERIFIED").length;
+  const pendingTL = paymentTimeline.filter((x) => x.status === "PENDING").length;
+  const rejectedTL = paymentTimeline.filter((x) => x.status === "REJECTED").length;
+  const unpaidTL = paymentTimeline.filter((x) => x.status === "UNPAID").length;
+  const upcomingTL = paymentTimeline.filter((x) => x.status === "UPCOMING").length;
+  const totalPaidTL = paymentTimeline
     .filter((x) => x.status === "VERIFIED")
     .reduce((s, x) => s + (x.amount ?? 0), 0);
 
@@ -413,10 +449,17 @@ async function TenantDashboard({
       {/* ===== 2 chart utama ===== */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
-          title="Riwayat pembayaran 6 bulan"
-          subtitle={`${verified6m} lunas · ${pending6m} menunggu · ${rejected6m} ditolak · ${unpaid6m} belum bayar — total masuk ${rupiah(totalPaid6m)}`}
+          title="Jadwal pembayaran 6 bulan sejak masuk"
+          subtitle={
+            tenancy
+              ? `${verifiedTL} lunas · ${pendingTL} menunggu · ${rejectedTL} ditolak · ${unpaidTL} belum bayar · ${upcomingTL} akan datang — total masuk ${rupiah(totalPaidTL)}`
+              : "Belum ada tenancy aktif"
+          }
         >
-          <MonthStatusTimeline data={paymentTimeline} />
+          <MonthStatusTimeline
+            data={paymentTimeline}
+            emptyLabel="Belum ada tenancy aktif"
+          />
         </ChartCard>
         <ChartCard
           title="Komplain saya"
