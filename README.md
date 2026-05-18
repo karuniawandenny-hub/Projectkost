@@ -4,6 +4,8 @@ Aplikasi web (responsif mobile) untuk menghubungkan **pemilik kos** dan **penghu
 Pemilik bisa kelola data semua kos & penghuni; penghuni bisa upload KTP, foto diri,
 bukti pembayaran bulanan, dan membuat komplain dengan foto — semua langsung dari HP.
 
+> **Mau langsung deploy ke produksi?** Lihat [**DEPLOY.md**](./DEPLOY.md) untuk panduan step-by-step Railway/Render/VPS (untuk pemula, ±15 menit).
+
 ## Fitur utama
 
 - **Auth email + password** — sederhana, langsung jalan tanpa setup eksternal.

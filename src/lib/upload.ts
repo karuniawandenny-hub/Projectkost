@@ -14,7 +14,19 @@ const ALLOWED_MIME = new Set([
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 
-const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
+/**
+ * Folder root uploads. Saat di produksi (Railway/Docker), set env
+ * UPLOADS_DIR ke path volume yang persisten (mis. /data/uploads).
+ * Default: public/uploads di project (untuk dev).
+ *
+ * Saat menggunakan custom UPLOADS_DIR, file harus juga di-serve via
+ * route /uploads/* — kita pakai symlink yang dibuat saat startup
+ * (lihat scripts/start.sh).
+ */
+const UPLOAD_ROOT =
+  process.env.UPLOADS_DIR && process.env.UPLOADS_DIR.length > 0
+    ? process.env.UPLOADS_DIR
+    : path.join(process.cwd(), "public", "uploads");
 
 function extFromMime(mime: string): string {
   switch (mime) {
