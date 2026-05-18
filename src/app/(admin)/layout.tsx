@@ -22,6 +22,7 @@ export default async function AdminLayout({
     { href: "/admin/kos", label: "Semua Kos" },
     { href: "/admin/payments", label: "Pembayaran" },
     { href: "/admin/complaints", label: "Komplain" },
+    { href: "/admin/system", label: "Sistem" },
   ];
 
   return (

@@ -60,6 +60,72 @@ Login sebagai admin dari halaman `/login` (boleh isi username atau email) →
 otomatis diarahkan ke modul admin `/admin`. **Segera ganti password admin
 default ini sebelum deploy ke produksi.**
 
+## Production setup — Reminder & Payment Gateway
+
+### 1. Reminder otomatis (Email + WhatsApp)
+
+Reminder pembayaran (H-7, H-3, H-1, OVERDUE) dikirim via `/api/cron/reminders` ke 3 channel.
+
+**A. Email via Resend** (recommended, gratis 3000/bulan)
+1. Daftar di [resend.com](https://resend.com)
+2. API Keys → buat key
+3. Set di `.env`:
+   ```bash
+   EMAIL_MODE="resend"
+   RESEND_API_KEY="re_xxxxxxxxxxxx"
+   EMAIL_FROM="Kelola Kos <noreply@yourdomain.com>"
+   ```
+
+**B. WhatsApp via Fonnte** (paling populer di Indonesia)
+1. Daftar di [fonnte.com](https://fonnte.com)
+2. Tambah Device → pindai QR pakai WA HP yang akan jadi pengirim
+3. Salin Device Token
+4. Set di `.env`:
+   ```bash
+   OTP_MODE="fonnte"
+   WA_GATEWAY_TOKEN="xxxxxxxxxxxx"
+   ```
+
+**C. Jadwalkan cron**
+
+`CRON_SECRET` (env, string acak panjang) melindungi endpoint.
+
+- **Deploy ke Vercel**: file `vercel.json` di repo sudah berisi schedule `0 2 * * *` (09:00 WIB harian). Vercel Cron otomatis kirim header `Authorization: Bearer <CRON_SECRET>` selama env var-nya ter-set di project Vercel.
+- **Self-hosted**: jadwalkan di crontab linux:
+  ```bash
+  0 9 * * * curl -X POST https://your-domain.com/api/cron/reminders \
+    -H "Authorization: Bearer $CRON_SECRET"
+  ```
+- **Alternatif gratis**: [cron-job.org](https://cron-job.org) atau [EasyCron](https://www.easycron.com), set URL `https://your-domain.com/api/cron/reminders?token=<CRON_SECRET>` harian.
+
+### 2. Payment Gateway (Auto-verify)
+
+Default `PAYMENT_GATEWAY=mock` — transaksi langsung di-PAID via webhook lokal. Cocok untuk demo. Untuk produksi pakai **Midtrans Snap**:
+
+1. Daftar di [midtrans.com](https://midtrans.com)
+2. Pilih environment **Sandbox** (untuk testing) atau **Production**
+3. Settings → Access Keys → salin Server Key & Client Key
+4. Settings → Configuration → Payment Notification URL:
+   ```
+   https://your-domain.com/api/webhooks/payment
+   ```
+5. Set di `.env`:
+   ```bash
+   PAYMENT_GATEWAY="midtrans"
+   MIDTRANS_SERVER_KEY="SB-Mid-server-xxxxx"
+   MIDTRANS_CLIENT_KEY="SB-Mid-client-xxxxx"
+   MIDTRANS_PROD="0"   # "1" untuk production
+   ```
+6. Tenant klik "Bayar online" di `/payments` → buka Midtrans Snap UI → pilih QRIS / VA / e-wallet → bayar → callback otomatis update status
+
+### 3. Halaman monitoring `/admin/system`
+
+Login sebagai admin → menu "Sistem" → halaman menampilkan:
+- Status setiap integrasi (Email / WA / Gateway / Cron) — hijau bila ter-konfigurasi, kuning bila masih dev mode
+- Statistik (jumlah tagihan, reminder log, gateway transaction)
+- **Tombol test** untuk picu manual: reminder cron, kirim email test, kirim WA test
+- Panduan setup expandable per gateway
+
 ## Peran & hak akses
 
 - **Admin** (`/admin`): kelola seluruh user (approve pemilik, ubah peran,
