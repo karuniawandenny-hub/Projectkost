@@ -21,6 +21,8 @@ export type ReportRow = {
   roomName: string;
   monthlyPrice: number;
   tenancyId: string;
+  tenancyStartDate: Date;
+  tenantId: string;
   tenantName: string;
   tenantEmail: string;
   periodMonth: number;
@@ -113,7 +115,7 @@ export async function buildReport(
       ],
     },
     include: {
-      tenant: { select: { name: true, email: true } },
+      tenant: { select: { id: true, name: true, email: true } },
       room: { include: { kos: { select: { id: true, name: true } } } },
       payments: {
         where: {
@@ -151,6 +153,8 @@ export async function buildReport(
         roomName: t.room.name,
         monthlyPrice: t.room.monthlyPrice,
         tenancyId: t.id,
+        tenancyStartDate: t.startDate,
+        tenantId: t.tenant.id,
         tenantName: t.tenant.name,
         tenantEmail: t.tenant.email,
         periodMonth: p.month,
@@ -162,22 +166,55 @@ export async function buildReport(
     }
   }
 
+  // Dedup per (tenantId, periode): kalau seorang penghuni punya >1 tenancy
+  // yang overlap dengan periode yang sama (contoh: pindah kamar di tengah
+  // bulan), pilih SATU baris saja. Prioritas:
+  //   1. baris dengan payment paling "kuat" (VERIFIED > PENDING > REJECTED > UNPAID)
+  //   2. tie-breaker: tenancy paling baru (startDate terbesar) — anggap
+  //      itu kamar tempat penghuni sekarang berada.
+  const statusRank: Record<ReportRow["paymentStatus"], number> = {
+    VERIFIED: 4,
+    PENDING: 3,
+    REJECTED: 2,
+    UNPAID: 1,
+  };
+  const deduped = new Map<string, ReportRow>();
+  for (const r of rows) {
+    const key = `${r.tenantId}|${r.periodYear}|${r.periodMonth}`;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, r);
+      continue;
+    }
+    const a = statusRank[r.paymentStatus];
+    const b = statusRank[existing.paymentStatus];
+    if (a > b) {
+      deduped.set(key, r);
+    } else if (a === b) {
+      // Tie: pilih tenancy yang lebih baru
+      if (r.tenancyStartDate.getTime() > existing.tenancyStartDate.getTime()) {
+        deduped.set(key, r);
+      }
+    }
+  }
+  const dedupedRows = Array.from(deduped.values());
+
   // Sort: kos asc, kamar asc, periode asc (tahun lalu bulan)
-  rows.sort((a, b) => {
+  dedupedRows.sort((a, b) => {
     if (a.kosName !== b.kosName) return a.kosName.localeCompare(b.kosName);
     if (a.roomName !== b.roomName) return a.roomName.localeCompare(b.roomName);
     if (a.periodYear !== b.periodYear) return a.periodYear - b.periodYear;
     return a.periodMonth - b.periodMonth;
   });
 
-  // Hitung summary dari SEMUA rows (sebelum filter status di-apply ke display).
-  const summary = summarize(rows, periods.length);
+  // Hitung summary dari rows yang sudah deduped.
+  const summary = summarize(dedupedRows, periods.length);
 
   // Filter status untuk tampilan tabel.
   const filtered =
     filters.status === "all"
-      ? rows
-      : rows.filter((r) => r.paymentStatus === filters.status);
+      ? dedupedRows
+      : dedupedRows.filter((r) => r.paymentStatus === filters.status);
 
   return { rows: filtered, summary };
 }
