@@ -16,6 +16,7 @@ import {
   billingSnapshot,
   formatDateID,
   anniversaryInMonth,
+  ensureBillsForUser,
 } from "@/lib/billing";
 
 const MONTH_LABELS = [
@@ -51,6 +52,16 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "TENANT" && !user.onboardedAt) redirect("/onboarding");
+
+  // Lazy auto-generate tagihan bulanan saat dashboard di-load.
+  // Idempoten (skip kalau sudah ada). Tidak blocking — kalau gagal,
+  // dashboard tetap render.
+  try {
+    await ensureBillsForUser(user.id);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("ensureBillsForUser error:", e);
+  }
 
   if (user.role === "OWNER") {
     return <OwnerDashboard ownerId={user.id} name={user.name} />;

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { verifyPayment } from "./actions";
+import { CheckoutButton } from "./CheckoutButton";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -23,6 +24,7 @@ const MONTHS = [
 ];
 
 function StatusBadge({ status }: { status: string }) {
+  if (status === "DUE") return <span className="badge-slate">Tagihan dibuat</span>;
   if (status === "PENDING") return <span className="badge-yellow">Menunggu verifikasi</span>;
   if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
   return <span className="badge-red">Ditolak</span>;
@@ -31,6 +33,13 @@ function StatusBadge({ status }: { status: string }) {
 export default async function PaymentsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Lazy auto-generate tagihan saat halaman pembayaran dibuka.
+  try {
+    const { ensureBillsForUser } = await import("@/lib/billing");
+    await ensureBillsForUser(user.id);
+  } catch {
+    // ignore
+  }
 
   if (user.role === "TENANT") {
     const payments = await prisma.payment.findMany({
@@ -74,21 +83,26 @@ export default async function PaymentsPage() {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <StatusBadge status={p.status} />
-                  <a
-                    href={p.proofUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-brand-700 hover:underline"
-                  >
-                    Lihat bukti
-                  </a>
-                  {p.status === "REJECTED" && (
-                    <Link
-                      href={`/payments/new?month=${p.periodMonth}&year=${p.periodYear}`}
+                  {p.proofUrl ? (
+                    <a
+                      href={p.proofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-sm text-brand-700 hover:underline"
                     >
-                      Upload ulang
-                    </Link>
+                      Lihat bukti
+                    </a>
+                  ) : null}
+                  {(p.status === "DUE" || p.status === "REJECTED") && (
+                    <>
+                      <Link
+                        href={`/payments/new?month=${p.periodMonth}&year=${p.periodYear}`}
+                        className="btn-primary text-xs"
+                      >
+                        {p.status === "DUE" ? "Upload bukti" : "Upload ulang"}
+                      </Link>
+                      <CheckoutButton paymentId={p.id} />
+                    </>
                   )}
                 </div>
               </div>
@@ -114,7 +128,10 @@ export default async function PaymentsPage() {
   });
 
   const pending = payments.filter((p) => p.status === "PENDING");
-  const others = payments.filter((p) => p.status !== "PENDING");
+  const due = payments.filter((p) => p.status === "DUE");
+  const others = payments.filter(
+    (p) => p.status !== "PENDING" && p.status !== "DUE"
+  );
 
   return (
     <div className="space-y-6">
@@ -135,6 +152,19 @@ export default async function PaymentsPage() {
           ))}
         </div>
       </section>
+
+      {due.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-500 mb-2">
+            Tagihan terbuka — belum diupload ({due.length})
+          </h2>
+          <div className="space-y-3">
+            {due.map((p) => (
+              <PaymentRow key={p.id} p={p} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-semibold text-slate-500 mb-2">
@@ -181,14 +211,18 @@ function PaymentRow({ p, verifyMode }: { p: PaymentWith; verifyMode?: boolean })
         </div>
         <div className="flex flex-col items-end gap-2">
           <StatusBadge status={p.status} />
-          <a
-            href={p.proofUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-brand-700 hover:underline"
-          >
-            Lihat bukti
-          </a>
+          {p.proofUrl ? (
+            <a
+              href={p.proofUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-brand-700 hover:underline"
+            >
+              Lihat bukti
+            </a>
+          ) : (
+            <span className="text-xs text-slate-400">Belum upload bukti</span>
+          )}
         </div>
       </div>
       {verifyMode && (

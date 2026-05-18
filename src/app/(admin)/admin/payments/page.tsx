@@ -79,6 +79,7 @@ export default async function AdminPaymentsPage({
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={p.status} />
+                {p.proofUrl ? (
                 <a
                   href={p.proofUrl}
                   target="_blank"
@@ -87,6 +88,9 @@ export default async function AdminPaymentsPage({
                 >
                   Bukti
                 </a>
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
               </div>
             </div>
           </div>

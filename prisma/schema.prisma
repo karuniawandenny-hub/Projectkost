@@ -99,22 +99,61 @@ model Tenancy {
 }
 
 model Payment {
-  id          String   @id @default(cuid())
-  tenancyId   String
-  periodMonth Int
-  periodYear  Int
-  amount      Int
-  proofUrl    String
-  status      String   @default("PENDING") // "PENDING" | "VERIFIED" | "REJECTED"
-  note        String?
-  reviewedAt  DateTime?
-  reviewNote  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  tenancyId    String
+  periodMonth  Int
+  periodYear   Int
+  amount       Int
+  proofUrl     String?  // null saat status = DUE (tagihan otomatis, belum diupload)
+  status       String   @default("DUE") // "DUE" | "PENDING" | "VERIFIED" | "REJECTED"
+  dueDate      DateTime? // tanggal jatuh tempo (untuk reminder query cepat)
+  note         String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tenancy     Tenancy  @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+  tenancy      Tenancy        @relation(fields: [tenancyId], references: [id], onDelete: Cascade)
+  reminders    ReminderLog[]
+  gatewayTxs   GatewayTransaction[]
 
+  @@unique([tenancyId, periodMonth, periodYear])
   @@index([tenancyId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model ReminderLog {
+  id        String   @id @default(cuid())
+  paymentId String
+  type      String   // "H7" | "H3" | "H1" | "OVERDUE"
+  channel   String   // "EMAIL" | "WA" | "IN_APP"
+  sentAt    DateTime @default(now())
+  error     String?
+
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, type, channel])
+  @@index([paymentId])
+}
+
+model GatewayTransaction {
+  id            String   @id @default(cuid())
+  paymentId     String
+  provider      String   // "MIDTRANS" | "XENDIT" | "MOCK"
+  externalId    String   // order_id / transaction id di gateway
+  amount        Int
+  status        String   // "PENDING" | "PAID" | "EXPIRED" | "FAILED"
+  paymentMethod String?  // "qris" | "va_bca" | "ovo" | dst
+  raw           String?  // raw payload terakhir dari gateway (JSON)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  paidAt        DateTime?
+
+  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, externalId])
+  @@index([paymentId])
   @@index([status])
 }
 

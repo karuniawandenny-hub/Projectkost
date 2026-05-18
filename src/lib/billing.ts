@@ -167,3 +167,116 @@ export function formatDateID(d: Date) {
     year: "numeric",
   });
 }
+
+/* =========================================================================
+ *  Auto-generate tagihan bulanan
+ * ========================================================================= */
+import { prisma } from "./prisma";
+
+/**
+ * Pastikan semua tagihan bulanan untuk tenancy aktif sudah ter-generate
+ * sebagai row Payment dengan status "DUE". Idempoten — aman dipanggil
+ * berkali-kali.
+ *
+ * Strategi: untuk tiap ACTIVE tenancy yang dimiliki user (sebagai owner
+ * atau tenant), generate tagihan dari max(startDate, createdAt) sampai
+ * bulan berjalan (atau 1 bulan ke depan kalau anniversary belum sampai
+ * akhir bulan).
+ */
+export async function ensureBillsForUser(userId: string): Promise<number> {
+  const tenancies = await prisma.tenancy.findMany({
+    where: {
+      status: "ACTIVE",
+      OR: [
+        { tenantId: userId },
+        { room: { kos: { ownerId: userId } } },
+      ],
+    },
+    include: {
+      room: true,
+      payments: {
+        select: { periodMonth: true, periodYear: true },
+      },
+    },
+  });
+  let created = 0;
+  for (const t of tenancies) {
+    created += await ensureBillsForTenancy(
+      t.id,
+      t.startDate,
+      t.createdAt,
+      t.room.monthlyPrice,
+      t.payments
+    );
+  }
+  return created;
+}
+
+async function ensureBillsForTenancy(
+  tenancyId: string,
+  startDate: Date,
+  createdAt: Date,
+  monthlyPrice: number,
+  existing: { periodMonth: number; periodYear: number }[]
+): Promise<number> {
+  const seed = new Date(
+    Math.max(startDate.getTime(), createdAt.getTime())
+  );
+  const today = new Date();
+
+  const existingKeys = new Set(
+    existing.map((p) => `${p.periodYear}-${p.periodMonth}`)
+  );
+
+  let created = 0;
+  let y = seed.getFullYear();
+  let m = seed.getMonth(); // 0-11
+  // Safety limit 36 bulan.
+  for (let i = 0; i < 36; i++) {
+    const periodYear = y;
+    const periodMonth = m + 1;
+    const dueDate = anniversaryInMonth(startDate, y, m);
+    // Hanya generate kalau tagihan belum ada DAN dueDate <= today.
+    const key = `${periodYear}-${periodMonth}`;
+    if (!existingKeys.has(key) && dueDate.getTime() <= today.getTime()) {
+      try {
+        await prisma.payment.create({
+          data: {
+            tenancyId,
+            periodMonth,
+            periodYear,
+            amount: monthlyPrice,
+            proofUrl: null,
+            status: "DUE",
+            dueDate,
+          },
+        });
+        created++;
+      } catch (e) {
+        // Race condition: unique violation kalau sudah dibuat paralel. Skip.
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.includes("Unique") && !msg.includes("UNIQUE")) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to create bill:", e);
+        }
+      }
+    }
+    // Stop kalau sudah lewat bulan berjalan + 1 (untuk preview tagihan
+    // yang akan datang).
+    const cutoff = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
+    if (dueDate.getTime() > cutoff.getTime()) break;
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+  return created;
+}
