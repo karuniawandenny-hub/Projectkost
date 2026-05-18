@@ -335,3 +335,100 @@ export function StackedBarChart({
     </div>
   );
 }
+
+/**
+ * Timeline status per bulan untuk dashboard penghuni.
+ * Setiap bulan ditampilkan sebagai kartu kecil dengan warna sesuai status
+ * (Lunas / Menunggu / Ditolak / Belum bayar) plus nominal yang dibayar
+ * (kalau ada record pembayaran).
+ */
+export type MonthStatusItem = {
+  label: string;       // "Mei 26"
+  status: "VERIFIED" | "PENDING" | "REJECTED" | "UNPAID";
+  amount: number | null;
+};
+
+export function MonthStatusTimeline({
+  data,
+  emptyLabel = "Belum ada periode tagihan",
+}: {
+  data: MonthStatusItem[];
+  emptyLabel?: string;
+}) {
+  if (data.length === 0) {
+    return (
+      <div className="grid place-items-center" style={{ minHeight: 120 }}>
+        <div className="text-sm text-slate-400">{emptyLabel}</div>
+      </div>
+    );
+  }
+  function styleFor(status: MonthStatusItem["status"]) {
+    if (status === "VERIFIED")
+      return {
+        bg: "bg-emerald-50",
+        border: "border-emerald-200",
+        accent: PALETTE.emerald,
+        label: "Lunas",
+        text: "text-emerald-800",
+      };
+    if (status === "PENDING")
+      return {
+        bg: "bg-amber-50",
+        border: "border-amber-200",
+        accent: PALETTE.amber,
+        label: "Menunggu",
+        text: "text-amber-800",
+      };
+    if (status === "REJECTED")
+      return {
+        bg: "bg-red-50",
+        border: "border-red-200",
+        accent: PALETTE.red,
+        label: "Ditolak",
+        text: "text-red-800",
+      };
+    return {
+      bg: "bg-slate-100/60",
+      border: "border-slate-200",
+      accent: PALETTE.slate,
+      label: "Belum bayar",
+      text: "text-slate-600",
+    };
+  }
+  function rupiahShort(n: number) {
+    if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(1)}jt`;
+    if (n >= 1_000) return `Rp ${(n / 1_000).toFixed(0)}k`;
+    return `Rp ${n}`;
+  }
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+      {data.map((d, i) => {
+        const s = styleFor(d.status);
+        return (
+          <div
+            key={i}
+            className={`relative overflow-hidden rounded-lg border ${s.border} ${s.bg} p-2.5`}
+            title={`${d.label}: ${s.label}${
+              d.amount !== null ? ` (${rupiahShort(d.amount)})` : ""
+            }`}
+          >
+            <span
+              aria-hidden
+              className="absolute inset-y-0 left-0 w-1"
+              style={{ backgroundColor: s.accent }}
+            />
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">
+              {d.label}
+            </div>
+            <div className={`mt-0.5 text-sm font-semibold ${s.text}`}>
+              {s.label}
+            </div>
+            <div className="text-[11px] text-slate-600">
+              {d.amount !== null ? rupiahShort(d.amount) : "—"}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

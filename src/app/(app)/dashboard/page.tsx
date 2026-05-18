@@ -6,9 +6,11 @@ import {
   PieChart,
   BarChart,
   StackedBarChart,
+  MonthStatusTimeline,
   PALETTE,
   type Segment,
   type StackedBarPoint,
+  type MonthStatusItem,
 } from "@/components/charts";
 import { billingSnapshot, formatDateID } from "@/lib/billing";
 
@@ -328,43 +330,23 @@ async function TenantDashboard({
     }),
   ]);
 
-  /* ---------- Pie: status pembayaran saya ---------- */
-  const verified = payments.filter((p) => p.status === "VERIFIED").length;
-  const pending = payments.filter((p) => p.status === "PENDING").length;
-  const rejected = payments.filter((p) => p.status === "REJECTED").length;
-  const paymentPie: Segment[] = [
-    { label: "Lunas", value: verified, color: PALETTE.emerald },
-    { label: "Menunggu", value: pending, color: PALETTE.amber },
-    { label: "Ditolak", value: rejected, color: PALETTE.red },
-  ];
-
-  /* ---------- Stacked bar: pembayaran saya 6 bulan per status ---------- */
-  const paymentLegend: Segment[] = [
-    { label: "Lunas", value: 0, color: PALETTE.emerald },
-    { label: "Menunggu", value: 0, color: PALETTE.amber },
-    { label: "Ditolak", value: 0, color: PALETTE.red },
-    { label: "Belum bayar", value: 0, color: PALETTE.slate },
-  ];
-  const paymentPerMonth: StackedBarPoint[] = months.map(({ m, y, label }) => {
+  /* ---------- Chart 1: timeline status pembayaran 6 bulan ---------- */
+  const paymentTimeline: MonthStatusItem[] = months.map(({ m, y, label }) => {
     const p = payments.find((x) => x.periodMonth === m && x.periodYear === y);
-    const segs: Segment[] = [
-      { label: "Lunas", value: p?.status === "VERIFIED" ? 1 : 0, color: PALETTE.emerald },
-      { label: "Menunggu", value: p?.status === "PENDING" ? 1 : 0, color: PALETTE.amber },
-      { label: "Ditolak", value: p?.status === "REJECTED" ? 1 : 0, color: PALETTE.red },
-      { label: "Belum bayar", value: p ? 0 : 1, color: PALETTE.slate },
-    ];
-    return { label, segments: segs, total: 1 };
+    const status: MonthStatusItem["status"] = p
+      ? (p.status as "VERIFIED" | "PENDING" | "REJECTED")
+      : "UNPAID";
+    return { label, status, amount: p?.amount ?? null };
   });
+  const verified6m = paymentTimeline.filter((x) => x.status === "VERIFIED").length;
+  const pending6m = paymentTimeline.filter((x) => x.status === "PENDING").length;
+  const rejected6m = paymentTimeline.filter((x) => x.status === "REJECTED").length;
+  const unpaid6m = paymentTimeline.filter((x) => x.status === "UNPAID").length;
+  const totalPaid6m = paymentTimeline
+    .filter((x) => x.status === "VERIFIED")
+    .reduce((s, x) => s + (x.amount ?? 0), 0);
 
-  /* ---------- Bar: nominal yang sudah saya bayar 6 bulan ---------- */
-  const amountPerMonth: Segment[] = months.map(({ m, y, label }) => {
-    const sum = payments
-      .filter((p) => p.periodMonth === m && p.periodYear === y && p.status === "VERIFIED")
-      .reduce((s, p) => s + p.amount, 0);
-    return { label, value: sum, color: PALETTE.brand };
-  });
-
-  /* ---------- Pie: komplain saya ---------- */
+  /* ---------- Chart 2: pie komplain saya ---------- */
   const cmplOpen = complaintsForChart.filter((c) => c.status === "OPEN").length;
   const cmplProgress = complaintsForChart.filter(
     (c) => c.status === "IN_PROGRESS"
@@ -428,33 +410,13 @@ async function TenantDashboard({
         </Link>
       </div>
 
-      {/* ===== Charts row 1 ===== */}
+      {/* ===== 2 chart utama ===== */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
-          title="Status pembayaran saya"
-          subtitle={`${verified} lunas · ${pending} menunggu · ${rejected} ditolak`}
+          title="Riwayat pembayaran 6 bulan"
+          subtitle={`${verified6m} lunas · ${pending6m} menunggu · ${rejected6m} ditolak · ${unpaid6m} belum bayar — total masuk ${rupiah(totalPaid6m)}`}
         >
-          <PieChart data={paymentPie} emptyLabel="Belum ada pembayaran" />
-        </ChartCard>
-        <ChartCard
-          title="Pembayaran 6 bulan terakhir"
-          subtitle="Status pembayaran bulanan"
-        >
-          <StackedBarChart
-            data={paymentPerMonth}
-            legend={paymentLegend}
-            formatValue={(n) => (n > 0 ? "✓" : "")}
-          />
-        </ChartCard>
-      </div>
-
-      {/* ===== Charts row 2 ===== */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard
-          title="Nominal pembayaran lunas (6 bln)"
-          subtitle="Total nominal yang sudah diverifikasi pemilik"
-        >
-          <BarChart data={amountPerMonth} formatValue={rupiahShort} />
+          <MonthStatusTimeline data={paymentTimeline} />
         </ChartCard>
         <ChartCard
           title="Komplain saya"
