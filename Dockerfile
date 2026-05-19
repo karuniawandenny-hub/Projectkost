@@ -53,8 +53,10 @@ COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 COPY scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Buat volume untuk SQLite + uploads.
-VOLUME ["/data"]
+# Buat folder /data sebagai mount point untuk persistent storage.
+# Volume di-mount oleh platform hosting (Railway/Render/dll) lewat
+# dashboard mereka, tidak perlu dideklarasikan di sini.
+RUN mkdir -p /data
 
 EXPOSE 3000
 
