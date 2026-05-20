@@ -14,11 +14,11 @@ WORKDIR /app
 # OpenSSL dibutuhkan Prisma di alpine.
 RUN apk add --no-cache openssl
 
+# Copy schema Prisma SEBELUM npm ci karena package.json punya
+# postinstall script 'prisma generate' yang butuh schema.
 COPY package.json package-lock.json* ./
-RUN npm ci
-
 COPY prisma ./prisma/
-RUN npx prisma generate
+RUN npm ci
 
 COPY . .
 
