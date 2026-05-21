@@ -52,6 +52,11 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV DATA_DIR=/data
+# Penting: Next.js standalone pakai HOSTNAME sebagai bind address.
+# Default Railway set HOSTNAME=<container-id>, yang bikin server cuma
+# listen di hostname spesifik & healthcheck Railway gagal.
+# Paksa ke 0.0.0.0 supaya listen di semua interface.
+ENV HOSTNAME=0.0.0.0
 
 # Salin output standalone Next.js (sudah berisi minimal deps).
 COPY --from=builder /app/public ./public

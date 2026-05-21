@@ -2,6 +2,9 @@
 # Production startup script — Kelola Kos.
 #
 # Tujuan: app harus bisa START dengan minimum konfigurasi user.
+#  - Paksa HOSTNAME=0.0.0.0 supaya Next.js bind ke semua interface
+#    (Railway set HOSTNAME=<container-id> by default, bikin healthcheck
+#    gagal).
 #  - Otomatis generate JWT_SECRET dan CRON_SECRET (sekali, lalu disimpan
 #    di /data/.secrets agar konsisten antar restart).
 #  - Default DATABASE_URL ke SQLite di /data.
@@ -10,6 +13,10 @@
 #  - Symlink upload folder ke volume.
 
 set -e
+
+# CRITICAL: paksa Next.js standalone bind ke 0.0.0.0, bukan ke
+# container hostname yang Railway set. Tanpa ini healthcheck gagal.
+export HOSTNAME=0.0.0.0
 
 DATA_DIR="${DATA_DIR:-/data}"
 SECRETS_FILE="$DATA_DIR/.secrets"
@@ -61,6 +68,7 @@ export UPLOADS_DIR="$DATA_DIR/uploads"
 
 echo "[start] DATA_DIR=$DATA_DIR"
 echo "[start] DATABASE_URL=$DATABASE_URL"
+echo "[start] HOSTNAME=$HOSTNAME PORT=${PORT:-3000}"
 echo "[start] EMAIL_MODE=$EMAIL_MODE OTP_MODE=$OTP_MODE PAYMENT_GATEWAY=$PAYMENT_GATEWAY"
 
 echo "[start] Running prisma db push (create/update schema)…"
