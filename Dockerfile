@@ -2,18 +2,18 @@
 #  Dockerfile produksi untuk Kelola Kos.
 #  Build standalone Next.js + SQLite (volume) + Prisma + script startup.
 #
-#  Base image: node:20-slim (Debian, glibc). Lebih kompatibel dengan
-#  Next.js SWC binary daripada alpine yang pakai musl.
+#  Pola ini mengikuti official Next.js Docker example: alpine + libc6-compat
+#  agar binary SWC (compiled untuk glibc) bisa load di musl alpine.
+#  Reference: https://github.com/vercel/next.js/tree/canary/examples/with-docker
 # =========================================================================
 
 # ----- Stage 1: install deps + build -----
-FROM node:20-slim AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# OpenSSL + ca-certificates dibutuhkan Prisma & TLS HTTPS.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# libc6-compat: shim glibc untuk alpine (musl) — wajib untuk Next.js SWC binary.
+# openssl: dibutuhkan Prisma engine + TLS.
+RUN apk add --no-cache libc6-compat openssl
 
 # Copy schema Prisma SEBELUM npm ci karena package.json punya
 # postinstall script 'prisma generate' yang butuh schema.
@@ -27,12 +27,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ----- Stage 2: runner -----
-FROM node:20-slim AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openssl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Sama dengan builder: libc6-compat + openssl di runtime juga.
+RUN apk add --no-cache libc6-compat openssl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
