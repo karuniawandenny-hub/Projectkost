@@ -1,26 +1,39 @@
 # =========================================================================
-#  Dockerfile produksi untuk Kelola Kos.
-#  Base image: node:20-bookworm — Debian Bookworm FULL (bukan slim).
-#  Alasan: Next.js 14.2.35 SWC binary butuh glibc symbols lengkap
-#  (__register_atfork dll) yang tidak ada di alpine + libc6-compat,
-#  dan kadang missing di slim variants. Full Debian aman.
-#  Build cache bust: v3
+#  Dockerfile produksi untuk Kelola Kos — versi defensif.
+#
+#  Strategi:
+#  - Base: node:20-bookworm (Debian Bookworm full, glibc lengkap)
+#  - npm install (bukan npm ci): biarkan npm pilih platform binary yang
+#    tepat (mis. @next/swc-linux-x64-gnu untuk x86_64 linux glibc).
+#  - --include=optional: pastikan optional deps (SWC binary varian
+#    platform) ikut ter-install.
+#  - Cache bust marker: v5
 # =========================================================================
 
-# ----- Stage 1: install deps + build -----
+# ----- Stage 1: builder -----
 FROM node:20-bookworm AS builder
 WORKDIR /app
 
-# OpenSSL sudah ada di base bookworm, tapi kita pastikan via apt.
+# Dependencies system yang dibutuhkan Prisma + TLS.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy schema Prisma SEBELUM npm ci karena package.json punya
-# postinstall script 'prisma generate' yang butuh schema.
+# Copy schema Prisma SEBELUM npm install karena postinstall hook
+# menjalankan 'prisma generate'.
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci
+
+# npm install (bukan ci) supaya platform-specific optional deps —
+# terutama @next/swc-linux-x64-gnu yang penting untuk Next.js build —
+# selalu di-resolve & install sesuai OS container.
+# --include=optional: paksa install semua optional deps (defaultnya).
+# --no-audit & --no-fund: kurangi noise di log.
+RUN npm install --include=optional --no-audit --no-fund
+
+# Verifikasi SWC binary terinstall — fail fast kalau tidak.
+RUN ls -lh node_modules/@next/swc-linux-x64-gnu/next-swc.linux-x64-gnu.node \
+    || (echo "ERROR: SWC binary tidak terinstall" && exit 1)
 
 COPY . .
 
@@ -40,17 +53,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV DATA_DIR=/data
 
-# Salin output standalone Next.js.
+# Salin output standalone Next.js (sudah berisi minimal deps).
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Prisma engine + seed file (perlu di runtime untuk db push & seed).
+# Prisma + tsx untuk seed runtime.
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-# tsx untuk run seed; bcryptjs untuk seed hashing.
 COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
 
@@ -58,7 +70,6 @@ COPY scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 # Buat folder /data sebagai mount point untuk persistent storage.
-# Volume di-mount oleh platform hosting (Railway/Render/dll).
 RUN mkdir -p /data
 
 EXPOSE 3000
