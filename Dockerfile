@@ -1,19 +1,20 @@
 # =========================================================================
 #  Dockerfile produksi untuk Kelola Kos.
-#  Build standalone Next.js + SQLite (volume) + Prisma + script startup.
-#
-#  Pola ini mengikuti official Next.js Docker example: alpine + libc6-compat
-#  agar binary SWC (compiled untuk glibc) bisa load di musl alpine.
-#  Reference: https://github.com/vercel/next.js/tree/canary/examples/with-docker
+#  Base image: node:20-bookworm — Debian Bookworm FULL (bukan slim).
+#  Alasan: Next.js 14.2.35 SWC binary butuh glibc symbols lengkap
+#  (__register_atfork dll) yang tidak ada di alpine + libc6-compat,
+#  dan kadang missing di slim variants. Full Debian aman.
+#  Build cache bust: v3
 # =========================================================================
 
 # ----- Stage 1: install deps + build -----
-FROM node:20-alpine AS builder
+FROM node:20-bookworm AS builder
 WORKDIR /app
 
-# libc6-compat: shim glibc untuk alpine (musl) — wajib untuk Next.js SWC binary.
-# openssl: dibutuhkan Prisma engine + TLS.
-RUN apk add --no-cache libc6-compat openssl
+# OpenSSL sudah ada di base bookworm, tapi kita pastikan via apt.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy schema Prisma SEBELUM npm ci karena package.json punya
 # postinstall script 'prisma generate' yang butuh schema.
@@ -27,11 +28,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ----- Stage 2: runner -----
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# Sama dengan builder: libc6-compat + openssl di runtime juga.
-RUN apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -56,8 +58,7 @@ COPY scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 # Buat folder /data sebagai mount point untuk persistent storage.
-# Volume di-mount oleh platform hosting (Railway/Render/dll) lewat
-# dashboard mereka, tidak perlu dideklarasikan di sini.
+# Volume di-mount oleh platform hosting (Railway/Render/dll).
 RUN mkdir -p /data
 
 EXPOSE 3000
