@@ -2,17 +2,18 @@
 #  Dockerfile produksi untuk Kelola Kos.
 #  Build standalone Next.js + SQLite (volume) + Prisma + script startup.
 #
-#  Bisa di-deploy ke: Railway, Render, Fly.io, atau VPS apapun yang
-#  support Docker. Pastikan mount volume ke /data (1 GB cukup untuk
-#  ratusan kos & ribuan foto).
+#  Base image: node:20-slim (Debian, glibc). Lebih kompatibel dengan
+#  Next.js SWC binary daripada alpine yang pakai musl.
 # =========================================================================
 
 # ----- Stage 1: install deps + build -----
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 WORKDIR /app
 
-# OpenSSL dibutuhkan Prisma di alpine.
-RUN apk add --no-cache openssl
+# OpenSSL + ca-certificates dibutuhkan Prisma & TLS HTTPS.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy schema Prisma SEBELUM npm ci karena package.json punya
 # postinstall script 'prisma generate' yang butuh schema.
@@ -26,10 +27,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ----- Stage 2: runner -----
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 WORKDIR /app
 
-RUN apk add --no-cache openssl
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
