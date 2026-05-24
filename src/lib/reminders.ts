@@ -46,6 +46,31 @@ export type ReminderMessageInput = {
   daysOverdue?: number;
 };
 
+// Variasi sapaan untuk mengurangi kemiripan template antar pesan
+// (turunkan risiko trigger anti-spam WA yang deteksi bulk-messaging).
+const GREETINGS = ["Halo", "Hai", "Assalamualaikum", "Selamat pagi/siang"];
+const REMINDER_CLOSINGS = [
+  "Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo, ya.",
+  "Mohon disiapkan pembayarannya sebelum jatuh tempo.",
+  "Terima kasih atas perhatian dan kerja samanya.",
+  "Silakan upload bukti transfer di aplikasi setelah membayar.",
+];
+const OVERDUE_CLOSINGS = [
+  "Mohon segera upload bukti pembayaran agar tidak menambah keterlambatan.",
+  "Mohon kerja samanya untuk menyelesaikan pembayaran secepatnya.",
+  "Silakan hubungi pemilik kos kalau ada kendala pembayaran.",
+];
+
+function pickVariation(seed: string, list: string[]): string {
+  // Deterministik berdasarkan seed (paymentId+type) supaya retry tidak
+  // ganti pesan, tapi tetap bervariasi antar tenant/periode.
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return list[Math.abs(hash) % list.length];
+}
+
 export function buildReminderMessage(input: ReminderMessageInput): {
   subject: string;
   body: string;
@@ -53,13 +78,23 @@ export function buildReminderMessage(input: ReminderMessageInput): {
   const periodLabel = `${MONTH_LABELS[input.periodMonth - 1]} ${input.periodYear}`;
   const dueStr = formatDateID(input.dueDate);
   const amountFmt = "Rp " + input.amount.toLocaleString("id-ID");
+  const seed = `${input.tenantName}-${input.type}-${input.periodMonth}-${input.periodYear}`;
+  const greeting = pickVariation(seed, GREETINGS);
+  const closing =
+    input.type === "OVERDUE"
+      ? pickVariation(seed, OVERDUE_CLOSINGS)
+      : pickVariation(seed, REMINDER_CLOSINGS);
   const subject =
     input.type === "OVERDUE"
       ? `Tagihan ${periodLabel} terlambat`
       : `Pengingat tagihan kos — ${
           input.type === "H7" ? "7 hari lagi" : input.type === "H3" ? "3 hari lagi" : "besok"
         }`;
-  const body = `Halo ${input.tenantName},
+  const overdueLine =
+    input.type === "OVERDUE"
+      ? `Tagihan sudah lewat ${input.daysOverdue ?? 1} hari. ${closing}`
+      : closing;
+  const body = `${greeting} ${input.tenantName},
 
 Tagihan kos Anda untuk periode ${periodLabel}:
   Kos     : ${input.kosName}
@@ -67,11 +102,7 @@ Tagihan kos Anda untuk periode ${periodLabel}:
   Nominal : ${amountFmt}
   Jatuh tempo: ${dueStr}
 
-${
-  input.type === "OVERDUE"
-    ? `Tagihan sudah lewat ${input.daysOverdue ?? 1} hari. Mohon segera upload bukti pembayaran.`
-    : `Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo.`
-}
+${overdueLine}
 
 — Kos Baiti`;
   return { subject, body };
@@ -205,6 +236,13 @@ export async function processReminders(): Promise<ProcessResult> {
           data: { paymentId: p.id, type, channel: "WA" },
         });
         result.sent.push({ type, channel: "WA" });
+        // Throttle jeda 5-15 detik antar pesan WA untuk hindari pattern
+        // burst yang trigger anti-spam WhatsApp. Hanya dilakukan kalau
+        // WA benar-benar terkirim (bukan dev mode atau disabled).
+        if ((process.env.WA_ENABLED ?? "true").toLowerCase() !== "false") {
+          const jitter = 5000 + Math.floor(Math.random() * 10000);
+          await new Promise((r) => setTimeout(r, jitter));
+        }
       } catch (e) {
         result.errors.push({
           paymentId: p.id,
@@ -218,6 +256,15 @@ export async function processReminders(): Promise<ProcessResult> {
 }
 
 async function sendWhatsAppGeneric(phone: string, message: string): Promise<void> {
+  // Kill-switch global. Set WA_ENABLED=false di Railway untuk
+  // mematikan SEMUA pengiriman WA tanpa ubah kode lain (reminder cron,
+  // konfirmasi pembayaran, assign tenant). Pakai saat akun WA
+  // sedang di-restrict Meta atau provider gateway down.
+  if ((process.env.WA_ENABLED ?? "true").toLowerCase() === "false") {
+    // eslint-disable-next-line no-console
+    console.log(`[wa][disabled] skip ${phone} - WA_ENABLED=false`);
+    return;
+  }
   const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
   if (mode === "dev") {
     // eslint-disable-next-line no-console
