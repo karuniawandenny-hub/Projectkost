@@ -55,11 +55,12 @@ export default async function Shell({ user, children }: Props) {
     <div className="min-h-screen flex flex-col">
       <header className="border-b bg-white sticky top-0 z-10">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
-              K
-            </div>
-            <span className="font-semibold hidden sm:inline">Kos Baiti</span>
+          <Link href="/dashboard" className="flex items-center" aria-label="Kos Baiti — Dashboard">
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="h-10 w-auto"
+            />
           </Link>
 
           <nav className="flex items-center gap-1 overflow-x-auto">

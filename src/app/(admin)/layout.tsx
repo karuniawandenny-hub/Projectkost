@@ -30,11 +30,15 @@ export default async function AdminLayout({
     <div className="min-h-screen flex flex-col">
       <header className="border-b bg-slate-900 text-white sticky top-0 z-10">
         <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
-          <Link href="/admin" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-white text-slate-900 grid place-items-center font-bold">
-              A
-            </div>
-            <span className="font-semibold">Admin Kos Baiti</span>
+          <Link href="/admin" className="flex items-center gap-2" aria-label="Admin Kos Baiti">
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="h-10 w-auto rounded-md bg-white p-0.5"
+            />
+            <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-900">
+              Admin
+            </span>
           </Link>
 
           <nav className="flex items-center gap-1 overflow-x-auto">

@@ -40,11 +40,12 @@ export default async function HomePage() {
 
       <header className="relative z-10 border-b border-white/40 bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-fuchsia-500 via-violet-500 to-blue-600 text-white grid place-items-center font-bold shadow-lg shadow-violet-500/40">
-              K
-            </div>
-            <span className="font-semibold text-slate-900">Kos Baiti</span>
+          <div className="flex items-center">
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="h-12 w-auto"
+            />
           </div>
           <div className="flex gap-2">
             <Link href="/login" className="btn-secondary">
@@ -60,6 +61,11 @@ export default async function HomePage() {
       <section className="relative z-10 mx-auto max-w-5xl px-4 py-12 sm:py-16 md:py-20">
         <div className="grid gap-10 md:grid-cols-2 md:items-center">
           <div>
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="mb-6 h-32 w-auto sm:h-40 drop-shadow-xl"
+            />
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/80 px-3 py-1 text-xs font-medium text-violet-700 shadow-sm backdrop-blur-sm">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />

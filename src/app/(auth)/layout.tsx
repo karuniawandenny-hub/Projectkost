@@ -5,11 +5,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <main className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
         <div className="mx-auto max-w-5xl px-4 py-4">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
-              K
-            </div>
-            <span className="font-semibold">Kos Baiti</span>
+          <Link href="/" className="flex items-center" aria-label="Kos Baiti">
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="h-12 w-auto"
+            />
           </Link>
         </div>
       </header>

@@ -11,11 +11,12 @@ export default async function OnboardingPage() {
     <main className="min-h-screen bg-slate-50">
       <header className="border-b bg-white">
         <div className="mx-auto max-w-3xl px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
-              K
-            </div>
-            <span className="font-semibold">Kos Baiti</span>
+          <div className="flex items-center">
+            <img
+              src="/kos-baiti-logo.png"
+              alt="Kos Baiti"
+              className="h-12 w-auto"
+            />
           </div>
           <form action="/logout" method="POST">
             <button className="text-sm text-slate-600 hover:underline">Keluar</button>
