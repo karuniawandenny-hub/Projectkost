@@ -34,6 +34,49 @@ const MONTH_LABELS = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
+export type ReminderMessageInput = {
+  type: ReminderType;
+  tenantName: string;
+  kosName: string;
+  roomName: string;
+  periodMonth: number;
+  periodYear: number;
+  amount: number;
+  dueDate: Date;
+  daysOverdue?: number;
+};
+
+export function buildReminderMessage(input: ReminderMessageInput): {
+  subject: string;
+  body: string;
+} {
+  const periodLabel = `${MONTH_LABELS[input.periodMonth - 1]} ${input.periodYear}`;
+  const dueStr = formatDateID(input.dueDate);
+  const amountFmt = "Rp " + input.amount.toLocaleString("id-ID");
+  const subject =
+    input.type === "OVERDUE"
+      ? `Tagihan ${periodLabel} terlambat`
+      : `Pengingat tagihan kos — ${
+          input.type === "H7" ? "7 hari lagi" : input.type === "H3" ? "3 hari lagi" : "besok"
+        }`;
+  const body = `Halo ${input.tenantName},
+
+Tagihan kos Anda untuk periode ${periodLabel}:
+  Kos     : ${input.kosName}
+  Kamar   : ${input.roomName}
+  Nominal : ${amountFmt}
+  Jatuh tempo: ${dueStr}
+
+${
+  input.type === "OVERDUE"
+    ? `Tagihan sudah lewat ${input.daysOverdue ?? 1} hari. Mohon segera upload bukti pembayaran.`
+    : `Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo.`
+}
+
+— Kos Baiti`;
+  return { subject, body };
+}
+
 type ProcessResult = {
   scanned: number;
   sent: { type: ReminderType; channel: string }[];
@@ -93,33 +136,21 @@ export async function processReminders(): Promise<ProcessResult> {
     );
 
     const tenant = p.tenancy.tenant;
-    const kosName = p.tenancy.room.kos.name;
-    const roomName = p.tenancy.room.name;
     const periodLabel = `${MONTH_LABELS[p.periodMonth - 1]} ${p.periodYear}`;
     const dueStr = formatDateID(p.dueDate);
     const amountFmt = "Rp " + p.amount.toLocaleString("id-ID");
 
-    const subject =
-      type === "OVERDUE"
-        ? `Tagihan ${periodLabel} terlambat`
-        : `Pengingat tagihan kos — ${
-            type === "H7" ? "7 hari lagi" : type === "H3" ? "3 hari lagi" : "besok"
-          }`;
-    const body = `Halo ${tenant.name},
-
-Tagihan kos Anda untuk periode ${periodLabel}:
-  Kos     : ${kosName}
-  Kamar   : ${roomName}
-  Nominal : ${amountFmt}
-  Jatuh tempo: ${dueStr}
-
-${
-  type === "OVERDUE"
-    ? `Tagihan sudah lewat ${Math.abs(dayDiff)} hari. Mohon segera upload bukti pembayaran.`
-    : `Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo.`
-}
-
-— Kos Baiti`;
+    const { subject, body } = buildReminderMessage({
+      type,
+      tenantName: tenant.name,
+      kosName: p.tenancy.room.kos.name,
+      roomName: p.tenancy.room.name,
+      periodMonth: p.periodMonth,
+      periodYear: p.periodYear,
+      amount: p.amount,
+      dueDate: p.dueDate,
+      daysOverdue: Math.abs(dayDiff),
+    });
 
     // 1) Notifikasi in-app (selalu).
     if (!alreadyH.has("IN_APP")) {

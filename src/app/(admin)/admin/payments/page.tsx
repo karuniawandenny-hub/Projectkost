@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { TestControls } from "./TestControls";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -7,9 +8,19 @@ const MONTHS = [
 ];
 
 function StatusBadge({ status }: { status: string }) {
+  if (status === "DUE") return <span className="badge-yellow">Belum upload</span>;
   if (status === "PENDING") return <span className="badge-yellow">Menunggu</span>;
   if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
   return <span className="badge-red">Ditolak</span>;
+}
+
+function formatDateID(d: Date | null): string {
+  if (!d) return "—";
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default async function AdminPaymentsPage({
@@ -35,6 +46,7 @@ export default async function AdminPaymentsPage({
           room: { include: { kos: { include: { owner: { select: { name: true } } } } } },
         },
       },
+      _count: { select: { reminders: true } },
     },
   });
 
@@ -76,6 +88,12 @@ export default async function AdminPaymentsPage({
                   {MONTHS[p.periodMonth - 1]} {p.periodYear} • Rp{" "}
                   {p.amount.toLocaleString("id-ID")}
                 </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  Jatuh tempo:{" "}
+                  <span className="font-medium text-slate-700">
+                    {formatDateID(p.dueDate)}
+                  </span>
+                </div>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <StatusBadge status={p.status} />
@@ -93,6 +111,7 @@ export default async function AdminPaymentsPage({
                 )}
               </div>
             </div>
+            <TestControls paymentId={p.id} reminderCount={p._count.reminders} />
           </div>
         ))}
       </div>

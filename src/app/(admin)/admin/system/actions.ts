@@ -1,7 +1,11 @@
 "use server";
 
 import { requireUser } from "@/lib/session";
-import { processReminders } from "@/lib/reminders";
+import {
+  processReminders,
+  buildReminderMessage,
+  type ReminderType,
+} from "@/lib/reminders";
 import { normalizePhone } from "@/lib/phone";
 
 export type TestActionState = {
@@ -82,6 +86,89 @@ export async function testEmailAction(to: string): Promise<TestActionState> {
       message: e instanceof Error ? e.message : "Gagal hubungi Resend",
     };
   }
+}
+
+/**
+ * Preview reminder per tipe (H7/H3/H1/OVERDUE) ke nomor HP target.
+ *
+ * Pakai data dummy (Test User / Kos Baiti / Kamar A1 / Rp 1.000.000 /
+ * dueDate dihitung dari hari ini sesuai tipe). Tidak buat ReminderLog,
+ * tidak ganggu tagihan real. Murni untuk verifikasi format pesan.
+ */
+export async function previewReminderAction(
+  to: string,
+  type: ReminderType
+): Promise<TestActionState> {
+  await requireAdmin();
+  const normalized = normalizePhone(to);
+  if (!normalized) {
+    return { ok: false, message: "Format nomor HP tidak valid." };
+  }
+
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const offsetDays: Record<ReminderType, number> = {
+    H7: 7,
+    H3: 3,
+    H1: 1,
+    OVERDUE: -1,
+  };
+  const dueDate = new Date(
+    todayStart.getTime() + offsetDays[type] * 86_400_000
+  );
+
+  const { body } = buildReminderMessage({
+    type,
+    tenantName: "Penghuni Test",
+    kosName: "Kos Baiti (preview)",
+    roomName: "A1",
+    periodMonth: today.getMonth() + 1,
+    periodYear: today.getFullYear(),
+    amount: 1_000_000,
+    dueDate,
+    daysOverdue: type === "OVERDUE" ? 1 : undefined,
+  });
+
+  const previewBody = `[PREVIEW ${type}]\n\n${body}`;
+
+  const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
+  if (mode === "dev") {
+    // eslint-disable-next-line no-console
+    console.log(`[preview-reminder][dev] -> ${normalized} (${type}): ${previewBody.slice(0, 80)}…`);
+    return {
+      ok: true,
+      message: "Dev mode — pesan tidak benar-benar dikirim. Cek log server.",
+      detail: previewBody,
+    };
+  }
+  if (mode === "fonnte") {
+    const token = process.env.WA_GATEWAY_TOKEN;
+    if (!token) return { ok: false, message: "WA_GATEWAY_TOKEN belum diset." };
+    try {
+      const target = normalized.startsWith("+") ? normalized.slice(1) : normalized;
+      const form = new URLSearchParams();
+      form.set("target", target);
+      form.set("message", previewBody);
+      form.set("countryCode", "62");
+      const res = await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: { Authorization: token },
+        body: form,
+      });
+      const txt = await res.text().catch(() => "");
+      if (!res.ok) {
+        return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
+      }
+      return {
+        ok: true,
+        message: `Preview ${type} dikirim ke ${normalized}.`,
+        detail: previewBody,
+      };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : "Error" };
+    }
+  }
+  return { ok: false, message: `OTP_MODE='${mode}' belum didukung untuk preview.` };
 }
 
 export async function testWaAction(to: string): Promise<TestActionState> {
