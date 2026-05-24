@@ -2,8 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { sendTenantAssignedEmail } from "@/lib/email";
+
+function originFromHeaders(): string {
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  return `${proto}://${host}`;
+}
 
 export type KosState = { error?: string };
 
@@ -189,6 +198,23 @@ export async function assignTenant(
       },
     }),
   ]);
+
+  // Kirim welcome email — non-blocking, gagal kirim tidak membatalkan
+  // assignment. Hanya jalan kalau penghuni punya email terdaftar.
+  if (tenant.email) {
+    const result = await sendTenantAssignedEmail(tenant.email, {
+      tenantName: tenant.name,
+      kosName: room.kos.name,
+      roomName: room.name,
+      startDate,
+      monthlyPrice: room.monthlyPrice,
+      loginUrl: `${originFromHeaders()}/login`,
+    });
+    if (!result.delivered) {
+      // eslint-disable-next-line no-console
+      console.error("[assignTenantToRoom] welcome email gagal:", result.error);
+    }
+  }
 
   revalidatePath(`/kos`);
   revalidatePath(`/kos/${room.kosId}`);

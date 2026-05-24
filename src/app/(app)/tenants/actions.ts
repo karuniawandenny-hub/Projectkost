@@ -1,9 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
+import { sendTenantAssignedEmail } from "@/lib/email";
+
+function originFromHeaders(): string {
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  return `${proto}://${host}`;
+}
 
 export type ApproveTenantState = { error?: string; success?: string };
 
@@ -131,6 +140,22 @@ export async function approveAndAssignTenant(
     message: `${me.name} menyetujui akun Anda dan menempatkan Anda di ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startStr}.`,
     link: "/dashboard",
   });
+
+  // Kirim welcome email — non-blocking.
+  if (target.email) {
+    const result = await sendTenantAssignedEmail(target.email, {
+      tenantName: target.name,
+      kosName: room.kos.name,
+      roomName: room.name,
+      startDate,
+      monthlyPrice: room.monthlyPrice,
+      loginUrl: `${originFromHeaders()}/login`,
+    });
+    if (!result.delivered) {
+      // eslint-disable-next-line no-console
+      console.error("[approveAndAssignTenant] welcome email gagal:", result.error);
+    }
+  }
 
   revalidatePath("/tenants");
   revalidatePath(`/kos/${room.kosId}`);
