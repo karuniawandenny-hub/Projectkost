@@ -159,6 +159,19 @@ export async function previewReminderAction(
       if (!res.ok) {
         return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
       }
+      let parsed: { status?: boolean; reason?: string } = {};
+      try {
+        parsed = JSON.parse(txt);
+      } catch {
+        return { ok: false, message: "Response Fonnte bukan JSON.", detail: txt };
+      }
+      if (parsed.status === false) {
+        return {
+          ok: false,
+          message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
+          detail: txt,
+        };
+      }
       return {
         ok: true,
         message: `Preview ${type} dikirim ke ${normalized}.`,
@@ -209,6 +222,19 @@ export async function testWaAction(to: string): Promise<TestActionState> {
       const txt = await res.text().catch(() => "");
       if (!res.ok) {
         return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
+      }
+      let parsed: { status?: boolean; reason?: string } = {};
+      try {
+        parsed = JSON.parse(txt);
+      } catch {
+        return { ok: false, message: "Response Fonnte bukan JSON.", detail: txt };
+      }
+      if (parsed.status === false) {
+        return {
+          ok: false,
+          message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
+          detail: txt,
+        };
       }
       return { ok: true, message: `WA test dikirim ke ${normalized}.`, detail: txt };
     } catch (e) {

@@ -237,7 +237,21 @@ async function sendWhatsAppGeneric(phone: string, message: string): Promise<void
       headers: { Authorization: token },
       body: form,
     });
-    if (!res.ok) throw new Error(`Fonnte HTTP ${res.status}`);
+    const txt = await res.text().catch(() => "");
+    if (!res.ok) throw new Error(`Fonnte HTTP ${res.status}: ${txt}`);
+    // Fonnte selalu return HTTP 200 sekalipun gagal kirim. Status real
+    // ada di field `status` body JSON; reason di field `reason`.
+    let parsed: { status?: boolean; reason?: string; detail?: string } = {};
+    try {
+      parsed = JSON.parse(txt);
+    } catch {
+      throw new Error(`Fonnte response bukan JSON: ${txt.slice(0, 200)}`);
+    }
+    if (parsed.status === false) {
+      throw new Error(
+        `Fonnte gagal: ${parsed.reason ?? parsed.detail ?? "unknown"}`
+      );
+    }
     return;
   }
   // Generic gateway: POST JSON.
