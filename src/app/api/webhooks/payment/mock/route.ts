@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notify";
+import { sendPaymentVerifiedConfirmation } from "@/lib/payment-confirmation";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,13 @@ export async function GET(req: Request) {
         message: `${tx.payment.tenancy.room.kos.name} - Kamar ${tx.payment.tenancy.room.name} sudah dibayar.`,
         link: "/payments",
       });
+
+      try {
+        await sendPaymentVerifiedConfirmation(tx.payment.id);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("[payment-confirmation] gagal kirim WA/Email:", e);
+      }
     }
   }
 

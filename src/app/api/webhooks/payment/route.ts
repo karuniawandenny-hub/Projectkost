@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyMidtransSignature } from "@/lib/gateway";
 import { notify } from "@/lib/notify";
+import { sendPaymentVerifiedConfirmation } from "@/lib/payment-confirmation";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,13 @@ export async function POST(req: Request) {
       message: `${tx.payment.tenancy.room.kos.name} - Kamar ${tx.payment.tenancy.room.name} sudah dibayar lewat ${body.payment_type ?? "gateway"}.`,
       link: "/payments",
     });
+
+    try {
+      await sendPaymentVerifiedConfirmation(tx.payment.id);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[payment-confirmation] gagal kirim WA/Email:", e);
+    }
   }
 
   return NextResponse.json({ ok: true });

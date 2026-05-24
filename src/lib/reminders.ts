@@ -217,9 +217,6 @@ export async function processReminders(): Promise<ProcessResult> {
   return result;
 }
 
-/**
- * Kirim pesan WA via Fonnte / gateway generic / log (mode dev).
- */
 async function sendWhatsAppGeneric(phone: string, message: string): Promise<void> {
   const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
   if (mode === "dev") {
@@ -295,4 +292,7 @@ async function sendEmailGeneric(
     throw new Error(`Resend HTTP ${res.status}: ${t}`);
   }
 }
+
+
+export { sendWhatsAppGeneric, sendEmailGeneric };
 

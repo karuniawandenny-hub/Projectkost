@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
+import { sendPaymentVerifiedConfirmation } from "@/lib/payment-confirmation";
 
 export type PaymentSubmitState = { error?: string };
 
@@ -135,6 +136,15 @@ export async function verifyPayment(formData: FormData) {
         : `Pembayaran Anda ditolak${reviewNote ? `: ${reviewNote}` : "."}`,
     link: "/payments",
   });
+
+  if (action === "VERIFY") {
+    try {
+      await sendPaymentVerifiedConfirmation(payment.id);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[payment-confirmation] gagal kirim WA/Email:", e);
+    }
+  }
 
   revalidatePath("/payments");
 }
