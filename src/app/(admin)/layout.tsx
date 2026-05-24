@@ -62,6 +62,12 @@ export default async function AdminLayout({
                 <div className="px-3 py-2 text-xs text-slate-500">
                   Masuk sebagai <span className="font-semibold">Administrator</span>
                 </div>
+                <Link
+                  href="/admin/account"
+                  className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Akun & ganti password
+                </Link>
                 <form action="/logout" method="POST">
                   <button
                     type="submit"

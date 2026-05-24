@@ -143,3 +143,45 @@ export async function adminResetPassword(
   });
   return { successPassword: newPassword };
 }
+
+export type ChangeOwnPasswordState = {
+  error?: string;
+  success?: boolean;
+};
+
+/**
+ * Admin (atau siapapun yang login) mengganti password sendiri.
+ * Mensyaratkan password lama untuk verifikasi — supaya kalau cookie
+ * sesi dicuri, attacker tetap perlu password lama untuk lock-out user.
+ */
+export async function changeOwnPassword(
+  _prev: ChangeOwnPasswordState,
+  formData: FormData
+): Promise<ChangeOwnPasswordState> {
+  const me = await requireUser();
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!currentPassword) return { error: "Password lama wajib diisi." };
+  if (newPassword.length < 8) {
+    return { error: "Password baru minimal 8 karakter." };
+  }
+  if (newPassword !== confirmPassword) {
+    return { error: "Konfirmasi password baru tidak cocok." };
+  }
+  if (newPassword === currentPassword) {
+    return { error: "Password baru tidak boleh sama dengan password lama." };
+  }
+
+  const { verifyPassword, hashPassword } = await import("@/lib/password");
+  const ok = await verifyPassword(currentPassword, me.passwordHash);
+  if (!ok) return { error: "Password lama salah." };
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: me.id },
+    data: { passwordHash },
+  });
+  return { success: true };
+}
