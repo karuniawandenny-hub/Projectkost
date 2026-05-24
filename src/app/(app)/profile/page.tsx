@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
+import { PhoneEditForm } from "./PhoneEditForm";
 
 export default async function ProfilePage() {
   const user = await getCurrentUser();
@@ -25,9 +26,6 @@ export default async function ProfilePage() {
           <div>
             <div className="text-lg font-semibold">{user.name}</div>
             <div className="text-sm text-slate-600">{user.email}</div>
-            {user.phone && (
-              <div className="text-xs text-slate-500">{user.phone}</div>
-            )}
             <div className="text-xs text-slate-500 mt-1">
               {user.role === "OWNER" ? "Pemilik kos" : "Penghuni"}
             </div>
@@ -39,6 +37,11 @@ export default async function ProfilePage() {
             <Field label="Foto diri" url={user.selfiePhotoUrl} />
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h2 className="mb-3 text-lg font-semibold">Kontak WhatsApp</h2>
+        <PhoneEditForm currentPhone={user.phone} />
       </div>
 
       <form action="/logout" method="POST">

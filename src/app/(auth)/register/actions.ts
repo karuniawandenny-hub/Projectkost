@@ -36,11 +36,14 @@ export async function registerAction(
   }
 
   let phone: string | null = null;
-  if (phoneRaw) {
-    const norm = normalizePhone(phoneRaw);
-    if (!norm) return { error: "Nomor HP tidak valid. Kosongkan atau gunakan format 08xx." };
-    phone = norm;
+  if (!phoneRaw) {
+    return { error: "Nomor HP wajib diisi (untuk reminder pembayaran via WhatsApp)." };
   }
+  const norm = normalizePhone(phoneRaw);
+  if (!norm) {
+    return { error: "Nomor HP tidak valid. Gunakan format 08xxxxxxxxxx." };
+  }
+  phone = norm;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {

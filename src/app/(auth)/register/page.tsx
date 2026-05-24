@@ -76,7 +76,7 @@ export default function RegisterPage() {
         </div>
         <div>
           <label className="label" htmlFor="phone">
-            Nomor HP <span className="text-slate-400">(opsional)</span>
+            Nomor HP <span className="text-red-500">*</span>
           </label>
           <input
             id="phone"
@@ -84,7 +84,11 @@ export default function RegisterPage() {
             className="input"
             placeholder="08xxxxxxxxxx"
             inputMode="tel"
+            required
           />
+          <p className="mt-1 text-xs text-slate-500">
+            Wajib diisi untuk menerima reminder pembayaran via WhatsApp.
+          </p>
         </div>
         <div>
           <span className="label">Saya adalah</span>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { MissingPhoneBanner } from "../MissingPhoneBanner";
 import {
   PieChart,
   BarChart,
@@ -64,9 +65,9 @@ export default async function DashboardPage() {
   }
 
   if (user.role === "OWNER") {
-    return <OwnerDashboard ownerId={user.id} name={user.name} />;
+    return <OwnerDashboard ownerId={user.id} name={user.name} phone={user.phone} />;
   }
-  return <TenantDashboard userId={user.id} name={user.name} />;
+  return <TenantDashboard userId={user.id} name={user.name} phone={user.phone} />;
 }
 
 /* =========================================================================
@@ -75,9 +76,11 @@ export default async function DashboardPage() {
 async function OwnerDashboard({
   ownerId,
   name,
+  phone,
 }: {
   ownerId: string;
   name: string;
+  phone: string | null;
 }) {
   const months = lastSixMonths();
   const earliest = new Date(months[0].y, months[0].m - 1, 1);
@@ -211,6 +214,8 @@ async function OwnerDashboard({
         <p className="text-slate-600">Ringkasan bisnis kos Anda.</p>
       </div>
 
+      {!phone && <MissingPhoneBanner />}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total kos" value={kosCount} href="/kos" />
         <Stat label="Penghuni aktif" value={tenantsCount} href="/tenants" />
@@ -317,9 +322,11 @@ async function OwnerDashboard({
 async function TenantDashboard({
   userId,
   name,
+  phone,
 }: {
   userId: string;
   name: string;
+  phone: string | null;
 }) {
   const months = lastSixMonths();
 
@@ -424,6 +431,8 @@ async function TenantDashboard({
         <h1 className="text-2xl font-bold">Halo, {name.split(" ")[0]} 👋</h1>
         <p className="text-slate-600">Selamat datang di Kos Baiti.</p>
       </div>
+
+      {!phone && <MissingPhoneBanner />}
 
       {tenancy ? (
         <>
