@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { verifyPayment } from "./actions";
-import { CheckoutButton } from "./CheckoutButton";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -94,15 +93,12 @@ export default async function PaymentsPage() {
                     </a>
                   ) : null}
                   {(p.status === "DUE" || p.status === "REJECTED") && (
-                    <>
-                      <Link
-                        href={`/payments/new?month=${p.periodMonth}&year=${p.periodYear}`}
-                        className="btn-primary text-xs"
-                      >
-                        {p.status === "DUE" ? "Upload bukti" : "Upload ulang"}
-                      </Link>
-                      <CheckoutButton paymentId={p.id} />
-                    </>
+                    <Link
+                      href={`/payments/new?month=${p.periodMonth}&year=${p.periodYear}`}
+                      className="btn-primary text-xs"
+                    >
+                      {p.status === "DUE" ? "Upload bukti" : "Upload ulang"}
+                    </Link>
                   )}
                 </div>
               </div>

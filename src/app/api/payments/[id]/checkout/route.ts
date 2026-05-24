@@ -11,8 +11,22 @@ export const dynamic = "force-dynamic";
  *
  * Penghuni meminta link bayar untuk Payment tertentu. Membuat
  * GatewayTransaction baru dan return redirectUrl.
+ *
+ * NOTE: Pembayaran online dinonaktifkan untuk sementara per permintaan
+ * owner. Hanya fitur upload bukti yang aktif. Untuk re-enable: set env
+ * `ONLINE_PAYMENT_ENABLED=true` di Railway Variables + restart.
  */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
+  if (process.env.ONLINE_PAYMENT_ENABLED !== "true") {
+    return NextResponse.json(
+      {
+        error:
+          "Pembayaran online sementara dinonaktifkan. Silakan upload bukti transfer manual via tombol \"Upload bukti\".",
+      },
+      { status: 503 }
+    );
+  }
+
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
