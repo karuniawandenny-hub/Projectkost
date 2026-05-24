@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { createTransaction, gatewayProvider } from "@/lib/gateway";
+import { publicOrigin } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Sudah lunas" }, { status: 400 });
   }
 
-  const origin = new URL(req.url).origin;
+  const origin = publicOrigin(req);
   const orderId = `kk-${payment.id}-${Date.now()}`;
 
   try {
