@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kelola Kos — Manajemen Bisnis Kos",
+  title: "Baiti Kos — Forum Komunikasi Pemilik & Penghuni Kos",
   description:
     "Aplikasi untuk pemilik & penghuni kos: data penghuni, pembayaran, dan komplain.",
 };
