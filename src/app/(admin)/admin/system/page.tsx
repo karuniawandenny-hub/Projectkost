@@ -1,5 +1,15 @@
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TestActions } from "./TestActions";
+import { CronUrlCard } from "./CronUrlCard";
+
+function getBaseUrl() {
+  const h = headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto =
+    h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
 
 function StatusPill({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -38,10 +48,15 @@ export default async function AdminSystemPage() {
   const emailMode = process.env.EMAIL_MODE ?? "dev";
   const waMode = process.env.OTP_MODE ?? "dev";
   const gatewayMode = process.env.PAYMENT_GATEWAY ?? "mock";
-  const cronConfigured = !!process.env.CRON_SECRET;
+  const cronSecret = process.env.CRON_SECRET;
+  const cronConfigured = !!cronSecret;
   const emailKey = !!process.env.RESEND_API_KEY;
   const waKey = !!process.env.WA_GATEWAY_TOKEN;
   const midtransKey = !!process.env.MIDTRANS_SERVER_KEY;
+
+  const cronUrl = cronSecret
+    ? `${getBaseUrl()}/api/cron/reminders?token=${cronSecret}`
+    : "";
 
   return (
     <div className="space-y-6">
@@ -109,27 +124,27 @@ export default async function AdminSystemPage() {
           </p>
         </div>
 
-        <div className="card">
+        <div className="card md:col-span-2">
           <h2 className="font-semibold">Cron / Scheduled Reminder</h2>
           <div className="mt-2">
             <StatusPill ok={cronConfigured} label={cronConfigured ? "configured" : "no secret"} />
           </div>
           <p className="mt-3 text-sm text-slate-600">
             {cronConfigured
-              ? "CRON_SECRET ter-set. Endpoint /api/cron/reminders siap dipanggil."
-              : "CRON_SECRET belum di-set di .env. Reminder tidak bisa dijadwalkan."}
+              ? "CRON_SECRET ter-set. Endpoint /api/cron/reminders siap dipanggil dari cron eksternal."
+              : "CRON_SECRET belum di-set. Reminder tidak bisa dijadwalkan."}
           </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Vercel Cron schedule: <code>0 2 * * *</code> (09:00 WIB harian).
-          </p>
+          <div className="mt-3">
+            <CronUrlCard url={cronUrl} configured={cronConfigured} />
+          </div>
         </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Stat label="Total tagihan" value={bills} />
         <Stat label="Tagihan DUE (belum upload)" value={duePayments} />
-        <Stat label="Reminder log total" value={totalReminders} />
-        <Stat label="Reminder hari ini" value={remindersToday} />
+        <Stat label="Reminder log total" value={totalReminders} href="/admin/reminders" />
+        <Stat label="Reminder hari ini" value={remindersToday} href="/admin/reminders" />
         <Stat label="Transaksi gateway" value={totalGatewayTx} />
         <Stat label="Gateway PAID" value={paidGatewayTx} />
       </section>
@@ -253,43 +268,101 @@ MIDTRANS_PROD="0"`}</pre>
             <li>Restart, lalu klik "Bayar online" di /payments tenant.</li>
           </ol>
         </details>
+        <details className="mt-2" open>
+          <summary className="cursor-pointer text-sm font-medium text-brand-700">
+            ⏰ Setup cron-job.org (recommended, gratis)
+          </summary>
+          <div className="mt-2 ml-5 space-y-2 text-sm text-slate-700">
+            <p>
+              Setup reminder otomatis tiap pagi <strong>09:00 WIB</strong>{" "}
+              dengan cron-job.org. Gratis, tidak perlu kartu kredit.
+            </p>
+            <ol className="ml-5 list-decimal space-y-2">
+              <li>
+                Buka{" "}
+                <a
+                  href="https://cron-job.org/en/signup/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-700 hover:underline"
+                >
+                  cron-job.org/signup
+                </a>{" "}
+                → daftar dengan email Anda → verifikasi email.
+              </li>
+              <li>
+                Login → klik tombol <strong>"CREATE CRONJOB"</strong> (kanan atas).
+              </li>
+              <li>
+                Isi form:
+                <ul className="ml-5 mt-1 list-disc space-y-1 text-xs text-slate-600">
+                  <li>
+                    <strong>Title</strong>: <code>Kos Baiti — Reminder Pembayaran</code>
+                  </li>
+                  <li>
+                    <strong>URL</strong>: paste URL dari card "Cron / Scheduled
+                    Reminder" di atas (gunakan tombol Salin)
+                  </li>
+                  <li>
+                    <strong>Schedule</strong>: pilih tab "Every day at" → set{" "}
+                    <code>09:00</code> dengan timezone <code>Asia/Jakarta</code>
+                  </li>
+                  <li>
+                    <strong>Request method</strong>: <code>GET</code> (default)
+                  </li>
+                  <li>
+                    Tab <strong>Notifications</strong>: aktifkan "Notify on failure"
+                    supaya Anda dapat email kalau cron gagal
+                  </li>
+                </ul>
+              </li>
+              <li>
+                Klik <strong>CREATE</strong>. Cron langsung aktif.
+              </li>
+              <li>
+                Klik nama cronjob → tab <strong>"History"</strong> untuk lihat
+                eksekusi. Status <code>200 OK</code> = sukses.
+              </li>
+              <li>
+                Verifikasi: balik ke halaman ini (refresh), atau cek{" "}
+                <a href="/admin/reminders" className="text-brand-700 hover:underline">
+                  /admin/reminders
+                </a>{" "}
+                untuk lihat log reminder yang sudah dikirim.
+              </li>
+            </ol>
+            <div className="rounded-md bg-amber-50 p-3 text-xs text-amber-900">
+              💡 <strong>Test sekarang</strong>: klik tombol "Picu reminder
+              manual" di section Test integrasi di atas untuk simulasi cron.
+              Idempoten — kalau sudah dikirim hari ini, tidak akan dobel.
+            </div>
+          </div>
+        </details>
         <details className="mt-2">
           <summary className="cursor-pointer text-sm font-medium text-brand-700">
-            ⏰ Cron Schedule
+            ⚙️ Alternatif: cron lain (Vercel, server linux, EasyCron)
           </summary>
           <div className="mt-2 ml-5 space-y-2 text-sm text-slate-700">
             <p>
               <strong>Vercel Cron</strong>: file <code>vercel.json</code> di repo
               sudah menjadwalkan <code>0 2 * * *</code> (09:00 WIB harian).
-              Otomatis aktif setelah deploy ke Vercel. Pastikan{" "}
-              <code>CRON_SECRET</code> ter-set di Environment Variables proyek
-              Vercel (Vercel Cron otomatis kirim header{" "}
-              <code>Authorization: Bearer {`<CRON_SECRET>`}</code>).
+              Otomatis aktif setelah deploy ke Vercel.
             </p>
             <p>
               <strong>Self-hosted</strong>: jadwalkan di crontab linux:
             </p>
             <pre className="rounded bg-slate-100 p-2 text-xs">{`0 9 * * * curl -X POST https://your-domain.com/api/cron/reminders -H "Authorization: Bearer $CRON_SECRET"`}</pre>
             <p>
-              <strong>Alternatif gratis</strong>:{" "}
-              <a
-                href="https://cron-job.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-brand-700 hover:underline"
-              >
-                cron-job.org
-              </a>{" "}
-              atau{" "}
+              <strong>EasyCron</strong>:{" "}
               <a
                 href="https://www.easycron.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-brand-700 hover:underline"
               >
-                EasyCron
-              </a>
-              .
+                easycron.com
+              </a>{" "}
+              (mirip cron-job.org, free tier lebih kecil).
             </p>
           </div>
         </details>
@@ -298,11 +371,27 @@ MIDTRANS_PROD="0"`}</pre>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="card">
+function Stat({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: number;
+  href?: string;
+}) {
+  const content = (
+    <>
       <div className="text-xs text-slate-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <a href={href} className="card hover:bg-slate-50 transition-colors">
+        {content}
+      </a>
+    );
+  }
+  return <div className="card">{content}</div>;
 }
