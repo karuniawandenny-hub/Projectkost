@@ -11,8 +11,8 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 const ADMIN_USERNAME = "admin";
-const ADMIN_PASSWORD = "d111284k";
-const ADMIN_EMAIL = "admin@kelolakos.local";
+const ADMIN_PASSWORD = "kosbaiti-admin";
+const ADMIN_EMAIL = "admin@kosbaiti.local";
 
 async function main() {
   const existing = await prisma.user.findFirst({

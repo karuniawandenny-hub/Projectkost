@@ -61,7 +61,7 @@ Railway secara default ambil branch `main`. Anda perlu ganti ke branch yang ada 
 
 1. Tab **Settings** → scroll ke section **Networking**
 2. Klik **Generate Domain**
-3. Railway kasih URL seperti `kelolakos-production-xxxx.up.railway.app`
+3. Railway kasih URL seperti `kosbaiti-production-xxxx.up.railway.app`
 4. Klik URL itu di browser
 
 ---
@@ -71,21 +71,20 @@ Railway secara default ambil branch `main`. Anda perlu ganti ke branch yang ada 
 1. Browser akan tampilkan halaman aplikasi Anda
 2. Klik **Masuk**
 3. Username: **`admin`**
-4. Password: **`d111284k`**
+4. Password: **`kosbaiti-admin`**
 5. ✅ Anda di dashboard admin!
 
 ---
 
 ## 🔴 SEGERA ganti password admin
 
-Password `d111284k` adalah default — orang lain yang tahu repository Anda bisa login juga. **Segera ganti**:
+Password `kosbaiti-admin` adalah default — orang lain yang tahu repository Anda bisa login juga. **Segera ganti**:
 
 1. Login admin
-2. Klik menu **Pengguna**
-3. Cari user **Administrator** → klik
-4. Scroll ke **Reset password**
-5. Isi password baru yang kuat (mis. `KosKu#2026Aman!`)
-6. **Simpan**
+2. Klik **nama Anda** di kanan atas header → dropdown muncul
+3. Klik **Akun & ganti password** → masuk ke halaman `/admin/account`
+4. Isi: **Password lama** `kosbaiti-admin` → **Password baru** yang kuat (mis. `KosKu#2026Aman!`) → **Konfirmasi**
+5. Klik **Simpan password baru**
 
 ---
 

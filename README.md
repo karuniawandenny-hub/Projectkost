@@ -55,8 +55,8 @@ otomatis dibuat:
 | Field    | Nilai                 |
 |----------|-----------------------|
 | Username | `admin`               |
-| Password | `d111284k`            |
-| Email    | `admin@kelolakos.local` |
+| Password | `kosbaiti-admin`      |
+| Email    | `admin@kosbaiti.local` |
 
 Login sebagai admin dari halaman `/login` (boleh isi username atau email) →
 otomatis diarahkan ke modul admin `/admin`. **Segera ganti password admin
