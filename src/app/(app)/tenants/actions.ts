@@ -5,7 +5,8 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
-import { sendTenantAssignedEmail } from "@/lib/email";
+import { sendTenantAssignedEmail, buildTenantAssignedText } from "@/lib/email";
+import { sendWhatsAppGeneric } from "@/lib/reminders";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -141,19 +142,28 @@ export async function approveAndAssignTenant(
     link: "/dashboard",
   });
 
-  // Kirim welcome email — non-blocking.
+  // Kirim welcome email + WA — non-blocking, kedua channel independen.
+  const welcomeParams = {
+    tenantName: target.name,
+    kosName: room.kos.name,
+    roomName: room.name,
+    startDate,
+    monthlyPrice: room.monthlyPrice,
+    loginUrl: `${originFromHeaders()}/login`,
+  };
   if (target.email) {
-    const result = await sendTenantAssignedEmail(target.email, {
-      tenantName: target.name,
-      kosName: room.kos.name,
-      roomName: room.name,
-      startDate,
-      monthlyPrice: room.monthlyPrice,
-      loginUrl: `${originFromHeaders()}/login`,
-    });
+    const result = await sendTenantAssignedEmail(target.email, welcomeParams);
     if (!result.delivered) {
       // eslint-disable-next-line no-console
       console.error("[approveAndAssignTenant] welcome email gagal:", result.error);
+    }
+  }
+  if (target.phone) {
+    try {
+      await sendWhatsAppGeneric(target.phone, buildTenantAssignedText(welcomeParams));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[approveAndAssignTenant] welcome WA gagal:", e);
     }
   }
 

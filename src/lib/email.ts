@@ -248,7 +248,7 @@ function buildTenantAssignedHtml(p: TenantAssignedEmailParams): string {
   `;
 }
 
-function buildTenantAssignedText(p: TenantAssignedEmailParams): string {
+export function buildTenantAssignedText(p: TenantAssignedEmailParams): string {
   return [
     `Selamat datang di Kos Baiti, ${p.tenantName}!`,
     ``,

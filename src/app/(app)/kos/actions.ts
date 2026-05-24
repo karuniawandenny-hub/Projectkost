@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { sendTenantAssignedEmail } from "@/lib/email";
+import { sendTenantAssignedEmail, buildTenantAssignedText } from "@/lib/email";
+import { sendWhatsAppGeneric } from "@/lib/reminders";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -199,20 +200,29 @@ export async function assignTenant(
     }),
   ]);
 
-  // Kirim welcome email — non-blocking, gagal kirim tidak membatalkan
-  // assignment. Hanya jalan kalau penghuni punya email terdaftar.
+  // Kirim welcome email + WA — non-blocking, gagal kirim tidak membatalkan
+  // assignment. Kedua channel independen.
+  const welcomeParams = {
+    tenantName: tenant.name,
+    kosName: room.kos.name,
+    roomName: room.name,
+    startDate,
+    monthlyPrice: room.monthlyPrice,
+    loginUrl: `${originFromHeaders()}/login`,
+  };
   if (tenant.email) {
-    const result = await sendTenantAssignedEmail(tenant.email, {
-      tenantName: tenant.name,
-      kosName: room.kos.name,
-      roomName: room.name,
-      startDate,
-      monthlyPrice: room.monthlyPrice,
-      loginUrl: `${originFromHeaders()}/login`,
-    });
+    const result = await sendTenantAssignedEmail(tenant.email, welcomeParams);
     if (!result.delivered) {
       // eslint-disable-next-line no-console
       console.error("[assignTenantToRoom] welcome email gagal:", result.error);
+    }
+  }
+  if (tenant.phone) {
+    try {
+      await sendWhatsAppGeneric(tenant.phone, buildTenantAssignedText(welcomeParams));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[assignTenantToRoom] welcome WA gagal:", e);
     }
   }
 
