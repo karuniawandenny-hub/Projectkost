@@ -7,7 +7,7 @@
 #    tepat (mis. @next/swc-linux-x64-gnu untuk x86_64 linux glibc).
 #  - --include=optional: pastikan optional deps (SWC binary varian
 #    platform) ikut ter-install.
-#  - Cache bust marker: v5
+#  - Cache bust marker: v6 (global prisma/tsx di runner)
 # =========================================================================
 
 # ----- Stage 1: builder -----
@@ -67,9 +67,13 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+# CRITICAL: install `prisma` & `tsx` SEBAGAI GLOBAL BIN supaya muncul di
+# $PATH. Sebelumnya kita cuma copy folder `node_modules/prisma/` tanpa
+# `node_modules/.bin/prisma` — npx tidak ketemu binary-nya & seed gagal.
+# Global install bikin runtime db push + seed pasti jalan.
+RUN npm install -g prisma@5.22.0 tsx@4.19.2 --no-audit --no-fund
 
 COPY scripts/start.sh ./start.sh
 RUN chmod +x ./start.sh
