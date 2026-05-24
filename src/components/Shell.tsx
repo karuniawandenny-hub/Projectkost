@@ -59,7 +59,7 @@ export default async function Shell({ user, children }: Props) {
             <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
               K
             </div>
-            <span className="font-semibold hidden sm:inline">Kelola Kos</span>
+            <span className="font-semibold hidden sm:inline">Kos Baiti</span>
           </Link>
 
           <nav className="flex items-center gap-1 overflow-x-auto">

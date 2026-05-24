@@ -63,7 +63,7 @@ export async function sendPasswordResetEmail(
         body: JSON.stringify({
           from,
           to: toEmail,
-          subject: "Reset password Kelola Kos",
+          subject: "Reset password Kos Baiti",
           html: buildResetHtml(resetUrl),
           text:
             "Klik link berikut untuk reset password Anda (berlaku 1 jam):\n" +
@@ -90,7 +90,7 @@ function buildResetHtml(resetUrl: string): string {
   const safe = resetUrl.replace(/"/g, "&quot;");
   return `
     <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#0f172a">
-      <h2 style="margin:0 0 8px 0">Reset password Kelola Kos</h2>
+      <h2 style="margin:0 0 8px 0">Reset password Kos Baiti</h2>
       <p style="margin:0 0 16px 0;color:#475569">
         Kami menerima permintaan untuk mengatur ulang password akun Anda.
         Klik tombol di bawah untuk membuat password baru. Link berlaku 1 jam.

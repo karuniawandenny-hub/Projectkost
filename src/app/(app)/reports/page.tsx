@@ -101,7 +101,7 @@ export default async function ReportsPage({
 
       {/* Header laporan saat di-print */}
       <div className="hidden print:block">
-        <h2 className="text-xl font-bold">Laporan Kos — Kelola Kos</h2>
+        <h2 className="text-xl font-bold">Laporan Kos — Kos Baiti</h2>
         <div className="text-sm">
           Periode: <strong>{periodLabel}</strong> · Kos:{" "}
           <strong>{kosLabel}</strong>

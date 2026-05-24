@@ -66,9 +66,9 @@ export async function testEmailAction(to: string): Promise<TestActionState> {
       body: JSON.stringify({
         from,
         to,
-        subject: "Test integrasi Kelola Kos",
+        subject: "Test integrasi Kos Baiti",
         text:
-          "Halo!\n\nIni email test dari Kelola Kos. Jika Anda menerima ini, integrasi Resend Anda berfungsi.\n\nTerima kasih.",
+          "Halo!\n\nIni email test dari Kos Baiti. Jika Anda menerima ini, integrasi Resend Anda berfungsi.\n\nTerima kasih.",
       }),
     });
     if (!res.ok) {
@@ -92,7 +92,7 @@ export async function testWaAction(to: string): Promise<TestActionState> {
   }
   const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
   const message =
-    "Halo! Ini pesan test dari Kelola Kos. Jika Anda menerima ini, integrasi gateway WA Anda berfungsi.";
+    "Halo! Ini pesan test dari Kos Baiti. Jika Anda menerima ini, integrasi gateway WA Anda berfungsi.";
 
   if (mode === "dev") {
     // eslint-disable-next-line no-console

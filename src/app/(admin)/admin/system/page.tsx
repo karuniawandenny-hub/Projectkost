@@ -177,7 +177,7 @@ export default async function AdminSystemPage() {
               Set di <code>.env</code>:
               <pre className="mt-1 rounded bg-slate-100 p-2 text-xs">{`EMAIL_MODE="resend"
 RESEND_API_KEY="re_xxxxxxxxxxxx"
-EMAIL_FROM="Kelola Kos <noreply@yourdomain.com>"`}</pre>
+EMAIL_FROM="Kos Baiti <noreply@yourdomain.com>"`}</pre>
             </li>
             <li>Restart dev server, lalu klik "Test email" di atas.</li>
           </ol>

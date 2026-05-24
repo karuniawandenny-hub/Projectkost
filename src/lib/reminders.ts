@@ -119,7 +119,7 @@ ${
     : `Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo.`
 }
 
-— Kelola Kos`;
+— Kos Baiti`;
 
     // 1) Notifikasi in-app (selalu).
     if (!alreadyH.has("IN_APP")) {

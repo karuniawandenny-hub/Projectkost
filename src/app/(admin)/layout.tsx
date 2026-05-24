@@ -33,7 +33,7 @@ export default async function AdminLayout({
             <div className="h-8 w-8 rounded-lg bg-white text-slate-900 grid place-items-center font-bold">
               A
             </div>
-            <span className="font-semibold">Admin Kelola Kos</span>
+            <span className="font-semibold">Admin Kos Baiti</span>
           </Link>
 
           <nav className="flex items-center gap-1 overflow-x-auto">

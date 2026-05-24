@@ -9,29 +9,42 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-50 via-white to-indigo-50">
+    <main className="relative min-h-screen overflow-hidden bg-gradient-to-br from-sky-100 via-violet-50 to-rose-100">
       {/* Decorative gradient blobs (CSS-only, GPU-accelerated, no image
-          requests). pointer-events-none agar tidak ganggu klik. */}
+          requests). Lebih vibrant supaya halaman terasa hidup tapi
+          tetap ringan — semua di-blur jadi background, tidak block
+          render. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-32 -left-32 h-72 w-72 rounded-full bg-gradient-to-br from-blue-300 to-purple-300 opacity-30 blur-3xl"
+        className="pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full bg-gradient-to-br from-blue-400 to-fuchsia-400 opacity-50 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute top-1/2 -right-40 h-96 w-96 rounded-full bg-gradient-to-br from-pink-300 to-amber-300 opacity-25 blur-3xl"
+        className="pointer-events-none absolute top-1/3 -right-32 h-96 w-96 rounded-full bg-gradient-to-br from-pink-400 to-orange-300 opacity-45 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-gradient-to-br from-emerald-300 to-sky-300 opacity-20 blur-3xl"
+        className="pointer-events-none absolute bottom-0 left-1/4 h-80 w-80 rounded-full bg-gradient-to-br from-emerald-300 to-cyan-400 opacity-40 blur-3xl"
+      />
+      {/* Subtle dot pattern overlay (inline SVG data-uri ~150 bytes,
+          cached). Memberi tekstur halus tanpa beban gambar. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.07]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgb(15 23 42) 1px, transparent 0)",
+          backgroundSize: "24px 24px",
+        }}
       />
 
-      <header className="relative z-10 border-b border-white/40 bg-white/70 backdrop-blur-sm">
+      <header className="relative z-10 border-b border-white/40 bg-white/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-600 text-white grid place-items-center font-bold shadow-md shadow-indigo-500/30">
-              B
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-fuchsia-500 via-violet-500 to-blue-600 text-white grid place-items-center font-bold shadow-lg shadow-violet-500/40">
+              K
             </div>
-            <span className="font-semibold text-slate-900">Baiti Kos</span>
+            <span className="font-semibold text-slate-900">Kos Baiti</span>
           </div>
           <div className="flex gap-2">
             <Link href="/login" className="btn-secondary">
@@ -47,7 +60,7 @@ export default async function HomePage() {
       <section className="relative z-10 mx-auto max-w-5xl px-4 py-12 sm:py-16 md:py-20">
         <div className="grid gap-10 md:grid-cols-2 md:items-center">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-xs font-medium text-indigo-700 shadow-sm backdrop-blur-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/80 px-3 py-1 text-xs font-medium text-violet-700 shadow-sm backdrop-blur-sm">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -55,11 +68,13 @@ export default async function HomePage() {
               Online &amp; siap melayani
             </div>
             <h1 className="mt-4 text-4xl font-bold tracking-tight md:text-5xl">
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-fuchsia-600 via-violet-600 to-blue-600 bg-clip-text text-transparent">
                 Forum Komunikasi
               </span>
               <br />
-              <span className="text-slate-900">Baiti Kos</span>
+              <span className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-transparent">
+                Kos Baiti
+              </span>
             </h1>
             <p className="mt-4 text-lg text-slate-600">
               Satu aplikasi yang menghubungkan pemilik dan penghuni kos —
@@ -68,7 +83,7 @@ export default async function HomePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href="/register"
-                className="btn inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition hover:from-blue-700 hover:to-indigo-700"
+                className="btn inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-fuchsia-600 via-violet-600 to-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/40 transition hover:from-fuchsia-700 hover:via-violet-700 hover:to-blue-700"
               >
                 Mulai sekarang
                 <ArrowIcon />
@@ -102,9 +117,9 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <footer className="relative z-10 border-t border-white/40 bg-white/70 backdrop-blur-sm">
+      <footer className="relative z-10 border-t border-white/40 bg-white/70 backdrop-blur-md">
         <div className="mx-auto max-w-5xl px-4 py-6 text-center text-sm text-slate-500">
-          &copy; {new Date().getFullYear()} Baiti Kos
+          &copy; {new Date().getFullYear()} Kos Baiti
         </div>
       </footer>
     </main>
@@ -115,22 +130,25 @@ type FeatureColor = "blue" | "emerald" | "amber";
 
 const colorMap: Record<
   FeatureColor,
-  { ring: string; iconBg: string; iconText: string }
+  { ring: string; iconBg: string; accent: string; shadow: string }
 > = {
   blue: {
-    ring: "hover:ring-blue-200",
-    iconBg: "bg-blue-100",
-    iconText: "text-blue-600",
+    ring: "hover:ring-blue-300/60",
+    iconBg: "bg-gradient-to-br from-blue-500 to-indigo-600",
+    accent: "bg-gradient-to-b from-blue-400 to-indigo-500",
+    shadow: "shadow-blue-500/30",
   },
   emerald: {
-    ring: "hover:ring-emerald-200",
-    iconBg: "bg-emerald-100",
-    iconText: "text-emerald-600",
+    ring: "hover:ring-emerald-300/60",
+    iconBg: "bg-gradient-to-br from-emerald-500 to-teal-600",
+    accent: "bg-gradient-to-b from-emerald-400 to-teal-500",
+    shadow: "shadow-emerald-500/30",
   },
   amber: {
-    ring: "hover:ring-amber-200",
-    iconBg: "bg-amber-100",
-    iconText: "text-amber-600",
+    ring: "hover:ring-amber-300/60",
+    iconBg: "bg-gradient-to-br from-amber-500 to-orange-600",
+    accent: "bg-gradient-to-b from-amber-400 to-orange-500",
+    shadow: "shadow-amber-500/30",
   },
 };
 
@@ -148,10 +166,14 @@ function Feature({
   const c = colorMap[color];
   return (
     <div
-      className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm ring-1 ring-transparent transition hover:shadow-md ${c.ring}`}
+      className={`relative flex items-start gap-3 overflow-hidden rounded-xl border border-white/60 bg-white/90 p-4 pl-5 shadow-sm backdrop-blur-md ring-1 ring-transparent transition hover:-translate-y-0.5 hover:shadow-lg ${c.ring}`}
     >
+      <span
+        aria-hidden
+        className={`absolute left-0 top-0 h-full w-1 ${c.accent}`}
+      />
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${c.iconBg} ${c.iconText}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white shadow-md ${c.iconBg} ${c.shadow}`}
       >
         {icon}
       </div>

@@ -15,7 +15,7 @@ export default async function OnboardingPage() {
             <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
               K
             </div>
-            <span className="font-semibold">Kelola Kos</span>
+            <span className="font-semibold">Kos Baiti</span>
           </div>
           <form action="/logout" method="POST">
             <button className="text-sm text-slate-600 hover:underline">Keluar</button>

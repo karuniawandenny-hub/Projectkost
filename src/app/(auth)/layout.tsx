@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className="h-8 w-8 rounded-lg bg-brand-600 text-white grid place-items-center font-bold">
               K
             </div>
-            <span className="font-semibold">Kelola Kos</span>
+            <span className="font-semibold">Kos Baiti</span>
           </Link>
         </div>
       </header>
