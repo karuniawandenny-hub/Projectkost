@@ -61,11 +61,6 @@ export default async function HomePage() {
       <section className="relative z-10 mx-auto max-w-5xl px-4 py-12 sm:py-16 md:py-20">
         <div className="grid gap-10 md:grid-cols-2 md:items-center">
           <div>
-            <img
-              src="/kos-baiti-logo.png"
-              alt="Kos Baiti"
-              className="mb-6 h-32 w-auto sm:h-40 drop-shadow-xl"
-            />
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white/80 px-3 py-1 text-xs font-medium text-violet-700 shadow-sm backdrop-blur-sm">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
