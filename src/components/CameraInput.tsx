@@ -166,8 +166,10 @@ export function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
           audio: false,
           video: {
             facingMode: { ideal: current },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            // Minta resolusi tinggi tanpa lock orientation - device pilih
+            // landscape/portrait sesuai cara user pegang HP.
+            width: { ideal: 2560, min: 1280 },
+            height: { ideal: 1440, min: 720 },
           },
         });
         if (cancelled) {
@@ -235,84 +237,91 @@ export function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex flex-col bg-black"
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h3 className="font-semibold">Ambil foto</h3>
-          <button
-            type="button"
-            onClick={onCancel}
-            aria-label="Tutup"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
-          >
-            ✕
-          </button>
-        </div>
+      {/* Top bar */}
+      <div
+        className="flex items-center justify-between bg-black/80 px-4 py-3 text-white backdrop-blur-sm"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+      >
+        <h3 className="text-sm font-semibold sm:text-base">Ambil foto</h3>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Tutup"
+          className="rounded-full p-2 text-white hover:bg-white/10"
+        >
+          ✕
+        </button>
+      </div>
 
-        <div className="bg-slate-900">
-          {/* Video preview */}
-          <div className="relative aspect-video w-full">
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              autoPlay
-              className={`h-full w-full object-cover ${current === "user" ? "scale-x-[-1]" : ""}`}
-            />
-            {!ready && !error && (
-              <div className="absolute inset-0 grid place-items-center text-sm text-slate-200">
-                Mengaktifkan kamera…
-              </div>
-            )}
-            {error && (
-              <div className="absolute inset-0 grid place-items-center p-4 text-center">
-                <div>
-                  <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error}
-                  </div>
-                  <p className="mt-3 text-xs text-slate-300">
-                    Anda tetap bisa pakai &quot;Pilih dari file&quot; untuk
-                    mengunggah foto.
-                  </p>
-                </div>
-              </div>
-            )}
+      {/* Camera preview - mengisi seluruh ruang vertikal yang tersisa */}
+      <div className="relative flex-1 overflow-hidden bg-slate-900">
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          autoPlay
+          className={`absolute inset-0 h-full w-full object-contain ${
+            current === "user" ? "scale-x-[-1]" : ""
+          }`}
+        />
+        {!ready && !error && (
+          <div className="absolute inset-0 grid place-items-center text-sm text-slate-200">
+            Mengaktifkan kamera…
           </div>
-        </div>
+        )}
+        {error && (
+          <div className="absolute inset-0 grid place-items-center p-4 text-center">
+            <div className="max-w-sm">
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+              <p className="mt-3 text-xs text-slate-300">
+                Anda tetap bisa pakai &quot;Pilih dari file&quot; untuk
+                mengunggah foto.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-slate-50 px-4 py-3">
-          <button
-            type="button"
-            onClick={() =>
-              setCurrent((c) => (c === "user" ? "environment" : "user"))
-            }
-            className="btn-secondary"
-            disabled={busy}
-          >
-            Balik kamera
-          </button>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="btn-secondary"
-              disabled={busy}
-            >
-              Batal
-            </button>
-            <button
-              type="button"
-              onClick={snap}
-              className="btn-primary"
-              disabled={!ready || busy || !!error}
-            >
-              {busy ? "Memproses…" : "Ambil"}
-            </button>
-          </div>
-        </div>
+      {/* Bottom controls */}
+      <div
+        className="flex items-center justify-between gap-3 bg-black/90 px-4 py-4 text-white backdrop-blur-sm"
+        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      >
+        <button
+          type="button"
+          onClick={() =>
+            setCurrent((c) => (c === "user" ? "environment" : "user"))
+          }
+          disabled={busy}
+          className="rounded-full border border-white/30 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 disabled:opacity-50 sm:text-sm"
+        >
+          ↺ Balik
+        </button>
+
+        <button
+          type="button"
+          onClick={snap}
+          disabled={!ready || busy || !!error}
+          aria-label="Ambil foto"
+          className="grid h-16 w-16 place-items-center rounded-full border-4 border-white bg-white shadow-lg transition active:scale-95 disabled:opacity-40 sm:h-20 sm:w-20"
+        >
+          <span className="block h-12 w-12 rounded-full bg-white ring-2 ring-slate-900/20 sm:h-14 sm:w-14" />
+        </button>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="rounded-full border border-white/30 px-3 py-2 text-xs font-medium text-white hover:bg-white/10 disabled:opacity-50 sm:text-sm"
+        >
+          Batal
+        </button>
       </div>
     </div>
   );
