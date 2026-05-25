@@ -27,9 +27,9 @@ export default async function AdminLayout({
   ];
 
   return (
-    <div className="min-h-screen w-full flex flex-col overflow-x-hidden">
-      <header className="relative z-10 border-b bg-slate-900 text-white sm:sticky sm:top-0">
-        <div className="mx-auto w-full max-w-6xl px-3 sm:px-4">
+    <main className="relative min-h-screen overflow-hidden bg-slate-50">
+      <header className="relative z-10 border-b bg-slate-900 text-white">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4">
           {/* Top row: logo + user dropdown (selalu satu baris) */}
           <div className="flex items-center justify-between gap-3 py-2 sm:py-3">
             <Link
@@ -95,10 +95,7 @@ export default async function AdminLayout({
             </div>
           </div>
 
-          {/* Mobile nav: wrap di div dengan overflow-hidden + w-full untuk
-              paksa iOS Safari constrain ke parent. Inner nav scroll
-              horizontal di dalam. Tanpa double-wrap, flex items
-              shrink-0 whitespace-nowrap bisa expand parent di iOS. */}
+          {/* Mobile nav: double-wrap untuk iOS Safari */}
           <div className="w-full overflow-hidden border-t border-slate-800 sm:hidden">
             <nav className="flex items-center gap-1 overflow-x-auto py-1.5">
               {nav.map((n) => (
@@ -120,9 +117,9 @@ export default async function AdminLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">
-        <div className="w-full overflow-x-hidden">{children}</div>
-      </main>
-    </div>
+      <section className="relative z-10 mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
+        {children}
+      </section>
+    </main>
   );
 }

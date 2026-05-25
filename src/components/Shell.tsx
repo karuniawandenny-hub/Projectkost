@@ -52,9 +52,9 @@ export default async function Shell({ user, children }: Props) {
       ];
 
   return (
-    <div className="min-h-screen w-full flex flex-col overflow-x-hidden">
-      <header className="relative z-10 border-b bg-white sm:sticky sm:top-0">
-        <div className="mx-auto w-full max-w-6xl px-3 sm:px-4">
+    <main className="relative min-h-screen overflow-hidden bg-slate-50">
+      <header className="relative z-10 border-b bg-white">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4">
           {/* Top row: logo + actions (notif + user) */}
           <div className="flex items-center justify-between gap-3 py-2 sm:py-3">
             <Link
@@ -144,9 +144,9 @@ export default async function Shell({ user, children }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">
-        <div className="w-full overflow-x-hidden">{children}</div>
-      </main>
-    </div>
+      <section className="relative z-10 mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
+        {children}
+      </section>
+    </main>
   );
 }
