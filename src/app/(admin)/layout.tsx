@@ -93,13 +93,13 @@ export default async function AdminLayout({
             </div>
           </div>
 
-          {/* Mobile nav: baris kedua, full-width scrollable */}
-          <nav className="-mx-3 flex items-center gap-1 overflow-x-auto border-t border-slate-800 px-3 py-1.5 sm:hidden">
+          {/* Mobile nav: baris kedua, horizontal-scrollable di dalam container */}
+          <nav className="flex items-center gap-1 overflow-x-auto border-t border-slate-800 py-1.5 sm:hidden">
             {nav.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
-                className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-slate-800 whitespace-nowrap inline-flex items-center gap-1"
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-100 hover:bg-slate-800 whitespace-nowrap inline-flex items-center gap-1 shrink-0"
               >
                 <span>{n.label}</span>
                 {n.badge ? (
