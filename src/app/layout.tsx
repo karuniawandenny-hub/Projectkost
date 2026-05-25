@@ -44,7 +44,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        <div className="w-full max-w-full overflow-x-hidden">{children}</div>
+      </body>
     </html>
   );
 }

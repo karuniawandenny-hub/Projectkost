@@ -32,10 +32,10 @@ export default async function AdminDashboardPage() {
   ]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard Admin</h1>
-        <p className="text-slate-600">Ringkasan sistem.</p>
+        <h1 className="break-words text-xl font-bold sm:text-2xl">Dashboard Admin</h1>
+        <p className="text-sm text-slate-600 sm:text-base">Ringkasan sistem.</p>
       </div>
 
       <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none lg:grid-cols-4">

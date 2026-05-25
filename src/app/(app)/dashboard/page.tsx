@@ -428,8 +428,8 @@ async function TenantDashboard({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Halo, {name.split(" ")[0]} 👋</h1>
-        <p className="text-slate-600">Selamat datang di Kos Baiti.</p>
+        <h1 className="break-words text-xl font-bold sm:text-2xl">Halo, {name.split(" ")[0]} 👋</h1>
+        <p className="text-sm text-slate-600 sm:text-base">Selamat datang di Kos Baiti.</p>
       </div>
 
       {!phone && <MissingPhoneBanner />}
