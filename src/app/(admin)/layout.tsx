@@ -40,7 +40,9 @@ export default async function AdminLayout({
               <img
                 src="/kos-baiti-logo.png"
                 alt="Kos Baiti"
-                className="h-9 w-auto rounded-md bg-white p-0.5 sm:h-10"
+                width={40}
+                height={40}
+                className="h-9 w-9 max-w-full rounded-md bg-white object-contain p-0.5 sm:h-10 sm:w-10"
               />
               <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-900 sm:px-2 sm:text-[10px]">
                 Admin

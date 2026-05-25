@@ -65,7 +65,9 @@ export default async function Shell({ user, children }: Props) {
               <img
                 src="/kos-baiti-logo.png"
                 alt="Kos Baiti"
-                className="h-9 w-auto sm:h-10"
+                width={40}
+                height={40}
+                className="h-9 w-9 max-w-full object-contain sm:h-10 sm:w-10"
               />
             </Link>
 

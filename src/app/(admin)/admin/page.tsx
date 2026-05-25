@@ -83,8 +83,8 @@ export default async function AdminDashboardPage() {
           <div className="mt-3 divide-y">
             {recentPending.map((u) => (
               <div key={u.id} className="py-3 flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <div className="font-medium">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium break-words">
                     {u.name}{" "}
                     <span
                       className={
@@ -94,7 +94,7 @@ export default async function AdminDashboardPage() {
                       {u.role === "OWNER" ? "Pemilik" : "Penghuni"}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-500 break-all">
                     {u.email}
                     {u.phone ? ` • ${u.phone}` : ""}
                   </div>

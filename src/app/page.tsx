@@ -44,7 +44,9 @@ export default async function HomePage() {
             <img
               src="/kos-baiti-logo.png"
               alt="Kos Baiti"
-              className="h-12 w-auto"
+              width={48}
+              height={48}
+              className="h-12 w-12 max-w-full object-contain"
             />
           </div>
           <div className="flex gap-2">
