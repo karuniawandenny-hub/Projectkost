@@ -285,3 +285,22 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
+
+/**
+ * Versi singkat untuk WhatsApp — hanya info esensial. Pesan email yg
+ * panjang & berformat HTML tidak cocok untuk WA, dan teks template
+ * yang sama persis untuk semua penerima berisiko trigger anti-spam.
+ */
+export function buildTenantAssignedWaText(p: TenantAssignedEmailParams): string {
+  return [
+    `Halo ${p.tenantName},`,
+    ``,
+    `Anda sudah ditempatkan di Kamar ${p.roomName} - ${p.kosName}.`,
+    `Mulai sewa: ${formatTanggalId(p.startDate)}`,
+    `Tagihan: ${formatRupiah(p.monthlyPrice)}/bulan`,
+    ``,
+    `Login dashboard: ${p.loginUrl}`,
+    ``,
+    `— Kos Baiti`,
+  ].join("\n");
+}

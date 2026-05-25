@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
-import { sendTenantAssignedEmail, buildTenantAssignedText } from "@/lib/email";
+import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWhatsAppGeneric } from "@/lib/reminders";
 
 function originFromHeaders(): string {
@@ -160,7 +160,7 @@ export async function approveAndAssignTenant(
   }
   if (target.phone) {
     try {
-      await sendWhatsAppGeneric(target.phone, buildTenantAssignedText(welcomeParams));
+      await sendWhatsAppGeneric(target.phone, buildTenantAssignedWaText(welcomeParams));
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[approveAndAssignTenant] welcome WA gagal:", e);
