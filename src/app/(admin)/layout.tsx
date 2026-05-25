@@ -67,7 +67,7 @@ export default async function AdminLayout({
 
             <div className="flex items-center gap-2 shrink-0">
               <details className="relative">
-                <summary className="cursor-pointer list-none rounded-full bg-slate-700 px-3 py-1.5 text-sm font-medium">
+                <summary className="block max-w-[110px] cursor-pointer list-none truncate rounded-full bg-slate-700 px-3 py-1.5 text-sm font-medium sm:max-w-none">
                   {user.username ?? user.name.split(" ")[0]}
                 </summary>
                 <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white p-2 shadow-lg text-slate-900">

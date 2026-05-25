@@ -9,11 +9,13 @@
 html,
 body {
   height: 100%;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
-  overflow-x: hidden;
+  position: relative;
 }
 
 @layer components {

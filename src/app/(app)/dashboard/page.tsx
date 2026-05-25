@@ -216,7 +216,7 @@ async function OwnerDashboard({
 
       {!phone && <MissingPhoneBanner />}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none lg:grid-cols-4">
         <Stat label="Total kos" value={kosCount} href="/kos" />
         <Stat label="Penghuni aktif" value={tenantsCount} href="/tenants" />
         <Stat
@@ -466,12 +466,15 @@ async function TenantDashboard({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:grid sm:grid-cols-3 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none">
         <Stat label="Komplain terbuka" value={openComplaints} href="/complaints" />
         <Stat label="Pembayaran tercatat" value={payments.length} href="/payments" />
-        <Link href="/payments/new" className="card hover:bg-slate-50">
+        <Link
+          href="/payments/new"
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50 sm:block sm:rounded-xl sm:border sm:border-slate-200 sm:bg-white sm:p-5 sm:shadow-sm"
+        >
           <div className="text-sm text-slate-500">Aksi cepat</div>
-          <div className="mt-1 font-semibold text-brand-700">
+          <div className="font-semibold text-brand-700 sm:mt-1">
             + Upload bukti pembayaran
           </div>
         </Link>
@@ -537,13 +540,24 @@ function Stat({
   href?: string;
   highlight?: boolean;
 }) {
-  const inner = (
-    <div className={`card h-full ${highlight ? "border-amber-400 bg-amber-50" : ""}`}>
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-    </div>
+  const className = `flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50 sm:block sm:h-full sm:rounded-xl sm:border sm:border-slate-200 sm:bg-white sm:p-5 sm:shadow-sm ${
+    highlight ? "bg-amber-50 sm:border-amber-400" : ""
+  }`;
+  const content = (
+    <>
+      <div className="text-sm text-slate-600 sm:text-slate-500">{label}</div>
+      <div className="shrink-0 text-lg font-semibold tabular-nums sm:mt-1 sm:text-2xl">
+        {value}
+      </div>
+    </>
   );
-  return href ? <Link href={href}>{inner}</Link> : inner;
+  return href ? (
+    <Link href={href} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {

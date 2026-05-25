@@ -38,7 +38,7 @@ export default async function AdminDashboardPage() {
         <p className="text-slate-600">Ringkasan sistem.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+      <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none lg:grid-cols-4">
         <Stat label="Total pengguna" value={totalUsers} href="/admin/users" />
         <Stat
           label="Pemilik menunggu approval"
@@ -133,15 +133,24 @@ function Stat({
   href?: string;
   highlight?: boolean;
 }) {
-  const inner = (
-    <div
-      className={`h-full rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 ${
-        highlight ? "border-amber-400 bg-amber-50" : ""
-      }`}
-    >
-      <div className="text-xs leading-tight text-slate-500 sm:text-sm">{label}</div>
-      <div className="mt-1 text-xl font-semibold sm:text-2xl">{value}</div>
-    </div>
+  // Mobile: baris compact (label kiri, nilai kanan).
+  // Desktop (sm:+): card grid seperti sebelumnya.
+  const className = `flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50 sm:block sm:h-full sm:rounded-xl sm:border sm:border-slate-200 sm:bg-white sm:p-5 sm:shadow-sm ${
+    highlight ? "bg-amber-50 sm:border-amber-400" : ""
+  }`;
+  const content = (
+    <>
+      <div className="text-sm text-slate-600 sm:text-sm sm:text-slate-500">{label}</div>
+      <div className="shrink-0 text-lg font-semibold tabular-nums sm:mt-1 sm:text-2xl">
+        {value}
+      </div>
+    </>
   );
-  return href ? <Link href={href} className="block h-full">{inner}</Link> : inner;
+  return href ? (
+    <Link href={href} className={className}>
+      {content}
+    </Link>
+  ) : (
+    <div className={className}>{content}</div>
+  );
 }

@@ -90,7 +90,7 @@ export default async function Shell({ user, children }: Props) {
             <div className="flex items-center gap-2 shrink-0">
               <NotifBell unread={unread} />
               <details className="relative">
-                <summary className="cursor-pointer list-none rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700">
+                <summary className="block max-w-[110px] cursor-pointer list-none truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 sm:max-w-none">
                   {user.name.split(" ")[0]}
                 </summary>
                 <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white p-2 shadow-lg">
