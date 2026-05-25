@@ -121,27 +121,32 @@ export default async function Shell({ user, children }: Props) {
             </div>
           </div>
 
-          {/* Mobile nav: baris kedua, horizontal-scrollable di dalam container */}
-          <nav className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto border-t border-slate-100 py-1.5 sm:hidden">
-            {nav.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1 shrink-0"
-              >
-                <span>{n.label}</span>
-                {n.badge ? (
-                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-slate-900">
-                    {n.badge}
-                  </span>
-                ) : null}
-              </Link>
-            ))}
-          </nav>
+          {/* Mobile nav: wrap di div overflow-hidden untuk paksa constrain
+              ke parent di iOS Safari. Inner nav scroll horizontal. */}
+          <div className="w-full overflow-hidden border-t border-slate-100 sm:hidden">
+            <nav className="flex items-center gap-1 overflow-x-auto py-1.5">
+              {nav.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1 shrink-0"
+                >
+                  <span>{n.label}</span>
+                  {n.badge ? (
+                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-slate-900">
+                      {n.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">
+        <div className="w-full overflow-x-hidden">{children}</div>
+      </main>
     </div>
   );
 }
