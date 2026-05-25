@@ -174,7 +174,7 @@ export async function previewReminderAction(
       }
       return {
         ok: true,
-        message: `Preview ${type} dikirim ke ${normalized}.`,
+        message: `Preview ${type} diantrikan ke Fonnte untuk ${normalized}. Tunggu beberapa detik & cek WA penerima.`,
         detail: previewBody,
       };
     } catch (e) {
@@ -236,7 +236,11 @@ export async function testWaAction(to: string): Promise<TestActionState> {
           detail: txt,
         };
       }
-      return { ok: true, message: `WA test dikirim ke ${normalized}.`, detail: txt };
+      return {
+        ok: true,
+        message: `Diantrikan ke Fonnte untuk ${normalized}. Cek penerima — bisa butuh beberapa detik. Kalau tidak sampai, lihat dashboard Fonnte → Delivery Report.`,
+        detail: txt,
+      };
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : "Error" };
     }

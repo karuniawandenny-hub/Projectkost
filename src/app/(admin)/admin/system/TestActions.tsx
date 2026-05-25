@@ -17,13 +17,15 @@ function ResultBox({ result }: { result: TestActionState | null }) {
     <div
       className={
         result.ok
-          ? "mt-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
-          : "mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+          ? "mt-2 overflow-hidden rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          : "mt-2 overflow-hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
       }
     >
-      {result.message}
+      <div className="break-words">{result.message}</div>
       {result.detail && (
-        <pre className="mt-1 whitespace-pre-wrap text-xs">{result.detail}</pre>
+        <pre className="mt-1 max-w-full overflow-x-auto whitespace-pre-wrap break-all text-[11px] leading-snug sm:text-xs">
+          {result.detail}
+        </pre>
       )}
     </div>
   );
