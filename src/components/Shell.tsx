@@ -54,66 +54,92 @@ export default async function Shell({ user, children }: Props) {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b bg-white sticky top-0 z-10">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-3">
-          <Link href="/dashboard" className="flex items-center" aria-label="Kos Baiti — Dashboard">
-            <img
-              src="/kos-baiti-logo.png"
-              alt="Kos Baiti"
-              className="h-10 w-auto"
-            />
-          </Link>
+        <div className="mx-auto max-w-6xl px-3 sm:px-4">
+          {/* Top row: logo + actions (notif + user) */}
+          <div className="flex items-center justify-between gap-3 py-2 sm:py-3">
+            <Link
+              href="/dashboard"
+              className="flex items-center shrink-0"
+              aria-label="Kos Baiti — Dashboard"
+            >
+              <img
+                src="/kos-baiti-logo.png"
+                alt="Kos Baiti"
+                className="h-9 w-auto sm:h-10"
+              />
+            </Link>
 
-          <nav className="flex items-center gap-1 overflow-x-auto">
+            {/* Desktop nav (di tengah) */}
+            <nav className="hidden flex-1 items-center justify-center gap-1 overflow-x-auto sm:flex">
+              {nav.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1"
+                >
+                  <span>{n.label}</span>
+                  {n.badge ? (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+                      {n.badge}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <NotifBell unread={unread} />
+              <details className="relative">
+                <summary className="cursor-pointer list-none rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700">
+                  {user.name.split(" ")[0]}
+                </summary>
+                <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white p-2 shadow-lg">
+                  <div className="px-3 py-2 text-xs text-slate-500">
+                    Masuk sebagai{" "}
+                    <span className="font-semibold text-slate-700">
+                      {isOwner ? "Pemilik" : "Penghuni"}
+                    </span>
+                  </div>
+                  <Link
+                    href="/profile"
+                    className="block rounded-md px-3 py-2 text-sm hover:bg-slate-100"
+                  >
+                    Profil saya
+                  </Link>
+                  <form action="/logout" method="POST">
+                    <button
+                      type="submit"
+                      className="block w-full rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Keluar
+                    </button>
+                  </form>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          {/* Mobile nav: baris kedua, full-width scrollable */}
+          <nav className="-mx-3 flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-3 py-1.5 sm:hidden">
             {nav.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
-                className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1"
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1"
               >
                 <span>{n.label}</span>
                 {n.badge ? (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
+                  <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[9px] font-bold text-slate-900">
                     {n.badge}
                   </span>
                 ) : null}
               </Link>
             ))}
           </nav>
-
-          <div className="flex items-center gap-2">
-            <NotifBell unread={unread} />
-            <details className="relative">
-              <summary className="cursor-pointer list-none rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700">
-                {user.name.split(" ")[0]}
-              </summary>
-              <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white p-2 shadow-lg">
-                <div className="px-3 py-2 text-xs text-slate-500">
-                  Masuk sebagai{" "}
-                  <span className="font-semibold text-slate-700">
-                    {isOwner ? "Pemilik" : "Penghuni"}
-                  </span>
-                </div>
-                <Link
-                  href="/profile"
-                  className="block rounded-md px-3 py-2 text-sm hover:bg-slate-100"
-                >
-                  Profil saya
-                </Link>
-                <form action="/logout" method="POST">
-                  <button
-                    type="submit"
-                    className="block w-full rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                  >
-                    Keluar
-                  </button>
-                </form>
-              </div>
-            </details>
-          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-3 py-4 sm:px-4 sm:py-6">{children}</main>
     </div>
   );
 }
