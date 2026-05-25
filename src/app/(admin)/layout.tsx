@@ -27,7 +27,7 @@ export default async function AdminLayout({
   ];
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen w-full flex flex-col overflow-x-hidden">
       <header className="border-b bg-slate-900 text-white sticky top-0 z-10">
         <div className="mx-auto max-w-6xl px-3 sm:px-4">
           {/* Top row: logo + user dropdown (selalu satu baris) */}
