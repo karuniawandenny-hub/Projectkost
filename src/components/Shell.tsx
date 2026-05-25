@@ -53,8 +53,8 @@ export default async function Shell({ user, children }: Props) {
 
   return (
     <div className="min-h-screen w-full flex flex-col overflow-x-hidden">
-      <header className="border-b bg-white sticky top-0 z-10">
-        <div className="mx-auto max-w-6xl px-3 sm:px-4">
+      <header className="relative z-10 border-b bg-white sm:sticky sm:top-0">
+        <div className="mx-auto w-full max-w-6xl px-3 sm:px-4">
           {/* Top row: logo + actions (notif + user) */}
           <div className="flex items-center justify-between gap-3 py-2 sm:py-3">
             <Link
@@ -120,7 +120,7 @@ export default async function Shell({ user, children }: Props) {
           </div>
 
           {/* Mobile nav: baris kedua, horizontal-scrollable di dalam container */}
-          <nav className="flex items-center gap-1 overflow-x-auto border-t border-slate-100 py-1.5 sm:hidden">
+          <nav className="flex min-w-0 max-w-full items-center gap-1 overflow-x-auto border-t border-slate-100 py-1.5 sm:hidden">
             {nav.map((n) => (
               <Link
                 key={n.href}
