@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { approveUser, rejectUser, setUserStatus } from "../../actions";
+import { EmptyState, UsersIcon } from "@/components/EmptyState";
+import { BulkActions, BulkCheckbox } from "./BulkActions";
 
 type SearchParams = {
   role?: string;
@@ -51,6 +53,13 @@ export default async function AdminUsersPage({
     take: 200,
   });
 
+  const pendingUserIds = users
+    .filter(
+      (u) =>
+        u.status === "PENDING" && (u.role === "OWNER" || u.role === "TENANT")
+    )
+    .map((u) => u.id);
+
   const filters = [
     { href: "/admin/users", label: "Semua" },
     { href: "/admin/users?status=PENDING", label: "Menunggu approval" },
@@ -94,16 +103,30 @@ export default async function AdminUsersPage({
         ))}
       </div>
 
+      <BulkActions pendingUserIds={pendingUserIds} />
+
       <div className="space-y-2">
         {users.length === 0 && (
-          <div className="card text-sm text-slate-500">
-            Tidak ada pengguna yang cocok dengan filter.
-          </div>
+          <EmptyState
+            icon={<UsersIcon />}
+            title="Tidak ada pengguna"
+            description="Tidak ada user yang cocok dengan filter. Coba ubah filter atau search."
+          />
         )}
-        {users.map((u) => (
+        {users.map((u) => {
+          const isPending =
+            u.status === "PENDING" &&
+            (u.role === "OWNER" || u.role === "TENANT");
+          return (
           <div key={u.id} className="card">
             <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                {isPending && (
+                  <div className="mt-1">
+                    <BulkCheckbox userId={u.id} />
+                  </div>
+                )}
+                <div className="min-w-0">
                 <Link
                   href={`/admin/users/${u.id}`}
                   className="font-semibold hover:underline"
@@ -118,6 +141,7 @@ export default async function AdminUsersPage({
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   <RoleBadge role={u.role} />
                   <StatusBadge status={u.status} />
+                </div>
                 </div>
               </div>
 
@@ -160,7 +184,8 @@ export default async function AdminUsersPage({
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

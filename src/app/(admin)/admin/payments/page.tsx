@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { TestControls } from "./TestControls";
+import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -73,7 +74,11 @@ export default async function AdminPaymentsPage({
       </div>
       <div className="space-y-2">
         {payments.length === 0 && (
-          <div className="card text-sm text-slate-500">Tidak ada data.</div>
+          <EmptyState
+            icon={<PaymentIcon />}
+            title="Tidak ada pembayaran"
+            description="Pembayaran dari penghuni di seluruh kos akan muncul di sini."
+          />
         )}
         {payments.map((p) => (
           <div key={p.id} className="card">

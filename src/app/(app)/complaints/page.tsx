@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { EmptyState, ChatIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
 
 function StatusBadge({ status }: { status: string }) {
@@ -44,11 +45,24 @@ export default async function ComplaintsPage() {
 
       <div className="space-y-3">
         {complaints.length === 0 && (
-          <div className="card text-sm text-slate-500">
-            {user.role === "TENANT"
-              ? "Belum ada komplain. Klik tombol di atas untuk membuat komplain."
-              : "Tidak ada komplain saat ini."}
-          </div>
+          <EmptyState
+            icon={<ChatIcon />}
+            title={
+              user.role === "TENANT"
+                ? "Belum ada komplain"
+                : "Tidak ada komplain saat ini"
+            }
+            description={
+              user.role === "TENANT"
+                ? "Laporkan kerusakan atau masalah lain agar pemilik bisa tindak lanjut."
+                : "Komplain dari penghuni kos Anda akan muncul di sini."
+            }
+            action={
+              user.role === "TENANT"
+                ? { label: "Buat komplain", href: "/complaints/new" }
+                : undefined
+            }
+          />
         )}
         {complaints.map((c) => {
           const photos: string[] = c.photoUrls ? JSON.parse(c.photoUrls) : [];

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { EmptyState, InboxIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function NotificationsPage() {
@@ -24,9 +25,11 @@ export default async function NotificationsPage() {
       <h1 className="text-2xl font-bold">Notifikasi</h1>
       <div className="space-y-2">
         {notifs.length === 0 && (
-          <div className="card text-sm text-slate-500">
-            Belum ada notifikasi.
-          </div>
+          <EmptyState
+            icon={<InboxIcon />}
+            title="Belum ada notifikasi"
+            description="Reminder tagihan, status pembayaran, dan info lain akan muncul di sini."
+          />
         )}
         {notifs.map((n) => {
           const inner = (

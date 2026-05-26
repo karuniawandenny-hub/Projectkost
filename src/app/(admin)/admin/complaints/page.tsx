@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { EmptyState, ChatIcon } from "@/components/EmptyState";
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "OPEN") return <span className="badge-yellow">Terbuka</span>;
@@ -56,7 +57,11 @@ export default async function AdminComplaintsPage({
       </div>
       <div className="space-y-2">
         {complaints.length === 0 && (
-          <div className="card text-sm text-slate-500">Tidak ada data.</div>
+          <EmptyState
+            icon={<ChatIcon />}
+            title="Tidak ada komplain"
+            description="Komplain dari penghuni di seluruh kos akan muncul di sini."
+          />
         )}
         {complaints.map((c) => (
           <Link

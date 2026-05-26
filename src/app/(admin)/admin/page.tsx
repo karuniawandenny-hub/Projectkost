@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { approveUser, rejectUser } from "../actions";
+import { EmptyState, UsersIcon } from "@/components/EmptyState";
 
 export default async function AdminDashboardPage() {
   const [
@@ -76,9 +77,14 @@ export default async function AdminDashboardPage() {
           </Link>
         </div>
         {recentPending.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
-            Tidak ada pengajuan menunggu.
-          </p>
+          <div className="mt-3">
+            <EmptyState
+              icon={<UsersIcon />}
+              title="Tidak ada pengajuan menunggu"
+              description="Pengajuan akun baru dari pemilik atau penghuni akan muncul di sini."
+              action={{ label: "Lihat semua pengguna", href: "/admin/users" }}
+            />
+          </div>
         ) : (
           <div className="mt-3 divide-y">
             {recentPending.map((u) => (

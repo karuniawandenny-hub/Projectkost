@@ -50,6 +50,86 @@ export async function approveUser(formData: FormData) {
 }
 
 /**
+ * Bulk approve banyak user PENDING sekaligus. Pakai dari halaman
+ * /admin/users dengan checkbox + tombol "Setujui semua".
+ * userIds dipisahkan oleh koma.
+ */
+export async function bulkApproveUsers(formData: FormData) {
+  await requireAdmin();
+  const idsRaw = String(formData.get("userIds") ?? "");
+  const userIds = idsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (userIds.length === 0) throw new Error("BAD_INPUT");
+
+  const targets = await prisma.user.findMany({
+    where: {
+      id: { in: userIds },
+      status: "PENDING",
+      role: { in: ["OWNER", "TENANT"] },
+    },
+  });
+
+  for (const target of targets) {
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { status: "ACTIVE" },
+    });
+    await notify({
+      userId: target.id,
+      type: target.role === "OWNER" ? "OWNER_APPROVED" : "TENANT_APPROVED",
+      title:
+        target.role === "OWNER"
+          ? "Akun pemilik Anda disetujui"
+          : "Akun penghuni Anda disetujui",
+      message:
+        target.role === "OWNER"
+          ? "Selamat! Akun pemilik Anda telah disetujui. Silakan masuk untuk mulai mengelola kos."
+          : "Akun penghuni Anda telah disetujui oleh administrator. Silakan login & akses dashboard.",
+      link: "/login",
+    });
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/users");
+}
+
+/**
+ * Bulk reject banyak user PENDING sekaligus.
+ */
+export async function bulkRejectUsers(formData: FormData) {
+  await requireAdmin();
+  const idsRaw = String(formData.get("userIds") ?? "");
+  const userIds = idsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (userIds.length === 0) throw new Error("BAD_INPUT");
+
+  const targets = await prisma.user.findMany({
+    where: {
+      id: { in: userIds },
+      status: "PENDING",
+      role: { in: ["OWNER", "TENANT"] },
+    },
+  });
+
+  for (const target of targets) {
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { status: "SUSPENDED" },
+    });
+    await notify({
+      userId: target.id,
+      type: target.role === "OWNER" ? "OWNER_REJECTED" : "TENANT_REJECTED",
+      title: "Pengajuan akun ditolak",
+      message:
+        target.role === "OWNER"
+          ? "Mohon maaf, pengajuan akun pemilik Anda tidak disetujui. Silakan hubungi administrator untuk informasi lebih lanjut."
+          : "Mohon maaf, pengajuan akun penghuni Anda tidak disetujui.",
+      link: "/login",
+    });
+  }
+
+  revalidatePath("/admin/users");
+}
+
+/**
  * Tolak user PENDING -> SUSPENDED.
  */
 export async function rejectUser(formData: FormData) {

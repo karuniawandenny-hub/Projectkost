@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
 import { verifyPayment } from "./actions";
 
@@ -56,9 +57,15 @@ export default async function PaymentsPage() {
         </div>
         <div className="space-y-3">
           {payments.length === 0 && (
-            <div className="card text-sm text-slate-500">
-              Belum ada pembayaran. Upload bukti pembayaran pertama Anda.
-            </div>
+            <EmptyState
+              icon={<PaymentIcon />}
+              title="Belum ada pembayaran"
+              description="Setiap kali Anda upload bukti transfer, akan muncul di sini lengkap dengan status verifikasi."
+              action={{
+                label: "Upload bukti pembayaran",
+                href: "/payments/new",
+              }}
+            />
           )}
           {payments.map((p) => (
             <div key={p.id} className="card">
