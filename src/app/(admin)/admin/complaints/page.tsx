@@ -11,7 +11,7 @@ function StatusBadge({ status }: { status: string }) {
 export default async function AdminComplaintsPage({
   searchParams,
 }: {
-  searchParams: { status?: string };
+  searchParams: { status?: string; q?: string };
 }) {
   const where: Record<string, unknown> = {};
   if (
@@ -19,6 +19,15 @@ export default async function AdminComplaintsPage({
     ["OPEN", "IN_PROGRESS", "RESOLVED"].includes(searchParams.status)
   ) {
     where.status = searchParams.status;
+  }
+  if (searchParams.q && searchParams.q.trim()) {
+    const q = searchParams.q.trim();
+    where.OR = [
+      { title: { contains: q } },
+      { description: { contains: q } },
+      { tenancy: { tenant: { name: { contains: q } } } },
+      { tenancy: { room: { kos: { name: { contains: q } } } } },
+    ];
   }
   const complaints = await prisma.complaint.findMany({
     where,
@@ -44,6 +53,21 @@ export default async function AdminComplaintsPage({
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Komplain (sistem)</h1>
+      <form className="flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[200px]">
+          <label className="label">Cari (judul / deskripsi / tenant / kos)</label>
+          <input
+            name="q"
+            defaultValue={searchParams.q ?? ""}
+            className="input"
+            placeholder="ketik untuk mencari"
+          />
+        </div>
+        <input type="hidden" name="status" value={searchParams.status ?? ""} />
+        <button type="submit" className="btn-primary">
+          Cari
+        </button>
+      </form>
       <div className="flex flex-wrap gap-2">
         {filters.map((f) => (
           <Link

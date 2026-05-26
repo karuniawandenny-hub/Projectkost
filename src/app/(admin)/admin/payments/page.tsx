@@ -27,14 +27,25 @@ function formatDateID(d: Date | null): string {
 export default async function AdminPaymentsPage({
   searchParams,
 }: {
-  searchParams: { status?: string };
+  searchParams: { status?: string; q?: string };
 }) {
   const where: Record<string, unknown> = {};
   if (
     searchParams.status &&
-    ["PENDING", "VERIFIED", "REJECTED"].includes(searchParams.status)
+    ["DUE", "PENDING", "VERIFIED", "REJECTED"].includes(searchParams.status)
   ) {
     where.status = searchParams.status;
+  }
+  if (searchParams.q && searchParams.q.trim()) {
+    const q = searchParams.q.trim();
+    where.tenancy = {
+      OR: [
+        { tenant: { name: { contains: q } } },
+        { tenant: { email: { contains: q } } },
+        { room: { name: { contains: q } } },
+        { room: { kos: { name: { contains: q } } } },
+      ],
+    };
   }
   const payments = await prisma.payment.findMany({
     where,
@@ -88,6 +99,22 @@ export default async function AdminPaymentsPage({
           Export CSV
         </a>
       </div>
+      <form className="flex flex-wrap items-end gap-2">
+        <div className="flex-1 min-w-[200px]">
+          <label className="label">Cari (nama tenant / email / kos / kamar)</label>
+          <input
+            name="q"
+            defaultValue={searchParams.q ?? ""}
+            className="input"
+            placeholder="ketik untuk mencari"
+          />
+        </div>
+        <input type="hidden" name="status" value={searchParams.status ?? ""} />
+        <button type="submit" className="btn-primary">
+          Cari
+        </button>
+      </form>
+
       <div className="flex flex-wrap gap-2">
         {filters.map((f) => (
           <Link
