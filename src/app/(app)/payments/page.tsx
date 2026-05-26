@@ -107,6 +107,15 @@ export default async function PaymentsPage() {
                       {p.status === "DUE" ? "Upload bukti" : "Upload ulang"}
                     </Link>
                   )}
+                  {p.status === "VERIFIED" && (
+                    <Link
+                      href={`/payments/${p.id}/receipt`}
+                      target="_blank"
+                      className="text-sm text-emerald-700 hover:underline"
+                    >
+                      📄 Kuitansi
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>

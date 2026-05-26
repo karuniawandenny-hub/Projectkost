@@ -58,9 +58,36 @@ export default async function AdminPaymentsPage({
     { href: "/admin/payments?status=REJECTED", label: "Ditolak" },
   ];
 
+  const exportHref = searchParams.status
+    ? `/api/admin/payments/export?status=${searchParams.status}`
+    : "/api/admin/payments/export";
+
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Pembayaran (sistem)</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-2xl font-bold">Pembayaran (sistem)</h1>
+        <a
+          href={exportHref}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          download
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            className="h-4 w-4"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+            />
+          </svg>
+          Export CSV
+        </a>
+      </div>
       <div className="flex flex-wrap gap-2">
         {filters.map((f) => (
           <Link
@@ -113,6 +140,15 @@ export default async function AdminPaymentsPage({
                 </a>
                 ) : (
                   <span className="text-xs text-slate-400">—</span>
+                )}
+                {p.status === "VERIFIED" && (
+                  <Link
+                    href={`/payments/${p.id}/receipt`}
+                    target="_blank"
+                    className="text-sm text-emerald-700 hover:underline"
+                  >
+                    📄 Kuitansi
+                  </Link>
                 )}
               </div>
             </div>
