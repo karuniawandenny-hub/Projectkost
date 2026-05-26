@@ -10,19 +10,15 @@ html,
 body {
   height: 100%;
   width: 100%;
-  overflow-x: clip;
+  max-width: 100%;
+  overflow-x: hidden;
   overscroll-behavior-x: contain;
-}
-
-@supports not (overflow: clip) {
-  html,
-  body {
-    overflow-x: hidden;
-  }
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
+  position: relative;
 }
 
 @layer components {

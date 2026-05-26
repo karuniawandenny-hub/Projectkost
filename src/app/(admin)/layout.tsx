@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { UserMenu } from "@/components/UserMenu";
 
 export default async function AdminLayout({
   children,
@@ -27,8 +28,8 @@ export default async function AdminLayout({
   ];
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-50">
-      <header className="relative z-10 border-b bg-slate-900 text-white">
+    <main className="relative min-h-screen bg-slate-50">
+      <header className="relative z-20 border-b bg-slate-900 text-white">
         <div className="mx-auto max-w-6xl px-3 sm:px-4">
           {/* Top row: logo + user dropdown (selalu satu baris) */}
           <div className="flex items-center justify-between gap-3 py-2 sm:py-3">
@@ -68,30 +69,24 @@ export default async function AdminLayout({
             </nav>
 
             <div className="flex items-center gap-2 shrink-0">
-              <details className="relative">
-                <summary className="block max-w-[110px] cursor-pointer list-none truncate rounded-full bg-slate-700 px-3 py-1.5 text-sm font-medium sm:max-w-none">
-                  {user.username ?? user.name.split(" ")[0]}
-                </summary>
-                <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-white p-2 shadow-lg text-slate-900">
-                  <div className="px-3 py-2 text-xs text-slate-500">
-                    Masuk sebagai <span className="font-semibold">Administrator</span>
-                  </div>
-                  <Link
-                    href="/admin/account"
-                    className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
-                  >
-                    Akun & ganti password
-                  </Link>
-                  <form action="/logout" method="POST">
-                    <button
-                      type="submit"
-                      className="block w-full rounded-md px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Keluar
-                    </button>
-                  </form>
-                </div>
-              </details>
+              <UserMenu
+                label={user.username ?? user.name.split(" ")[0]}
+                summaryClassName="block max-w-[110px] truncate rounded-full bg-slate-700 px-3 py-1.5 text-sm font-medium text-white sm:max-w-none"
+                subtitle="Masuk sebagai Administrator"
+                items={[
+                  {
+                    type: "link",
+                    href: "/admin/account",
+                    label: "Akun & ganti password",
+                  },
+                  {
+                    type: "form",
+                    action: "/logout",
+                    label: "Keluar",
+                    variant: "danger",
+                  },
+                ]}
+              />
             </div>
           </div>
 
@@ -118,7 +113,7 @@ export default async function AdminLayout({
       </header>
 
       <section className="relative z-10 mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
-        {children}
+        <div className="w-full overflow-x-hidden">{children}</div>
       </section>
     </main>
   );
