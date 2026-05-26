@@ -6,6 +6,8 @@ import {
   testEmailAction,
   testWaAction,
   previewReminderAction,
+  checkFonnteDeviceAction,
+  validateWaNumberAction,
   type TestActionState,
 } from "./actions";
 
@@ -36,11 +38,27 @@ export function TestActions() {
   const [emailState, setEmailState] = useState<TestActionState | null>(null);
   const [waState, setWaState] = useState<TestActionState | null>(null);
   const [previewState, setPreviewState] = useState<TestActionState | null>(null);
+  const [deviceState, setDeviceState] = useState<TestActionState | null>(null);
+  const [validateState, setValidateState] = useState<TestActionState | null>(null);
+  const [validateTo, setValidateTo] = useState("");
   const [previewTo, setPreviewTo] = useState("");
   const [previewType, setPreviewType] = useState<ReminderType>("H7");
   const [emailTo, setEmailTo] = useState("");
   const [waTo, setWaTo] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+
+  async function runCheckDevice() {
+    setLoading("device");
+    setDeviceState(await checkFonnteDeviceAction());
+    setLoading(null);
+  }
+
+  async function runValidate(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading("validate");
+    setValidateState(await validateWaNumberAction(validateTo));
+    setLoading(null);
+  }
 
   async function runReminders() {
     setLoading("reminders");
@@ -183,6 +201,67 @@ export function TestActions() {
       </div>
       <ResultBox result={previewState} />
     </form>
+
+    {/* Diagnostic WA Fonnte */}
+    <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/50 p-3">
+      <div className="text-sm font-semibold">🔍 Diagnostik WA Fonnte</div>
+      <p className="mt-1 text-xs text-slate-600">
+        Jika pesan WA "sent" di Fonnte tapi tidak sampai ke penerima,
+        pakai 2 tools ini untuk cari penyebab:
+      </p>
+
+      {/* Check device status */}
+      <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+        <div className="text-xs font-medium text-slate-700">
+          1. Status device WA (gateway Fonnte)
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Pastikan device <strong>CONNECT</strong>. Kalau disconnect, semua
+          pesan akan stuck di queue (state 0) sampai user reconnect di
+          dashboard Fonnte.
+        </p>
+        <button
+          type="button"
+          onClick={runCheckDevice}
+          disabled={loading === "device"}
+          className="btn-primary mt-2 w-full"
+        >
+          {loading === "device" ? "Cek…" : "Cek status device"}
+        </button>
+        <ResultBox result={deviceState} />
+      </div>
+
+      {/* Validate WA number */}
+      <form
+        onSubmit={runValidate}
+        className="mt-3 rounded-md border border-slate-200 bg-white p-3"
+      >
+        <div className="text-xs font-medium text-slate-700">
+          2. Validasi nomor target di WA
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Cek apakah nomor target benar-benar terdaftar di WhatsApp dan
+          punya privasi yang mengizinkan menerima dari non-kontak.
+          Nomor non-WA akan "sent" tapi tidak pernah sampai.
+        </p>
+        <input
+          type="tel"
+          required
+          value={validateTo}
+          onChange={(e) => setValidateTo(e.target.value)}
+          placeholder="08xxxxxxxxxx"
+          className="input mt-2"
+        />
+        <button
+          type="submit"
+          disabled={loading === "validate"}
+          className="btn-primary mt-2 w-full"
+        >
+          {loading === "validate" ? "Cek…" : "Validasi nomor di WA"}
+        </button>
+        <ResultBox result={validateState} />
+      </form>
+    </div>
   </>
   );
 }

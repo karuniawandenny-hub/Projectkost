@@ -20,6 +20,143 @@ async function requireAdmin() {
   return me;
 }
 
+/**
+ * Cek status device Fonnte: connected/disconnected, quota, dll.
+ * Penting untuk diagnose: kalau pesan "sent" tapi tidak sampai
+ * penerima, biasanya device disconnect atau quota habis.
+ */
+export async function checkFonnteDeviceAction(): Promise<TestActionState> {
+  await requireAdmin();
+  const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
+  if (mode !== "fonnte") {
+    return {
+      ok: false,
+      message: `OTP_MODE='${mode}' (bukan fonnte). Cek device hanya untuk mode fonnte.`,
+    };
+  }
+  const token = process.env.WA_GATEWAY_TOKEN;
+  if (!token) return { ok: false, message: "WA_GATEWAY_TOKEN belum diset." };
+  try {
+    const res = await fetch("https://api.fonnte.com/device", {
+      method: "POST",
+      headers: { Authorization: token },
+    });
+    const txt = await res.text().catch(() => "");
+    if (!res.ok) {
+      return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
+    }
+    let parsed: {
+      status?: boolean;
+      device_status?: string;
+      device?: string;
+      name?: string;
+      quota?: number;
+      messages?: number;
+      autoread?: boolean;
+      package?: string;
+      expired?: string;
+      reason?: string;
+    } = {};
+    try {
+      parsed = JSON.parse(txt);
+    } catch {
+      return { ok: false, message: "Response bukan JSON.", detail: txt };
+    }
+    if (parsed.status === false) {
+      return {
+        ok: false,
+        message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
+        detail: txt,
+      };
+    }
+    const isConnected = parsed.device_status === "connect";
+    const summary = [
+      `Device: ${parsed.device ?? "?"} (${parsed.name ?? "no name"})`,
+      `Status: ${parsed.device_status ?? "?"} ${isConnected ? "✓" : "✗"}`,
+      `Paket: ${parsed.package ?? "free"}${parsed.expired ? ` (expired ${parsed.expired})` : ""}`,
+      `Kuota tersisa: ${parsed.quota ?? "?"}`,
+      `Pesan terkirim hari ini: ${parsed.messages ?? "?"}`,
+    ].join("\n");
+    return {
+      ok: isConnected,
+      message: isConnected
+        ? "Device CONNECT dan siap kirim WA."
+        : `Device ${parsed.device_status ?? "tidak connect"}. Reconnect di dashboard Fonnte.`,
+      detail: summary + "\n\nRaw:\n" + txt,
+    };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Error" };
+  }
+}
+
+/**
+ * Validasi apakah nomor target punya WhatsApp aktif.
+ * Tanpa ini, pesan ke nomor non-WA akan "sent" di Fonnte tapi
+ * tidak pernah sampai.
+ */
+export async function validateWaNumberAction(
+  to: string
+): Promise<TestActionState> {
+  await requireAdmin();
+  const normalized = normalizePhone(to);
+  if (!normalized) {
+    return { ok: false, message: "Format nomor HP tidak valid." };
+  }
+  const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
+  if (mode !== "fonnte") {
+    return {
+      ok: false,
+      message: `OTP_MODE='${mode}'. Validasi hanya untuk mode fonnte.`,
+    };
+  }
+  const token = process.env.WA_GATEWAY_TOKEN;
+  if (!token) return { ok: false, message: "WA_GATEWAY_TOKEN belum diset." };
+  try {
+    const target = normalized.startsWith("+") ? normalized.slice(1) : normalized;
+    const form = new URLSearchParams();
+    form.set("target", target);
+    form.set("countryCode", "62");
+    const res = await fetch("https://api.fonnte.com/validate", {
+      method: "POST",
+      headers: { Authorization: token },
+      body: form,
+    });
+    const txt = await res.text().catch(() => "");
+    if (!res.ok) {
+      return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
+    }
+    let parsed: {
+      status?: boolean;
+      registered?: string[];
+      not_registered?: string[];
+      reason?: string;
+    } = {};
+    try {
+      parsed = JSON.parse(txt);
+    } catch {
+      return { ok: false, message: "Response bukan JSON.", detail: txt };
+    }
+    if (parsed.status === false) {
+      return {
+        ok: false,
+        message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
+        detail: txt,
+      };
+    }
+    const isRegistered =
+      parsed.registered && parsed.registered.length > 0 && !parsed.not_registered?.length;
+    return {
+      ok: !!isRegistered,
+      message: isRegistered
+        ? `${normalized} TERDAFTAR di WhatsApp.`
+        : `${normalized} TIDAK terdaftar di WhatsApp atau privasi blok.`,
+      detail: txt,
+    };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Error" };
+  }
+}
+
 export async function testReminderAction(): Promise<TestActionState> {
   await requireAdmin();
   try {
