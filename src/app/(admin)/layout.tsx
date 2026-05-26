@@ -112,8 +112,8 @@ export default async function AdminLayout({
         </div>
       </header>
 
-      <section className="relative z-10 mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
-        <div className="w-full overflow-x-hidden">{children}</div>
+      <section className="relative z-10 mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6">
+        {children}
       </section>
     </main>
   );
