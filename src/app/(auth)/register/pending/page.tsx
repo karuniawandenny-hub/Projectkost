@@ -1,8 +1,24 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
+import { CheckStatusButton } from "./CheckStatusButton";
 
 export default async function RegisterPendingPage() {
   const user = await getCurrentUser();
+
+  // Kalau user sudah ACTIVE (admin sudah approve), langsung lempar ke
+  // dashboard - tidak perlu lagi tampilkan halaman menunggu.
+  if (user && user.status === "ACTIVE") {
+    if (user.role === "ADMIN") redirect("/admin");
+    // Tenant yang belum onboarding -> tetap ke onboarding
+    if (user.role === "TENANT" && !user.onboardedAt) redirect("/onboarding");
+    redirect("/dashboard");
+  }
+  // Kalau SUSPENDED (di-tolak), arahkan ke login.
+  if (user && user.status === "SUSPENDED") {
+    redirect("/login?reason=rejected");
+  }
+
   const isTenant = user?.role === "TENANT";
 
   return (
@@ -55,21 +71,26 @@ export default async function RegisterPendingPage() {
           )}
         </div>
       </div>
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         {user ? (
-          <form action="/logout" method="POST">
-            <button type="submit" className="btn-secondary">
-              Keluar
-            </button>
-          </form>
+          <>
+            <CheckStatusButton />
+            <form action="/logout" method="POST">
+              <button type="submit" className="btn-secondary">
+                Keluar
+              </button>
+            </form>
+          </>
         ) : (
-          <Link href="/login" className="btn-primary">
-            Ke halaman login
-          </Link>
+          <>
+            <Link href="/login" className="btn-primary">
+              Ke halaman login
+            </Link>
+            <Link href="/" className="btn-secondary">
+              Kembali ke beranda
+            </Link>
+          </>
         )}
-        <Link href="/" className="btn-secondary">
-          Kembali ke beranda
-        </Link>
       </div>
     </div>
   );
