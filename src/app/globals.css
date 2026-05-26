@@ -28,6 +28,13 @@ body > * {
   max-width: 100vw;
 }
 
+/* iOS Safari fix: min-width: 0 supaya flex/grid items bisa shrink
+   di bawah min-content (default min-width: auto = min-content).
+   Tanpa ini, item dengan teks panjang tidak wrap dan push parent. */
+* {
+  min-width: 0;
+}
+
 /* iOS Safari fix: form input dengan font-size <16px otomatis ditambah
    zoom saat focus (auto-zoom feature). Bisa bikin layout shift bahkan
    permanent overflow setelah unzoom. */
@@ -61,7 +68,7 @@ textarea {
     @apply btn bg-emerald-600 text-white hover:bg-emerald-700;
   }
   .input {
-    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 sm:text-sm;
   }
   .label {
     @apply block text-sm font-medium text-slate-700 mb-1;
