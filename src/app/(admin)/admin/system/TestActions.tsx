@@ -137,7 +137,8 @@ export function TestActions() {
       <form onSubmit={runWa} className="rounded-lg border border-slate-200 p-3">
         <div className="text-sm font-semibold">Test WhatsApp</div>
         <p className="mt-1 text-xs text-slate-600">
-          Kirim WA "ping" ke nomor di bawah via mode aktif.
+          Auto pre-flight: cek device → validasi nomor di WA → kirim.
+          Kalau salah satu gagal, kirim dibatalkan dengan alasan jelas.
         </p>
         <input
           type="tel"

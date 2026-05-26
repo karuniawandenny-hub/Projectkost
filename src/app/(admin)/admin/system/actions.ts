@@ -345,8 +345,91 @@ export async function testWaAction(to: string): Promise<TestActionState> {
     if (!token) {
       return { ok: false, message: "WA_GATEWAY_TOKEN belum diset." };
     }
+    const target = normalized.startsWith("+") ? normalized.slice(1) : normalized;
+    const diagnostics: string[] = [];
+
+    // ===== Pre-flight 1: Cek device status =====
     try {
-      const target = normalized.startsWith("+") ? normalized.slice(1) : normalized;
+      const devRes = await fetch("https://api.fonnte.com/device", {
+        method: "POST",
+        headers: { Authorization: token },
+      });
+      const devTxt = await devRes.text().catch(() => "");
+      let devParsed: {
+        device_status?: string;
+        quota?: number;
+        package?: string;
+      } = {};
+      try {
+        devParsed = JSON.parse(devTxt);
+      } catch {
+        // ignore
+      }
+      diagnostics.push(
+        `[Device] status=${devParsed.device_status ?? "?"}, kuota=${devParsed.quota ?? "?"}, paket=${devParsed.package ?? "free"}`
+      );
+      if (devParsed.device_status && devParsed.device_status !== "connect") {
+        return {
+          ok: false,
+          message: `Device WA ${devParsed.device_status}. Reconnect di dashboard Fonnte sebelum kirim ulang.`,
+          detail: diagnostics.join("\n") + "\n\nRaw device:\n" + devTxt,
+        };
+      }
+      if (typeof devParsed.quota === "number" && devParsed.quota <= 0) {
+        return {
+          ok: false,
+          message: "Kuota Fonnte habis. Top-up di dashboard sebelum kirim ulang.",
+          detail: diagnostics.join("\n"),
+        };
+      }
+    } catch (e) {
+      diagnostics.push(
+        `[Device] check skipped: ${e instanceof Error ? e.message : "error"}`
+      );
+    }
+
+    // ===== Pre-flight 2: Validasi nomor target di WA =====
+    try {
+      const valForm = new URLSearchParams();
+      valForm.set("target", target);
+      valForm.set("countryCode", "62");
+      const valRes = await fetch("https://api.fonnte.com/validate", {
+        method: "POST",
+        headers: { Authorization: token },
+        body: valForm,
+      });
+      const valTxt = await valRes.text().catch(() => "");
+      let valParsed: {
+        registered?: string[];
+        not_registered?: string[];
+      } = {};
+      try {
+        valParsed = JSON.parse(valTxt);
+      } catch {
+        // ignore
+      }
+      const isRegistered =
+        valParsed.registered &&
+        valParsed.registered.length > 0 &&
+        !valParsed.not_registered?.length;
+      diagnostics.push(
+        `[Validasi] ${normalized} ${isRegistered ? "TERDAFTAR di WA ✓" : "TIDAK terdaftar di WA ✗"}`
+      );
+      if (!isRegistered) {
+        return {
+          ok: false,
+          message: `Nomor ${normalized} tidak terdaftar di WhatsApp (atau privasi blok). Pesan tidak akan sampai meski Fonnte report "sent".`,
+          detail: diagnostics.join("\n") + "\n\nRaw validate:\n" + valTxt,
+        };
+      }
+    } catch (e) {
+      diagnostics.push(
+        `[Validasi] check skipped: ${e instanceof Error ? e.message : "error"}`
+      );
+    }
+
+    // ===== Send =====
+    try {
       const form = new URLSearchParams();
       form.set("target", target);
       form.set("message", message);
@@ -360,7 +443,7 @@ export async function testWaAction(to: string): Promise<TestActionState> {
       if (!res.ok) {
         return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
       }
-      let parsed: { status?: boolean; reason?: string } = {};
+      let parsed: { status?: boolean; reason?: string; id?: number[] } = {};
       try {
         parsed = JSON.parse(txt);
       } catch {
@@ -370,13 +453,14 @@ export async function testWaAction(to: string): Promise<TestActionState> {
         return {
           ok: false,
           message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
-          detail: txt,
+          detail: diagnostics.join("\n") + "\n\nRaw send:\n" + txt,
         };
       }
+      diagnostics.push(`[Kirim] msgId=${parsed.id?.[0] ?? "?"}, state=queued`);
       return {
         ok: true,
-        message: `Diantrikan ke Fonnte untuk ${normalized}. Cek penerima — bisa butuh beberapa detik. Kalau tidak sampai, lihat dashboard Fonnte → Delivery Report.`,
-        detail: txt,
+        message: `✓ Pre-flight pass + dikirim ke ${normalized}. Cek WA penerima 5-30 detik. Kalau belum sampai juga, kemungkinan WA Meta drop diam-diam (akun probation) - penerima perlu save nomor sender dulu.`,
+        detail: diagnostics.join("\n") + "\n\nRaw send:\n" + txt,
       };
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : "Error" };
