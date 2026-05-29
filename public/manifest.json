@@ -1,0 +1,54 @@
+{
+  "name": "Kos Baiti — Manajemen Kos",
+  "short_name": "Kos Baiti",
+  "description": "Satu aplikasi, semua terkoneksi — data penghuni, pembayaran, dan komplain untuk pemilik & penghuni kos.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#f1f5f9",
+  "theme_color": "#1e3a8a",
+  "lang": "id",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/kos-baiti-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/kos-baiti-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/kos-baiti-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Buka dashboard utama",
+      "url": "/dashboard"
+    },
+    {
+      "name": "Pembayaran",
+      "short_name": "Bayar",
+      "description": "Halaman pembayaran",
+      "url": "/payments"
+    },
+    {
+      "name": "Komplain",
+      "short_name": "Komplain",
+      "description": "Buat / lihat komplain",
+      "url": "/complaints"
+    }
+  ]
+}

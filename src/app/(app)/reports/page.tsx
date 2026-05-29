@@ -8,7 +8,7 @@ import {
   type ReportFilters,
 } from "@/lib/reports";
 import { ReportFiltersForm } from "./ReportFiltersForm";
-import { PrintButton } from "./PrintButton";
+import { PrintButton } from "@/components/PrintButton";
 
 const STATUSES = ["all", "VERIFIED", "PENDING", "REJECTED", "UNPAID"] as const;
 
@@ -91,7 +91,7 @@ export default async function ReportsPage({
           </p>
         </div>
         <div className="no-print">
-          <PrintButton />
+          <PrintButton label="Cetak / Simpan PDF" className="btn-primary" />
         </div>
       </div>
 
@@ -159,6 +159,9 @@ export default async function ReportsPage({
           tone="slate"
         />
       </div>
+
+      {/* Ringkasan keuangan per kos (J - P&L sederhana) */}
+      <FinancialBreakdown rows={rows} />
 
       {/* Detail table */}
       <div className="card overflow-x-auto p-0">
@@ -252,6 +255,149 @@ function Stat({
       <div className="text-xs text-slate-500">{label}</div>
       <div className="mt-1 text-xl font-semibold">{value}</div>
       {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * Breakdown keuangan per kos: pendapatan, ekspektasi, collection rate.
+ * Disagregasi dari rows yang sudah ada (tidak query DB lagi).
+ */
+function FinancialBreakdown({
+  rows,
+}: {
+  rows: import("@/lib/reports").ReportRow[];
+}) {
+  if (rows.length === 0) return null;
+
+  type KosAgg = {
+    kosName: string;
+    expected: number;
+    verified: number;
+    pending: number;
+    unpaid: number;
+  };
+  const byKos = new Map<string, KosAgg>();
+  let totalExpected = 0;
+  let totalVerified = 0;
+  let totalPending = 0;
+  let totalUnpaid = 0;
+
+  // Single pass: bangun per-kos aggregation DAN total grand secara
+  // bersamaan. Sebelumnya 4 reduce terpisah setelah grouping = O(n*5).
+  for (const r of rows) {
+    const k = byKos.get(r.kosId) ?? {
+      kosName: r.kosName,
+      expected: 0,
+      verified: 0,
+      pending: 0,
+      unpaid: 0,
+    };
+    k.expected += r.monthlyPrice;
+    totalExpected += r.monthlyPrice;
+    if (r.paymentStatus === "VERIFIED") {
+      const amt = r.paymentAmount ?? 0;
+      k.verified += amt;
+      totalVerified += amt;
+    } else if (r.paymentStatus === "PENDING") {
+      const amt = r.paymentAmount ?? 0;
+      k.pending += amt;
+      totalPending += amt;
+    } else if (r.paymentStatus === "UNPAID") {
+      k.unpaid += r.monthlyPrice;
+      totalUnpaid += r.monthlyPrice;
+    }
+    byKos.set(r.kosId, k);
+  }
+
+  const list = [...byKos.values()].sort((a, b) => b.verified - a.verified);
+  const collectionRate =
+    totalExpected > 0 ? (totalVerified / totalExpected) * 100 : 0;
+
+  function rateClass(rate: number) {
+    return rate >= 85
+      ? "text-emerald-700"
+      : rate >= 60
+        ? "text-amber-700"
+        : "text-red-700";
+  }
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <h2 className="text-sm font-semibold text-slate-700">
+          Ringkasan Keuangan per Kos
+        </h2>
+        <p className="text-xs text-slate-500">
+          Collection rate keseluruhan:{" "}
+          <strong className={rateClass(collectionRate)}>
+            {collectionRate.toFixed(1)}%
+          </strong>{" "}
+          ({rupiah(totalVerified)} dari {rupiah(totalExpected)})
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-slate-600">
+              <th className="px-3 py-2">Kos</th>
+              <th className="px-3 py-2 text-right">Ekspektasi</th>
+              <th className="px-3 py-2 text-right">Lunas</th>
+              <th className="px-3 py-2 text-right">Pending</th>
+              <th className="px-3 py-2 text-right">Belum bayar</th>
+              <th className="px-3 py-2 text-right">Collection</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {list.map((k, i) => {
+              const rate =
+                k.expected > 0 ? (k.verified / k.expected) * 100 : 0;
+              return (
+                <tr key={i} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium">{k.kosName}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {rupiah(k.expected)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-semibold">
+                    {rupiah(k.verified)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-amber-700">
+                    {rupiah(k.pending)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-500">
+                    {rupiah(k.unpaid)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums font-semibold ${rateClass(rate)}`}
+                  >
+                    {rate.toFixed(0)}%
+                  </td>
+                </tr>
+              );
+            })}
+            <tr className="bg-slate-50 font-semibold">
+              <td className="px-3 py-2">TOTAL</td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {rupiah(totalExpected)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                {rupiah(totalVerified)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {rupiah(totalPending)}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {rupiah(totalUnpaid)}
+              </td>
+              <td
+                className={`px-3 py-2 text-right tabular-nums ${rateClass(collectionRate)}`}
+              >
+                {collectionRate.toFixed(0)}%
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

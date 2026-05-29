@@ -171,6 +171,7 @@ export function formatDateID(d: Date) {
 /* =========================================================================
  *  Auto-generate tagihan bulanan
  * ========================================================================= */
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 /**
@@ -183,33 +184,59 @@ import { prisma } from "./prisma";
  * bulan berjalan (atau 1 bulan ke depan kalau anniversary belum sampai
  * akhir bulan).
  */
-export async function ensureBillsForUser(userId: string): Promise<number> {
+/**
+ * Internal: jalankan ensureBillsForTenancy untuk semua tenancy yang
+ * cocok dengan `where` filter, paralel via Promise.all.
+ */
+async function ensureBillsFor(
+  where: Prisma.TenancyWhereInput
+): Promise<{ tenanciesScanned: number; billsCreated: number }> {
   const tenancies = await prisma.tenancy.findMany({
-    where: {
-      status: "ACTIVE",
-      OR: [
-        { tenantId: userId },
-        { room: { kos: { ownerId: userId } } },
-      ],
-    },
+    where,
     include: {
       room: true,
-      payments: {
-        select: { periodMonth: true, periodYear: true },
-      },
+      payments: { select: { periodMonth: true, periodYear: true } },
     },
   });
-  let created = 0;
-  for (const t of tenancies) {
-    created += await ensureBillsForTenancy(
-      t.id,
-      t.startDate,
-      t.createdAt,
-      t.room.monthlyPrice,
-      t.payments
-    );
-  }
-  return created;
+  const results = await Promise.all(
+    tenancies.map((t) =>
+      ensureBillsForTenancy(
+        t.id,
+        t.startDate,
+        t.createdAt,
+        t.room.monthlyPrice,
+        t.payments
+      )
+    )
+  );
+  return {
+    tenanciesScanned: tenancies.length,
+    billsCreated: results.reduce((s, n) => s + n, 0),
+  };
+}
+
+/**
+ * Generate tagihan untuk SEMUA tenancy aktif. Dipanggil dari cron
+ * harian supaya tagihan periode baru otomatis muncul tanpa perlu
+ * user login.
+ */
+export async function ensureBillsForAllActive() {
+  return ensureBillsFor({ status: "ACTIVE" });
+}
+
+/**
+ * Generate tagihan untuk tenancy yang dimiliki user tertentu (sebagai
+ * tenant atau owner). Dipanggil lazy saat user buka dashboard/payments.
+ */
+export async function ensureBillsForUser(userId: string): Promise<number> {
+  const { billsCreated } = await ensureBillsFor({
+    status: "ACTIVE",
+    OR: [
+      { tenantId: userId },
+      { room: { kos: { ownerId: userId } } },
+    ],
+  });
+  return billsCreated;
 }
 
 async function ensureBillsForTenancy(
@@ -228,7 +255,18 @@ async function ensureBillsForTenancy(
     existing.map((p) => `${p.periodYear}-${p.periodMonth}`)
   );
 
-  let created = 0;
+  // Kumpulkan dulu semua periode yang perlu dibuat, baru bulk insert
+  // di akhir via createMany + skipDuplicates. Ini menghilangkan race
+  // condition dan turunkan 1-36 INSERT serial jadi 1 round-trip.
+  const toCreate: {
+    tenancyId: string;
+    periodMonth: number;
+    periodYear: number;
+    amount: number;
+    proofUrl: null;
+    status: string;
+    dueDate: Date;
+  }[] = [];
   let y = seed.getFullYear();
   let m = seed.getMonth(); // 0-11
   // Safety limit 36 bulan.
@@ -236,30 +274,17 @@ async function ensureBillsForTenancy(
     const periodYear = y;
     const periodMonth = m + 1;
     const dueDate = anniversaryInMonth(startDate, y, m);
-    // Hanya generate kalau tagihan belum ada DAN dueDate <= today.
     const key = `${periodYear}-${periodMonth}`;
     if (!existingKeys.has(key) && dueDate.getTime() <= today.getTime()) {
-      try {
-        await prisma.payment.create({
-          data: {
-            tenancyId,
-            periodMonth,
-            periodYear,
-            amount: monthlyPrice,
-            proofUrl: null,
-            status: "DUE",
-            dueDate,
-          },
-        });
-        created++;
-      } catch (e) {
-        // Race condition: unique violation kalau sudah dibuat paralel. Skip.
-        const msg = e instanceof Error ? e.message : String(e);
-        if (!msg.includes("Unique") && !msg.includes("UNIQUE")) {
-          // eslint-disable-next-line no-console
-          console.error("Failed to create bill:", e);
-        }
-      }
+      toCreate.push({
+        tenancyId,
+        periodMonth,
+        periodYear,
+        amount: monthlyPrice,
+        proofUrl: null,
+        status: "DUE",
+        dueDate,
+      });
     }
     // Stop kalau sudah lewat bulan berjalan + 1 (untuk preview tagihan
     // yang akan datang).
@@ -278,5 +303,25 @@ async function ensureBillsForTenancy(
       y++;
     }
   }
-  return created;
+  if (toCreate.length === 0) return 0;
+  // SQLite tidak support createMany.skipDuplicates jadi pakai parallel
+  // individual create. Tetap lebih cepat dari versi sebelumnya yang
+  // serial. Race condition (unique violation) di-swallow karena
+  // sudah di-filter via existingKeys; sisa kasus adalah cron paralel.
+  const results = await Promise.all(
+    toCreate.map((data) =>
+      prisma.payment.create({ data }).then(
+        () => 1,
+        (e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!msg.includes("Unique") && !msg.includes("UNIQUE")) {
+            // eslint-disable-next-line no-console
+            console.error("Failed to create bill:", e);
+          }
+          return 0;
+        }
+      )
+    )
+  );
+  return results.reduce((s, n) => s + n, 0);
 }

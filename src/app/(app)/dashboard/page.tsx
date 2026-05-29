@@ -452,6 +452,16 @@ async function TenantDashboard({
                 {formatDateID(tenancy.startDate)}
               </span>
             </div>
+            <div className="mt-3">
+              <a
+                href={`/tenancies/${tenancy.id}/contract`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline"
+              >
+                📄 Lihat / cetak kontrak sewa
+              </a>
+            </div>
           </div>
           <BillingCard tenancy={tenancy} payments={payments} />
         </>

@@ -240,6 +240,14 @@ export default async function TenantsPage() {
                         Lihat KTP
                       </a>
                     )}
+                    <a
+                      href={`/tenancies/${t.id}/contract`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary"
+                    >
+                      📄 Kontrak
+                    </a>
                     <EditStartDateForm
                       tenancyId={t.id}
                       currentStartDate={t.startDate.toISOString()}

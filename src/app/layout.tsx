@@ -1,15 +1,22 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
+import { PWARegister } from "@/components/PWARegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Kos Baiti — Forum Komunikasi Pemilik & Penghuni Kos",
   description:
     "Satu aplikasi, semua terkoneksi — data penghuni, pembayaran, dan komplain untuk pemilik & penghuni kos.",
+  manifest: "/manifest.json",
   icons: {
     icon: "/kos-baiti-logo.png",
     shortcut: "/kos-baiti-logo.png",
     apple: "/kos-baiti-logo.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Kos Baiti",
+    statusBarStyle: "default",
   },
   openGraph: {
     type: "website",
@@ -61,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
+        <PWARegister />
       </body>
     </html>
   );

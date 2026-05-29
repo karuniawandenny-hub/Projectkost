@@ -54,6 +54,9 @@ export default async function AdminSystemPage() {
   const waKey = !!process.env.WA_GATEWAY_TOKEN;
   const midtransKey = !!process.env.MIDTRANS_SERVER_KEY;
 
+  const cronBillsUrl = cronSecret
+    ? `${getBaseUrl()}/api/cron/bills?token=${cronSecret}`
+    : "";
   const cronUrl = cronSecret
     ? `${getBaseUrl()}/api/cron/reminders?token=${cronSecret}`
     : "";
@@ -136,6 +139,19 @@ export default async function AdminSystemPage() {
           </p>
           <div className="mt-3">
             <CronUrlCard url={cronUrl} configured={cronConfigured} />
+          </div>
+          <div className="mt-4">
+            <div className="text-sm font-semibold text-slate-700">
+              Cron auto-generate tagihan (baru)
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Jadwalkan di cron-job.org tiap hari 00:30 WIB. Tagihan periode
+              baru akan otomatis muncul saat anniversary tenancy lewat — tidak
+              perlu menunggu owner/tenant login.
+            </p>
+            <div className="mt-2">
+              <CronUrlCard url={cronBillsUrl} configured={cronConfigured} />
+            </div>
           </div>
         </div>
       </section>

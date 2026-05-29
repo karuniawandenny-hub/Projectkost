@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { PrintButton } from "./PrintButton";
+import { PrintButton } from "@/components/PrintButton";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
