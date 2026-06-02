@@ -8,11 +8,6 @@ export const metadata: Metadata = {
   description:
     "Satu aplikasi, semua terkoneksi — data penghuni, pembayaran, dan komplain untuk pemilik & penghuni kos.",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/kos-baiti-logo.png",
-    shortcut: "/kos-baiti-logo.png",
-    apple: "/kos-baiti-logo.png",
-  },
   appleWebApp: {
     capable: true,
     title: "Kos Baiti",
