@@ -12,7 +12,7 @@
  * koneksi.
  */
 
-const CACHE_VERSION = "kos-baiti-v1";
+const CACHE_VERSION = "kos-baiti-v2";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/kos-baiti-logo.png",
