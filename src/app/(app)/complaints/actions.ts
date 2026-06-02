@@ -9,6 +9,7 @@ import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendWhatsAppGeneric } from "@/lib/reminders";
 import { sendComplaintResolvedEmail } from "@/lib/email";
+import { syncCorrectiveFromComplaint } from "../maintenance/actions";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -147,6 +148,18 @@ export async function replyComplaint(
       message: `Status komplain "${complaint.title}" diubah menjadi ${labelStatus(newStatus)}${note}.`,
       link: `/complaints/${complaint.id}`,
     });
+  }
+
+  // Sync ke record Maintenance korektif: kalau RESOLVED, bikin/update
+  // record di tabel Maintenance supaya muncul di histori perawatan kamar.
+  // Idempotent (cek complaintId unique di syncCorrectiveFromComplaint).
+  if (newStatus === "RESOLVED") {
+    try {
+      await syncCorrectiveFromComplaint(complaint.id);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[complaint-resolved][maintenance-sync] gagal:", e);
+    }
   }
 
   // === Notif WA + Email ke penghuni saat komplain BARU ditandai SELESAI ==

@@ -352,6 +352,110 @@ export async function processReminders(): Promise<ProcessResult> {
     }
   }
 
+  // ===================================================================
+  //  Reminder maintenance preventif (H-7, H-3, H-1) ke pemilik kos.
+  //  Skip CORRECTIVE (sudah COMPLETED saat dibuat dari komplain).
+  // ===================================================================
+  const upcoming = await prisma.maintenance.findMany({
+    where: {
+      type: "PREVENTIVE",
+      status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+    },
+    include: {
+      kos: {
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+        },
+      },
+      room: { select: { name: true } },
+    },
+  });
+
+  for (const m of upcoming) {
+    const dayDiff = daysBetween(today, m.scheduledDate);
+    let kind: "H7" | "H3" | "H1" | null = null;
+    if (dayDiff === 7 && !m.reminderH7Sent) kind = "H7";
+    else if (dayDiff === 3 && !m.reminderH3Sent) kind = "H3";
+    else if (dayDiff === 1 && !m.reminderH1Sent) kind = "H1";
+    if (!kind) continue;
+
+    const owner = m.kos.owner;
+    const dueStr = m.scheduledDate.toLocaleDateString("id-ID", {
+      day: "2-digit", month: "long", year: "numeric",
+    });
+    const scope = m.room ? `Kamar ${m.room.name}` : "Fasilitas kos";
+    const horizon =
+      kind === "H7" ? "7 hari lagi" : kind === "H3" ? "3 hari lagi" : "besok";
+    const subject = `Pengingat perawatan — ${horizon}`;
+    const body =
+      `Halo ${owner.name.split(/\s+/)[0]},\n\n` +
+      `Jadwal perawatan ${horizon} (${dueStr}):\n` +
+      `  ${m.title}\n` +
+      `  ${m.kos.name} • ${scope}\n\n` +
+      `Buka aplikasi untuk tandai sudah dikerjakan atau atur ulang jadwal.\n\n` +
+      `— Kos Baiti`;
+
+    // In-app
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: owner.id,
+          type: `MAINT_${kind}`,
+          title: subject,
+          message: `${m.title} — ${m.kos.name} • ${scope} — ${dueStr}`,
+          link: `/maintenance/${m.id}`,
+        },
+      });
+    } catch (e) {
+      result.errors.push({
+        paymentId: `maint:${m.id}`,
+        error: `in_app: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    }
+
+    // WA (skip kalau quiet hours)
+    if (owner.phone && !waBlockedByQuietHours) {
+      try {
+        await sendWhatsAppGeneric(owner.phone, body);
+        if ((process.env.WA_ENABLED ?? "true").toLowerCase() !== "false") {
+          await new Promise((r) =>
+            setTimeout(r, 5000 + Math.floor(Math.random() * 10000))
+          );
+        }
+      } catch (e) {
+        result.errors.push({
+          paymentId: `maint:${m.id}`,
+          error: `wa: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+
+    // Email
+    if (owner.email) {
+      try {
+        await sendEmailGeneric(owner.email, subject, body);
+      } catch (e) {
+        result.errors.push({
+          paymentId: `maint:${m.id}`,
+          error: `email: ${e instanceof Error ? e.message : String(e)}`,
+        });
+      }
+    }
+
+    // Mark sent (atomic per-kind) supaya tidak dispam saat cron re-run.
+    await prisma.maintenance.update({
+      where: { id: m.id },
+      data: {
+        reminderH7Sent: kind === "H7" ? true : m.reminderH7Sent,
+        reminderH3Sent: kind === "H3" ? true : m.reminderH3Sent,
+        reminderH1Sent: kind === "H1" ? true : m.reminderH1Sent,
+      },
+    });
+    result.sent.push({ type: kind as ReminderType, channel: "MAINT" });
+  }
+
   return result;
 }
 
