@@ -128,6 +128,36 @@ Mau pakai `kosanda.com` bukan URL Railway?
 3. Masukkan domain Anda
 4. Railway kasih CNAME record → copy ke DNS panel domain Anda
 5. Tunggu ±10 menit → HTTPS otomatis aktif
+6. **Set env `NEXT_PUBLIC_SITE_URL`** ke domain baru Anda (lihat section
+   di bawah) supaya preview link di WhatsApp/FB pakai domain yang benar.
+
+---
+
+## Set `NEXT_PUBLIC_SITE_URL` (untuk preview link WhatsApp/FB)
+
+Default kode pakai `https://kosbaiti.com`. Kalau domain Anda berbeda
+(misal `kosanda.com` atau URL Railway), set env supaya OG image (preview
+logo saat URL dibagikan di WhatsApp/FB/Twitter) pakai domain yang benar.
+
+**Di Railway:**
+
+1. Buka project → klik service Anda
+2. Tab **Variables**
+3. Klik **+ New Variable**
+4. **Name**: `NEXT_PUBLIC_SITE_URL`
+5. **Value**: `https://kosbaiti.com` (atau domain Anda, **tanpa trailing slash**)
+6. Klik **Add** → Railway otomatis redeploy
+
+**Verifikasi setelah deploy:**
+
+1. Buka **https://developers.facebook.com/tools/debug/**
+2. Paste URL Anda → klik **Debug**
+3. Pastikan `og:image` terbaca absolut: `https://kosbaiti.com/og-image.jpg`
+4. Klik **Scrape Again** 2× untuk force WhatsApp re-fetch cache
+
+> ⚠️ WhatsApp cache preview ~7 hari. Setelah set env, share link di
+> WhatsApp baru muncul preview kalau cache sudah expire atau Anda
+> Scrape Again di Facebook Debugger.
 
 ---
 
