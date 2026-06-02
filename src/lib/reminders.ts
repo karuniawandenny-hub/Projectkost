@@ -359,7 +359,11 @@ async function sendEmailGeneric(
 
 
 /**
- * Tempel link aplikasi di paling bawah pesan WA sebagai signature.
+ * Tempel call-to-action + link aplikasi di paling bawah pesan WA.
+ * - Baris CTA: ajak penerima simpan nomor pengirim supaya pesan
+ *   berikutnya tidak masuk spam / unknown.
+ * - Baris URL: shortcut buka aplikasi.
+ *
  * Idempotent: kalau pesan sudah berisi URL ini, tidak di-append ulang.
  * URL diambil dari NEXT_PUBLIC_SITE_URL supaya konsisten dengan domain
  * di metadata (OG image, canonical, dst).
@@ -367,7 +371,8 @@ async function sendEmailGeneric(
 export function appendWaSignature(message: string): string {
   const url = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
   if (message.includes(url)) return message;
-  return `${message.trimEnd()}\n\n${url}`;
+  const cta = "Simpan nomor ini agar update dari Kos Baiti tidak terlewat.";
+  return `${message.trimEnd()}\n\n${cta}\n${url}`;
 }
 
 export { sendWhatsAppGeneric, sendEmailGeneric };
