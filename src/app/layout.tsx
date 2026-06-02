@@ -3,7 +3,10 @@ import { Toaster } from "sonner";
 import { PWARegister } from "@/components/PWARegister";
 import "./globals.css";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kosbaiti.com";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Kos Baiti — Forum Komunikasi Pemilik & Penghuni Kos",
   description:
     "Satu aplikasi, semua terkoneksi — data penghuni, pembayaran, dan komplain untuk pemilik & penghuni kos.",
@@ -16,15 +19,24 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Kos Baiti",
+    url: siteUrl,
     title: "Kos Baiti — Satu aplikasi, semua terkoneksi",
     description:
       "Forum komunikasi pemilik & penghuni kos: data penghuni, pembayaran, dan komplain — semua tercatat rapi.",
     images: [
       {
-        url: "/kos-baiti-logo.png",
-        width: 1240,
-        height: 1240,
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 1200,
         alt: "Logo Kos Baiti",
+        type: "image/jpeg",
+      },
+      {
+        url: "/og-image-wide.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Kos Baiti — Forum Komunikasi Pemilik & Penghuni Kos",
+        type: "image/jpeg",
       },
     ],
     locale: "id_ID",
@@ -34,7 +46,7 @@ export const metadata: Metadata = {
     title: "Kos Baiti — Satu aplikasi, semua terkoneksi",
     description:
       "Forum komunikasi pemilik & penghuni kos.",
-    images: ["/kos-baiti-logo.png"],
+    images: ["/og-image-wide.jpg"],
   },
 };
 
