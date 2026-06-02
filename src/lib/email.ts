@@ -299,8 +299,6 @@ export function buildTenantAssignedWaText(p: TenantAssignedEmailParams): string 
     `Mulai sewa: ${formatTanggalId(p.startDate)}`,
     `Tagihan: ${formatRupiah(p.monthlyPrice)}/bulan`,
     ``,
-    `Login dashboard: ${p.loginUrl}`,
-    ``,
     `— Kos Baiti`,
   ].join("\n");
 }

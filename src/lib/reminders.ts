@@ -467,9 +467,15 @@ async function sendEmailGeneric(
  * Idempotent: kalau pesan sudah berisi URL ini, tidak di-append ulang.
  * URL diambil dari NEXT_PUBLIC_SITE_URL supaya konsisten dengan domain
  * di metadata (OG image, canonical, dst).
+ *
+ * Normalisasi defensif: kalau env diset ke apex `https://kosbaiti.com`
+ * (tanpa www), paksa jadi `https://www.kosbaiti.com` — domain canonical
+ * Railway terdaftar dengan www, apex tidak ter-handle Railway & kasih
+ * 403 ke scraper/preview.
  */
 export function appendWaSignature(message: string): string {
-  const url = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+  let url = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+  url = url.replace(/^https?:\/\/kosbaiti\.com/i, "https://www.kosbaiti.com");
   if (message.includes(url)) return message;
   const cta = "Simpan nomor ini agar update dari Kos Baiti tidak terlewat.";
   return `${message.trimEnd()}\n\n${cta}\n${url}`;
