@@ -61,8 +61,9 @@ export async function submitPayment(
   }
 
   // Jika pembayaran sebelumnya REJECTED/PENDING untuk periode sama -> update.
+  let paymentId: string;
   if (existing) {
-    await prisma.payment.update({
+    const updated = await prisma.payment.update({
       where: { id: existing.id },
       data: {
         amount,
@@ -73,8 +74,12 @@ export async function submitPayment(
         reviewNote: null,
       },
     });
+    paymentId = updated.id;
   } else {
-    await prisma.payment.create({
+    // CRITICAL: set status="PENDING" eksplisit. Default schema = "DUE"
+    // → kalau tidak diset, payment baru muncul dengan badge "Tagihan
+    // dibuat" walau proofUrl sudah ada. Bug yang user laporkan.
+    const created = await prisma.payment.create({
       data: {
         tenancyId: tenancy.id,
         periodMonth: month,
@@ -82,10 +87,13 @@ export async function submitPayment(
         amount,
         proofUrl,
         note,
+        status: "PENDING",
       },
     });
+    paymentId = created.id;
   }
 
+  // Notif ke pemilik kos: ada bukti baru untuk diverifikasi.
   await notify({
     userId: tenancy.room.kos.ownerId,
     type: "PAYMENT_SUBMITTED",
@@ -94,9 +102,27 @@ export async function submitPayment(
     link: "/payments",
   });
 
+  // Notif ke penghuni sendiri: konfirmasi bukti sudah diterima sistem
+  // & sedang menunggu verifikasi pemilik. Muncul di lonceng notifikasi.
+  await notify({
+    userId: user.id,
+    type: "PAYMENT_SUBMITTED_SELF",
+    title: "Bukti pembayaran terkirim",
+    message: `Bukti pembayaran ${MONTHS_ID[month - 1]} ${year} sudah diterima. Pembayaran Anda dalam proses verifikasi oleh pemilik kos.`,
+    link: "/payments",
+  });
+
   revalidatePath("/payments");
-  redirect("/payments");
+  // Query param dipakai halaman /payments untuk menampilkan banner sukses
+  // yang langsung kelihatan di mata user (lebih cepat ditangkap daripada
+  // notifikasi bell).
+  redirect(`/payments?uploaded=${paymentId}`);
 }
+
+const MONTHS_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
 
 export async function verifyPayment(formData: FormData) {
   const user = await requireUser();

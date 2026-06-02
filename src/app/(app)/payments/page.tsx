@@ -24,15 +24,20 @@ const MONTHS = [
 ];
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "DUE") return <span className="badge-slate">Tagihan dibuat</span>;
-  if (status === "PENDING") return <span className="badge-yellow">Menunggu verifikasi</span>;
+  if (status === "DUE") return <span className="badge-slate">Belum dibayar</span>;
+  if (status === "PENDING") return <span className="badge-yellow">Bukti diajukan, menunggu verifikasi</span>;
   if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
   return <span className="badge-red">Ditolak</span>;
 }
 
-export default async function PaymentsPage() {
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams?: { uploaded?: string };
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const justUploadedId = searchParams?.uploaded;
   // Lazy auto-generate tagihan saat halaman pembayaran dibuka.
   try {
     const { ensureBillsForUser } = await import("@/lib/billing");
@@ -55,6 +60,23 @@ export default async function PaymentsPage() {
             + Upload bukti pembayaran
           </Link>
         </div>
+        {justUploadedId && (
+          <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">✓</span>
+              <div>
+                <div className="font-semibold text-emerald-800">
+                  Bukti pembayaran berhasil diunggah
+                </div>
+                <p className="mt-1 text-sm text-emerald-700">
+                  Pembayaran Anda dalam proses verifikasi oleh pemilik kos.
+                  Anda akan menerima notifikasi setelah pemilik menyelesaikan
+                  verifikasi.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="space-y-3">
           {payments.length === 0 && (
             <EmptyState
