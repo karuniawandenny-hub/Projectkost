@@ -46,9 +46,94 @@ export type ReminderMessageInput = {
   daysOverdue?: number;
 };
 
+// =====================================================================
+//  Anti-spam helpers
+// =====================================================================
+//
+// Tujuan: turunkan risiko pesan WA ditandai spam oleh Meta/WhatsApp.
+// Sinyal yang biasa di-flag:
+//  - Burst kirim ke banyak nomor dalam waktu singkat → ditahan jitter.
+//  - Pesan template identik → variasi greeting/closing/struktur body.
+//  - Kirim di jam tidak masuk akal (dini hari) → quiet hours guard.
+//  - Banyak penerima belum simpan kontak → CTA "simpan nomor"
+//    (sudah ada di appendWaSignature).
+//
+
+/**
+ * Ambil nama depan saja dari nama lengkap. Lebih natural di sapaan
+ * personal & terkesan tidak template ("Halo Budi" vs "Halo Budi Santoso").
+ * Body tetap pakai nama lengkap untuk formalitas.
+ */
+function firstName(fullName: string): string {
+  const trimmed = fullName.trim();
+  if (!trimmed) return trimmed;
+  const parts = trimmed.split(/\s+/);
+  return parts[0];
+}
+
+/**
+ * Konversi waktu UTC ke jam Asia/Jakarta (UTC+7). Server Railway/Vercel
+ * biasanya UTC, jadi pakai konversi manual supaya tidak bergantung TZ env.
+ */
+function jakartaHour(now: Date = new Date()): number {
+  return (now.getUTCHours() + 7) % 24;
+}
+
+/**
+ * Salam berdasarkan jam Asia/Jakarta. Bikin pesan terasa kontekstual
+ * & tidak seperti broadcast template.
+ */
+function greetingByHour(h: number): string {
+  if (h >= 4 && h < 11) return "Selamat pagi";
+  if (h >= 11 && h < 15) return "Selamat siang";
+  if (h >= 15 && h < 18) return "Selamat sore";
+  return "Selamat malam";
+}
+
+/**
+ * Cek apakah saat ini dalam "quiet hours" — periode di mana cron
+ * reminder BULK tidak boleh kirim WA, karena pesan otomatis di jam
+ * tidur (22:00-06:00 WIB default) terlihat sangat spammy.
+ *
+ * Konfigurasi via env:
+ *  - WA_QUIET_HOURS_START (jam mulai, default 22)
+ *  - WA_QUIET_HOURS_END   (jam selesai, default 6)
+ * Set keduanya = 0 untuk nonaktifkan.
+ *
+ * Catatan: hanya berlaku untuk operasi bulk (cron reminders), bukan
+ * notifikasi transaksional (welcome assignment, konfirmasi pembayaran,
+ * komplain selesai) yang dipicu langsung oleh aksi user.
+ */
+export function isQuietHoursNow(now: Date = new Date()): boolean {
+  const startStr = process.env.WA_QUIET_HOURS_START ?? "22";
+  const endStr = process.env.WA_QUIET_HOURS_END ?? "6";
+  const start = Number.parseInt(startStr, 10);
+  const end = Number.parseInt(endStr, 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+  if (start === 0 && end === 0) return false;
+  const h = jakartaHour(now);
+  // Range melewati tengah malam (mis. 22-06): aktif kalau h >= 22 ATAU h < 6.
+  if (start > end) return h >= start || h < end;
+  // Range biasa (mis. 1-5): aktif kalau h >= 1 DAN h < 5.
+  return h >= start && h < end;
+}
+
+// =====================================================================
+
 // Variasi sapaan untuk mengurangi kemiripan template antar pesan
 // (turunkan risiko trigger anti-spam WA yang deteksi bulk-messaging).
-const GREETINGS = ["Halo", "Hai", "Assalamualaikum", "Selamat pagi/siang"];
+// "Selamat <jam>" akan diisi dinamis berdasarkan waktu kirim sebenarnya
+// di buildReminderMessage, supaya konteks waktu terasa autentik.
+const GREETINGS = ["Halo", "Hai", "Assalamualaikum warahmatullah", "__BY_TIME__"];
+
+// Variasi kalimat pembuka body — pecah pola "Tagihan kos Anda untuk
+// periode ..." yang sebelumnya identik untuk semua penerima.
+const BODY_INTROS = [
+  "Tagihan kos Anda untuk periode {period}:",
+  "Berikut rincian tagihan kos periode {period}:",
+  "Iuran kos Anda bulan {period}:",
+  "Tagihan sewa kamar untuk {period}:",
+];
 const REMINDER_CLOSINGS = [
   "Jangan lupa untuk menyelesaikan pembayaran sebelum jatuh tempo, ya.",
   "Mohon disiapkan pembayarannya sebelum jatuh tempo.",
@@ -79,7 +164,15 @@ export function buildReminderMessage(input: ReminderMessageInput): {
   const dueStr = formatDateID(input.dueDate);
   const amountFmt = "Rp " + input.amount.toLocaleString("id-ID");
   const seed = `${input.tenantName}-${input.type}-${input.periodMonth}-${input.periodYear}`;
-  const greeting = pickVariation(seed, GREETINGS);
+  let greeting = pickVariation(seed, GREETINGS);
+  // "__BY_TIME__" → ganti dengan salam aktual berdasarkan jam server WIB.
+  if (greeting === "__BY_TIME__") {
+    greeting = greetingByHour(jakartaHour());
+  }
+  const intro = pickVariation(seed + "-intro", BODY_INTROS).replace(
+    "{period}",
+    periodLabel
+  );
   const closing =
     input.type === "OVERDUE"
       ? pickVariation(seed, OVERDUE_CLOSINGS)
@@ -94,9 +187,11 @@ export function buildReminderMessage(input: ReminderMessageInput): {
     input.type === "OVERDUE"
       ? `Tagihan sudah lewat ${input.daysOverdue ?? 1} hari. ${closing}`
       : closing;
-  const body = `${greeting} ${input.tenantName},
+  // Sapaan pakai NAMA DEPAN (lebih personal & natural — kurangi kesan
+  // template/broadcast). Body pakai nama lengkap untuk formalitas tetap.
+  const body = `${greeting} ${firstName(input.tenantName)},
 
-Tagihan kos Anda untuk periode ${periodLabel}:
+${intro}
   Kos     : ${input.kosName}
   Kamar   : ${input.roomName}
   Nominal : ${amountFmt}
@@ -123,6 +218,11 @@ export async function processReminders(): Promise<ProcessResult> {
     skipped: 0,
     errors: [],
   };
+
+  // === Anti-spam guard: skip WA blast saat jam tidur WIB ===
+  // Email & in-app tetap dikirim. WA dilewati supaya tidak dianggap
+  // burst dini hari yang sangat spammy oleh Meta.
+  const waBlockedByQuietHours = isQuietHoursNow();
 
   // Ambil semua payment DUE/PENDING yang punya dueDate.
   const candidates = await prisma.payment.findMany({
@@ -228,8 +328,8 @@ export async function processReminders(): Promise<ProcessResult> {
       }
     }
 
-    // 3) WhatsApp (kalau ada).
-    if (!alreadyH.has("WA") && tenant.phone) {
+    // 3) WhatsApp (kalau ada, dan tidak dalam quiet hours).
+    if (!alreadyH.has("WA") && tenant.phone && !waBlockedByQuietHours) {
       try {
         await sendWhatsAppGeneric(tenant.phone, body);
         await prisma.reminderLog.create({
