@@ -26,8 +26,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/og-image.jpg",
-        width: 1200,
-        height: 1200,
+        width: 256,
+        height: 256,
         alt: "Logo Kos Baiti",
         type: "image/jpeg",
       },
