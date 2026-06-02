@@ -27,6 +27,21 @@ const PALETTE = {
 };
 export { PALETTE };
 
+/**
+ * Buat path SVG untuk satu slice pie (wedge dari center).
+ *
+ * Konvensi:
+ *  - 0° = atas (jam 12), increasing = searah jarum jam (clockwise visual).
+ *  - polar() dengan offset -90° sudah konsisten dengan ini.
+ *  - Slice digambar searah jarum jam dari startAngle → endAngle.
+ *
+ * Bug lama: pakai sweep-flag=0 (counter-clockwise) + swap variabel
+ * start/end → slice >180° digambar dengan arah/jalur salah, hasilnya
+ * bentuk segitiga atau wedge angular bukan donut yang halus.
+ *
+ * Perbaikan: sweep-flag=1 (clockwise) sesuai konvensi pie chart, plus
+ * penamaan variabel yang lurus (no swap).
+ */
 function describeArc(
   cx: number,
   cy: number,
@@ -34,10 +49,12 @@ function describeArc(
   startAngle: number,
   endAngle: number
 ) {
-  const start = polar(cx, cy, r, endAngle);
-  const end = polar(cx, cy, r, startAngle);
-  const large = endAngle - startAngle <= 180 ? "0" : "1";
-  return `M ${cx} ${cy} L ${end.x} ${end.y} A ${r} ${r} 0 ${large} 0 ${start.x} ${start.y} Z`;
+  const startPoint = polar(cx, cy, r, startAngle);
+  const endPoint = polar(cx, cy, r, endAngle);
+  // large-arc-flag = 1 kalau slice > 180°.
+  const large = endAngle - startAngle > 180 ? "1" : "0";
+  // sweep-flag = 1 = visual clockwise (sesuai konvensi pie chart).
+  return `M ${cx} ${cy} L ${startPoint.x} ${startPoint.y} A ${r} ${r} 0 ${large} 1 ${endPoint.x} ${endPoint.y} Z`;
 }
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = ((angleDeg - 90) * Math.PI) / 180;
