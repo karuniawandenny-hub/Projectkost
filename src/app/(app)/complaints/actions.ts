@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
+import { sendWhatsAppGeneric } from "@/lib/reminders";
 
 export type ComplaintSubmitState = { error?: string };
 
@@ -137,6 +138,40 @@ export async function replyComplaint(
       message: `Status komplain "${complaint.title}" diubah menjadi ${labelStatus(newStatus)}${note}.`,
       link: `/complaints/${complaint.id}`,
     });
+  }
+
+  // === Notif WA ke penghuni saat komplain BARU saja ditandai SELESAI ===
+  // Hanya kirim saat ada transisi (RESOLVED -> RESOLVED via re-save jangan
+  // dispam). Best-effort: error WA tidak menggagalkan update DB.
+  const tenant = complaint.tenancy.tenant;
+  if (
+    newStatus === "RESOLVED" &&
+    complaint.status !== "RESOLVED" &&
+    tenant.phone
+  ) {
+    const finalReply = reply ?? complaint.ownerReply ?? null;
+    const lines = [
+      `Halo ${tenant.name},`,
+      ``,
+      `Komplain Anda sudah selesai ditangani oleh pemilik kos.`,
+      ``,
+      `Judul: ${complaint.title}`,
+    ];
+    if (finalReply) {
+      lines.push(``, `Catatan pemilik:`, finalReply);
+    }
+    lines.push(
+      ``,
+      `Bila masih ada kendala atau perbaikan belum tuntas, silakan buka kembali komplain melalui aplikasi.`,
+      ``,
+      `— Kos Baiti`
+    );
+    try {
+      await sendWhatsAppGeneric(tenant.phone, lines.join("\n"));
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[complaint-resolved][wa] gagal:", e);
+    }
   }
 
   revalidatePath("/complaints");
