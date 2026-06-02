@@ -3,7 +3,7 @@ import { Toaster } from "sonner";
 import { PWARegister } from "@/components/PWARegister";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://kosbaiti.com";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
