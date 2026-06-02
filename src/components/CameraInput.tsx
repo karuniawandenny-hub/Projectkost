@@ -161,17 +161,20 @@ export function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: current },
-            // Minta resolusi tinggi tanpa lock orientation - device pilih
-            // landscape/portrait sesuai cara user pegang HP.
-            width: { ideal: 2560, min: 1280 },
-            height: { ideal: 1440, min: 720 },
-          },
-        });
+
+      // Detect mobile: facingMode bekerja akurat di HP, di desktop
+      // sering tidak ada makna (kamera laptop = user-facing satu-satunya).
+      const ua =
+        typeof navigator !== "undefined" ? navigator.userAgent : "";
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+
+      // Resolusi cuma "ideal" — TIDAK pakai `min`. Pakai min bikin
+      // browser lempar OverconstrainedError ("Invalid constraint") di
+      // webcam dengan resolusi rendah (mis. laptop kelas entry).
+      const idealRes = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+
+      // Helper untuk attach stream ke <video> & flag siap.
+      const attach = (stream: MediaStream) => {
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
@@ -179,21 +182,95 @@ export function CameraModal({ facingMode, onCancel, onCapture }: ModalProps) {
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => {});
+          videoRef.current.play().catch(() => {});
         }
         setReady(true);
+      };
+
+      try {
+        let stream: MediaStream;
+
+        if (isMobile) {
+          // HP: pakai facingMode supaya jelas depan/belakang.
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: current }, ...idealRes },
+          });
+        } else {
+          // Desktop (Mac/Win/Linux): enumerate dulu, hindari kamera yang
+          // bukan webcam lokal — terutama "Continuity Camera" di Mac
+          // (iPhone yang otomatis di-pair). User minta TIDAK pakai itu.
+          //
+          // enumerateDevices() butuh permission supaya label terisi.
+          // Pancing permission dengan getUserMedia minimal, stop seketika.
+          let cams: MediaDeviceInfo[] = [];
+          try {
+            const probe = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: true,
+            });
+            probe.getTracks().forEach((t) => t.stop());
+            const devs = await navigator.mediaDevices.enumerateDevices();
+            cams = devs.filter((d) => d.kind === "videoinput");
+          } catch {
+            cams = [];
+          }
+
+          // Buang Continuity Camera / iPhone / iPad / virtual cam.
+          // Sisanya = webcam fisik di laptop atau USB webcam.
+          const localCams = cams.filter(
+            (d) =>
+              !/iphone|ipad|continuity|virtual|obs|snap camera/i.test(
+                d.label
+              )
+          );
+          const preferred =
+            localCams[0] ?? cams[0] ?? null;
+
+          if (preferred?.deviceId) {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: {
+                deviceId: { exact: preferred.deviceId },
+                ...idealRes,
+              },
+            });
+          } else {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: idealRes,
+            });
+          }
+        }
+
+        attach(stream);
       } catch (e) {
-        const msg =
-          e instanceof Error
-            ? e.name === "NotAllowedError"
-              ? "Izin kamera ditolak. Aktifkan izin kamera di pengaturan browser."
-              : e.name === "NotFoundError"
-                ? "Tidak ada kamera yang terdeteksi pada perangkat ini."
-                : e.name === "NotReadableError"
-                  ? "Kamera sedang dipakai aplikasi lain."
-                  : e.message
-            : "Tidak bisa mengakses kamera.";
-        setError(msg);
+        // Fallback: kalau constraint apa pun ditolak, ambil kamera
+        // pertama tanpa constraint sama sekali. Pasti work selama ada
+        // setidaknya 1 kamera & permission diberikan.
+        try {
+          const fallback = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true,
+          });
+          attach(fallback);
+          return;
+        } catch (e2) {
+          const err = e2 instanceof Error ? e2 : e;
+          const msg =
+            err instanceof Error
+              ? err.name === "NotAllowedError"
+                ? "Izin kamera ditolak. Aktifkan izin kamera di pengaturan browser."
+                : err.name === "NotFoundError"
+                  ? "Tidak ada kamera yang terdeteksi pada perangkat ini."
+                  : err.name === "NotReadableError"
+                    ? "Kamera sedang dipakai aplikasi lain."
+                    : err.name === "OverconstrainedError"
+                      ? "Kamera perangkat tidak mendukung resolusi yang diminta."
+                      : err.message || "Tidak bisa mengakses kamera."
+              : "Tidak bisa mengakses kamera.";
+          setError(msg);
+        }
       }
     }
     start();
