@@ -161,6 +161,67 @@ logo saat URL dibagikan di WhatsApp/FB/Twitter) pakai domain yang benar.
 
 ---
 
+## Troubleshooting preview link 403 / "Bad Response Code"
+
+**Gejala:** Di Facebook Sharing Debugger (`developers.facebook.com/tools/debug/`):
+- Response Code: `403`
+- og:title cuma `kosbaiti.com` (nama domain, bukan judul aplikasi)
+- og:description kosong
+- WhatsApp/FB tidak menampilkan preview
+
+**Artinya:** 403 datang dari layer infrastruktur (Cloudflare/CDN/DNS),
+**sebelum sampai ke aplikasi Next.js**. Aplikasi kita tidak punya
+middleware yang memblokir. Kemungkinan paling besar (urutan):
+
+### 1. Cloudflare Bot Fight Mode aktif (paling sering)
+
+Kalau domain di-proxy lewat Cloudflare (orange cloud ☁️ di DNS record),
+Cloudflare blokir bot scraper seperti `facebookexternalhit`.
+
+**Fix:**
+1. Login **dash.cloudflare.com** → pilih domain `kosbaiti.com`
+2. Menu kiri: **Security** → **Bots**
+3. **Bot Fight Mode** → matikan (toggle OFF)
+4. Atau alternatif: **Security** → **WAF** → tambah custom rule:
+   - When: `User Agent` contains `facebookexternalhit` OR `WhatsApp` OR `Twitterbot`
+   - Then: **Skip** → centang semua security feature
+5. Tunggu ~30 detik → balik ke FB Debugger → **Scrape Again**
+
+### 2. DNS belum point ke Railway
+
+Cek apakah domain benar-benar serve aplikasi Anda:
+
+```
+curl -I https://kosbaiti.com/
+```
+
+- Kalau header `server:` menunjukkan Cloudflare/Niagahoster/registrar →
+  DNS belum point ke Railway dengan benar.
+- Yang benar: header `server: railway-edge` atau response Next.js.
+
+**Fix:** Di Railway → service → Settings → Networking → **+ Custom Domain**
+→ ikuti CNAME record yang dikasih → update DNS di domain registrar.
+
+### 3. Vercel Deployment Protection (kalau pakai Vercel)
+
+Kalau pakai Vercel preview/production protection, scraper di-block.
+
+**Fix:** Vercel dashboard → Settings → **Deployment Protection** → set
+ke **Public** untuk production.
+
+### Verifikasi cepat
+
+```bash
+# Cek dari command line (simulasi FB scraper):
+curl -A "facebookexternalhit/1.1" -I https://kosbaiti.com/
+```
+
+- Status `200 OK` → app jalan, FB akan dapat preview.
+- Status `403` → masih di-block di layer atas, ulangi langkah 1-3.
+- Status `301/302` → ada redirect, ikuti `Location:` header.
+
+---
+
 ## Biaya
 
 - **Railway**: trial 30 hari gratis (tanpa kartu kredit), lalu $5/bulan (~Rp 80rb/bulan) untuk plan Hobby
