@@ -27,41 +27,6 @@ async function requireOwnerOrAdmin() {
 }
 
 /**
- * Setujui penghuni saja (tanpa assign ke kamar) — sekedar mengubah
- * status PENDING -> ACTIVE.
- */
-export async function approveTenant(
-  _prev: ApproveTenantState,
-  formData: FormData
-): Promise<ApproveTenantState> {
-  const me = await requireOwnerOrAdmin();
-  const userId = String(formData.get("userId") ?? "");
-  if (!userId) return { error: "User tidak ditemukan." };
-
-  const target = await prisma.user.findUnique({ where: { id: userId } });
-  if (!target) return { error: "User tidak ditemukan." };
-  if (target.role !== "TENANT") return { error: "Bukan akun penghuni." };
-  if (target.status === "ACTIVE") return { error: "Sudah disetujui." };
-
-  await prisma.user.update({
-    where: { id: target.id },
-    data: { status: "ACTIVE" },
-  });
-
-  await notify({
-    userId: target.id,
-    type: "TENANT_APPROVED",
-    title: "Akun penghuni Anda disetujui",
-    message: `${me.name} telah menyetujui akun Anda. Silakan login dan akses dashboard.`,
-    link: "/dashboard",
-  });
-
-  revalidatePath("/tenants");
-  revalidatePath("/admin/users");
-  return { success: `${target.name} disetujui.` };
-}
-
-/**
  * Setujui penghuni DAN langsung assign ke kamar pilihan owner. Akan
  * mengubah status PENDING -> ACTIVE, membuat Tenancy aktif, dan menandai
  * kamar OCCUPIED — semuanya dalam satu transaksi.

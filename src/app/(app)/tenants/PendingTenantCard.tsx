@@ -4,7 +4,6 @@ import { useFormState, useFormStatus } from "react-dom";
 import { useMemo, useState } from "react";
 import {
   approveAndAssignTenant,
-  approveTenant,
   rejectTenant,
   type ApproveTenantState,
 } from "./actions";
@@ -67,7 +66,6 @@ export function PendingTenantCard({
     approveAndAssignTenant,
     initial
   );
-  const [approveState, approveActionForm] = useFormState(approveTenant, initial);
   const [rejectState, rejectActionForm] = useFormState(rejectTenant, initial);
 
   // Cascade: pilih kos -> kamar yang ditampilkan terfilter berdasarkan kos itu.
@@ -192,8 +190,8 @@ export function PendingTenantCard({
         {!hasAnyAvailable && (
           <div className="sm:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Anda belum punya kamar kosong di kos manapun. Tambah kamar lewat
-            menu <span className="font-medium">Kos & Kamar</span> dulu, atau
-            pakai opsi &quot;Setujui saja&quot; di bawah.
+            menu <span className="font-medium">Kos & Kamar</span> dulu sebelum
+            menyetujui penghuni baru.
           </div>
         )}
         {assignState?.error && (
@@ -209,24 +207,20 @@ export function PendingTenantCard({
       </form>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-slate-500">Tindakan lain:</span>
-        <form action={approveActionForm}>
-          <input type="hidden" name="userId" value={tenant.id} />
-          <ApproveButton label="Setujui saja (assign nanti)" />
-        </form>
+        <span className="text-xs text-slate-500">Atau:</span>
         <form action={rejectActionForm}>
           <input type="hidden" name="userId" value={tenant.id} />
           <RejectButton />
         </form>
       </div>
-      {(approveState?.error || rejectState?.error) && (
+      {rejectState?.error && (
         <div className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {approveState?.error ?? rejectState?.error}
+          {rejectState.error}
         </div>
       )}
-      {(approveState?.success || rejectState?.success) && (
+      {rejectState?.success && (
         <div className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          {approveState?.success ?? rejectState?.success}
+          {rejectState.success}
         </div>
       )}
     </div>
