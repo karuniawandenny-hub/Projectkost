@@ -304,3 +304,153 @@ export function buildTenantAssignedWaText(p: TenantAssignedEmailParams): string 
     `— Kos Baiti`,
   ].join("\n");
 }
+
+// ============================================================================
+// Email: Pemberitahuan komplain selesai ditangani
+// ============================================================================
+
+export type ComplaintResolvedEmailParams = {
+  tenantName: string;
+  complaintTitle: string;
+  /** Balasan/catatan dari pemilik kos. Null kalau pemilik tidak isi catatan. */
+  ownerReply: string | null;
+  /** URL absolut ke halaman detail komplain (mis. https://.../complaints/abc). */
+  complaintUrl: string;
+};
+
+/**
+ * Kirim email ke penghuni saat komplain mereka ditandai SELESAI oleh
+ * pemilik. Non-throwing — caller (replyComplaint) tetap commit DB
+ * walau email gagal.
+ */
+export async function sendComplaintResolvedEmail(
+  toEmail: string,
+  params: ComplaintResolvedEmailParams
+): Promise<SendEmailResult> {
+  const mode = process.env.EMAIL_MODE ?? "dev";
+  const subject = `Komplain "${params.complaintTitle}" sudah selesai`;
+  const html = buildComplaintResolvedHtml(params);
+  const text = buildComplaintResolvedText(params);
+
+  if (mode === "dev") {
+    // eslint-disable-next-line no-console
+    console.log(`[email][dev] complaint-resolved ${toEmail} -> ${params.complaintTitle}`);
+    return { delivered: true };
+  }
+
+  if (mode === "resend") {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.EMAIL_FROM;
+    if (!apiKey || !from) {
+      return {
+        delivered: false,
+        error: "RESEND_API_KEY / EMAIL_FROM belum diset.",
+      };
+    }
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ from, to: toEmail, subject, html, text }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        return { delivered: false, error: `Resend HTTP ${res.status}: ${body}` };
+      }
+      return { delivered: true };
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Resend complaint-resolved error:", err);
+      return { delivered: false, error: "Gagal hubungi Resend." };
+    }
+  }
+
+  return { delivered: false, error: `EMAIL_MODE tidak dikenal: ${mode}` };
+}
+
+function buildComplaintResolvedHtml(p: ComplaintResolvedEmailParams): string {
+  const safeName = escapeHtml(p.tenantName);
+  const safeTitle = escapeHtml(p.complaintTitle);
+  const safeUrl = p.complaintUrl.replace(/"/g, "&quot;");
+  const ownerReplyHtml = p.ownerReply
+    ? `
+        <div style="border-left:3px solid #2563eb;background:#eff6ff;padding:12px 14px;border-radius:0 8px 8px 0;margin:0 0 18px 0">
+          <div style="font-weight:600;color:#1e3a8a;font-size:13px;margin-bottom:4px">Catatan pemilik kos</div>
+          <div style="color:#1e40af;font-size:14px;line-height:1.55;white-space:pre-wrap">${escapeHtml(p.ownerReply)}</div>
+        </div>`
+    : "";
+
+  return `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a;background:#f8fafc">
+      <div style="background:#ffffff;border-radius:12px;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+        <div style="background:linear-gradient(135deg,#059669,#10b981);border-radius:8px;padding:16px;margin:0 0 20px 0;text-align:center">
+          <div style="color:#fff;font-size:14px;letter-spacing:0.5px;text-transform:uppercase;opacity:0.85">Kos Baiti</div>
+          <div style="color:#fff;font-size:22px;font-weight:700;margin-top:4px">Komplain Anda Selesai</div>
+        </div>
+
+        <p style="margin:0 0 16px 0;color:#0f172a;font-size:15px;line-height:1.55">
+          Halo <strong>${safeName}</strong>,
+        </p>
+        <p style="margin:0 0 16px 0;color:#475569;font-size:15px;line-height:1.55">
+          Komplain Anda sudah selesai ditangani oleh pemilik kos.
+        </p>
+
+        <table style="width:100%;border-collapse:collapse;margin:8px 0 20px 0;background:#f1f5f9;border-radius:8px;overflow:hidden">
+          <tr>
+            <td style="padding:10px 14px;color:#64748b;font-size:13px">Judul komplain</td>
+            <td style="padding:10px 14px;font-weight:600;text-align:right">${safeTitle}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px;color:#64748b;font-size:13px;border-top:1px solid #e2e8f0">Status</td>
+            <td style="padding:10px 14px;font-weight:600;text-align:right;border-top:1px solid #e2e8f0;color:#059669">Selesai</td>
+          </tr>
+        </table>
+
+        ${ownerReplyHtml}
+
+        <p style="margin:0 0 20px 0;color:#475569;font-size:14px;line-height:1.55">
+          Bila masih ada kendala atau perbaikan belum tuntas, silakan buka
+          kembali komplain melalui aplikasi.
+        </p>
+
+        <p style="margin:20px 0 12px 0;text-align:center">
+          <a href="${safeUrl}" style="display:inline-block;background:linear-gradient(135deg,#059669,#10b981);color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:14px">
+            Lihat detail komplain
+          </a>
+        </p>
+
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0" />
+        <p style="margin:0;color:#64748b;font-size:12px;text-align:center;line-height:1.5">
+          Email ini dikirim otomatis dari sistem Kos Baiti.<br />
+          Pertanyaan? Hubungi pemilik kos Anda secara langsung.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function buildComplaintResolvedText(p: ComplaintResolvedEmailParams): string {
+  const lines: string[] = [
+    `Halo ${p.tenantName},`,
+    ``,
+    `Komplain Anda sudah selesai ditangani oleh pemilik kos.`,
+    ``,
+    `Judul: ${p.complaintTitle}`,
+    `Status: Selesai`,
+  ];
+  if (p.ownerReply) {
+    lines.push(``, `Catatan pemilik:`, p.ownerReply);
+  }
+  lines.push(
+    ``,
+    `Bila masih ada kendala atau perbaikan belum tuntas, silakan buka kembali komplain melalui aplikasi.`,
+    ``,
+    `Lihat detail: ${p.complaintUrl}`,
+    ``,
+    `— Kos Baiti`
+  );
+  return lines.join("\n");
+}

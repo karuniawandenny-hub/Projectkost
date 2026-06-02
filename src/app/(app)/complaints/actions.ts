@@ -2,11 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendWhatsAppGeneric } from "@/lib/reminders";
+import { sendComplaintResolvedEmail } from "@/lib/email";
+
+function originFromHeaders(): string {
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  return `${proto}://${host}`;
+}
 
 export type ComplaintSubmitState = { error?: string };
 
@@ -140,37 +149,57 @@ export async function replyComplaint(
     });
   }
 
-  // === Notif WA ke penghuni saat komplain BARU saja ditandai SELESAI ===
-  // Hanya kirim saat ada transisi (RESOLVED -> RESOLVED via re-save jangan
-  // dispam). Best-effort: error WA tidak menggagalkan update DB.
+  // === Notif WA + Email ke penghuni saat komplain BARU ditandai SELESAI ==
+  // Hanya saat transisi (mencegah spam kalau pemilik re-save status yang
+  // sudah RESOLVED). Best-effort: error WA/email tidak menggagalkan update.
   const tenant = complaint.tenancy.tenant;
-  if (
-    newStatus === "RESOLVED" &&
-    complaint.status !== "RESOLVED" &&
-    tenant.phone
-  ) {
+  if (newStatus === "RESOLVED" && complaint.status !== "RESOLVED") {
     const finalReply = reply ?? complaint.ownerReply ?? null;
-    const lines = [
-      `Halo ${tenant.name},`,
-      ``,
-      `Komplain Anda sudah selesai ditangani oleh pemilik kos.`,
-      ``,
-      `Judul: ${complaint.title}`,
-    ];
-    if (finalReply) {
-      lines.push(``, `Catatan pemilik:`, finalReply);
+    const complaintUrl = `${originFromHeaders()}/complaints/${complaint.id}`;
+
+    // --- WhatsApp ---
+    if (tenant.phone) {
+      const lines = [
+        `Halo ${tenant.name},`,
+        ``,
+        `Komplain Anda sudah selesai ditangani oleh pemilik kos.`,
+        ``,
+        `Judul: ${complaint.title}`,
+      ];
+      if (finalReply) {
+        lines.push(``, `Catatan pemilik:`, finalReply);
+      }
+      lines.push(
+        ``,
+        `Bila masih ada kendala atau perbaikan belum tuntas, silakan buka kembali komplain melalui aplikasi.`,
+        ``,
+        `— Kos Baiti`
+      );
+      try {
+        await sendWhatsAppGeneric(tenant.phone, lines.join("\n"));
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("[complaint-resolved][wa] gagal:", e);
+      }
     }
-    lines.push(
-      ``,
-      `Bila masih ada kendala atau perbaikan belum tuntas, silakan buka kembali komplain melalui aplikasi.`,
-      ``,
-      `— Kos Baiti`
-    );
-    try {
-      await sendWhatsAppGeneric(tenant.phone, lines.join("\n"));
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[complaint-resolved][wa] gagal:", e);
+
+    // --- Email ---
+    if (tenant.email) {
+      try {
+        const result = await sendComplaintResolvedEmail(tenant.email, {
+          tenantName: tenant.name,
+          complaintTitle: complaint.title,
+          ownerReply: finalReply,
+          complaintUrl,
+        });
+        if (!result.delivered) {
+          // eslint-disable-next-line no-console
+          console.error("[complaint-resolved][email] gagal:", result.error);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error("[complaint-resolved][email] gagal:", e);
+      }
     }
   }
 
