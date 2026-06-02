@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/session";
 import {
   processReminders,
   buildReminderMessage,
+  appendWaSignature,
   type ReminderType,
 } from "@/lib/reminders";
 import { normalizePhone } from "@/lib/phone";
@@ -266,7 +267,7 @@ export async function previewReminderAction(
     daysOverdue: type === "OVERDUE" ? 1 : undefined,
   });
 
-  const previewBody = `[PREVIEW ${type}]\n\n${body}`;
+  const previewBody = appendWaSignature(`[PREVIEW ${type}]\n\n${body}`);
 
   const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
   if (mode === "dev") {
@@ -328,8 +329,9 @@ export async function testWaAction(to: string): Promise<TestActionState> {
     return { ok: false, message: "Format nomor HP tidak valid." };
   }
   const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
-  const message =
-    "Halo! Ini pesan test dari Kos Baiti. Jika Anda menerima ini, integrasi gateway WA Anda berfungsi.";
+  const message = appendWaSignature(
+    "Halo! Ini pesan test dari Kos Baiti. Jika Anda menerima ini, integrasi gateway WA Anda berfungsi."
+  );
 
   if (mode === "dev") {
     // eslint-disable-next-line no-console

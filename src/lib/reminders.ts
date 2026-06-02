@@ -256,6 +256,9 @@ export async function processReminders(): Promise<ProcessResult> {
 }
 
 async function sendWhatsAppGeneric(phone: string, message: string): Promise<void> {
+  // Tempel signature URL aplikasi di paling bawah setiap pesan WA.
+  // Idempotent — kalau pemanggil sudah pasang URL, tidak akan double.
+  message = appendWaSignature(message);
   // Kill-switch global. Set WA_ENABLED=false di Railway untuk
   // mematikan SEMUA pengiriman WA tanpa ubah kode lain (reminder cron,
   // konfirmasi pembayaran, assign tenant). Pakai saat akun WA
@@ -354,6 +357,18 @@ async function sendEmailGeneric(
   }
 }
 
+
+/**
+ * Tempel link aplikasi di paling bawah pesan WA sebagai signature.
+ * Idempotent: kalau pesan sudah berisi URL ini, tidak di-append ulang.
+ * URL diambil dari NEXT_PUBLIC_SITE_URL supaya konsisten dengan domain
+ * di metadata (OG image, canonical, dst).
+ */
+export function appendWaSignature(message: string): string {
+  const url = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+  if (message.includes(url)) return message;
+  return `${message.trimEnd()}\n\n${url}`;
+}
 
 export { sendWhatsAppGeneric, sendEmailGeneric };
 
