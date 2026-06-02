@@ -2,8 +2,11 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { approveUser, rejectUser } from "../actions";
 import { EmptyState, UsersIcon } from "@/components/EmptyState";
+import { getStorageStatus } from "@/lib/storage-status";
 
 export default async function AdminDashboardPage() {
+  const storage = getStorageStatus();
+
   const [
     totalUsers,
     pendingOwners,
@@ -38,6 +41,36 @@ export default async function AdminDashboardPage() {
         <h1 className="break-words text-xl font-bold sm:text-2xl">Dashboard Admin</h1>
         <p className="text-sm text-slate-600 sm:text-base">Ringkasan sistem.</p>
       </div>
+
+      {!storage.persistent ? (
+        <div className="rounded-lg border-2 border-rose-300 bg-rose-50 p-4 text-sm">
+          <div className="font-bold text-rose-800">
+            ⚠️ Penyimpanan data TIDAK persisten
+          </div>
+          <p className="mt-1 text-rose-700">{storage.message}</p>
+          <p className="mt-2 text-rose-700">
+            <strong>Akibatnya:</strong> semua data (pemilik, penghuni, kos,
+            pembayaran, komplain) akan <strong>hilang</strong> setiap kali
+            aplikasi di-redeploy atau update program.
+          </p>
+          <p className="mt-2 text-rose-700">
+            <strong>Cara fix di Railway:</strong> Settings → Volumes →{" "}
+            <strong>+ Add Volume</strong> → Mount path:{" "}
+            <code className="rounded bg-rose-100 px-1.5 py-0.5 font-mono">
+              /data
+            </code>{" "}
+            → Size 1GB → klik Add. Railway rebuild ~3 menit, lalu data akan
+            persisten otomatis.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <span className="font-semibold text-emerald-800">
+            ✅ Data tersimpan aman
+          </span>
+          <span className="ml-2 text-emerald-700">{storage.message}</span>
+        </div>
+      )}
 
       <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:grid sm:grid-cols-2 sm:gap-3 sm:divide-y-0 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none lg:grid-cols-4">
         <Stat label="Total pengguna" value={totalUsers} href="/admin/users" />

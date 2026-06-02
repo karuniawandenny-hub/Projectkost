@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, writeFile, unlink } from "fs/promises";
 import path from "path";
 import { randomBytes } from "crypto";
 
@@ -76,4 +76,34 @@ export async function saveUploadedFile(
   await writeFile(filepath, buffer);
 
   return `/uploads/${safeSubdir}/${filename}`;
+}
+
+/**
+ * Hapus 1 file upload berdasarkan URL `/uploads/...`. Best-effort:
+ * tidak melempar error kalau file sudah tidak ada / path invalid /
+ * permission denied — caller bisa lanjut delete row DB tanpa risiko
+ * setengah jalan.
+ *
+ * Aman dari path traversal: hanya melayani URL yang dimulai dengan
+ * `/uploads/` dan tidak mengandung `..`.
+ */
+export async function deleteUploadByUrl(url: string | null | undefined): Promise<void> {
+  if (!url) return;
+  if (!url.startsWith("/uploads/")) return;
+  if (url.includes("..")) return;
+  const rel = url.slice("/uploads/".length);
+  const filepath = path.join(UPLOAD_ROOT, rel);
+  try {
+    await unlink(filepath);
+  } catch {
+    // file mungkin sudah tidak ada — abaikan
+  }
+}
+
+/**
+ * Hapus banyak file dari URL — convenience untuk array JSON
+ * (mis. Complaint.photoUrls yang berisi JSON array of urls).
+ */
+export async function deleteUploadsByUrls(urls: (string | null | undefined)[]): Promise<void> {
+  await Promise.all(urls.map((u) => deleteUploadByUrl(u)));
 }

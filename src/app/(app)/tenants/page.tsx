@@ -9,6 +9,7 @@ import {
 } from "../move-request/actions";
 import { PendingTenantCard, type KosOption } from "./PendingTenantCard";
 import { EditStartDateForm } from "./EditStartDateForm";
+import { DeleteTenantButton } from "./DeleteTenantButton";
 
 export default async function TenantsPage() {
   const user = await getCurrentUser();
@@ -262,6 +263,11 @@ export default async function TenantsPage() {
                         Akhiri sewa
                       </button>
                     </form>
+                    <DeleteTenantButton
+                      userId={t.tenant.id}
+                      tenantName={t.tenant.name}
+                      buttonLabel="Hapus penghuni"
+                    />
                   </div>
                 </div>
               </div>

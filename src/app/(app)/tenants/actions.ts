@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWhatsAppGeneric } from "@/lib/reminders";
+import { deleteUploadByUrl, deleteUploadsByUrls } from "@/lib/upload";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -247,6 +248,129 @@ export async function updateTenancyStartDate(
   revalidatePath("/kos");
   revalidatePath(`/kos/${tenancy.room.kosId}`);
   return { success: `Tanggal mulai sewa ${tenancy.tenant.name} diperbarui ke ${startStr}.` };
+}
+
+/**
+ * Hapus penghuni beserta SEMUA data terkait (tenancy, payment, komplain,
+ * move-request, notifikasi, reset-token, plus file upload KTP/selfie/
+ * bukti bayar/foto komplain).
+ *
+ * Aturan akses:
+ *  - ADMIN: boleh hapus penghuni siapa pun.
+ *  - OWNER: hanya boleh hapus penghuni yang punya tenancy (aktif maupun
+ *    sudah ENDED) di salah satu kos milik OWNER. Mencegah owner A
+ *    menghapus tenant milik owner B.
+ *  - Role selain ADMIN/OWNER → FORBIDDEN.
+ *  - Target user harus role TENANT (tidak boleh hapus OWNER/ADMIN dari
+ *    sini — admin punya nonaktifkan/aktifkan saja).
+ *
+ * Operasi:
+ *  1. Kumpulkan semua file URL milik tenant (KTP, selfie, semua bukti
+ *     bayar, semua foto komplain, semua foto resolusi).
+ *  2. Set kamar yang sedang OCCUPIED oleh tenancy aktif → AVAILABLE.
+ *  3. prisma.user.delete — Prisma onDelete: Cascade akan auto-hapus:
+ *     Tenancy → Payment → ReminderLog + GatewayTransaction,
+ *     Tenancy → Complaint, Tenancy → RoomMoveRequest,
+ *     User → Notification, User → PasswordResetToken.
+ *  4. Best-effort: unlink semua file upload yang dikumpulkan di step 1.
+ */
+export type DeleteTenantState = { error?: string; success?: string };
+
+export async function deleteTenant(
+  _prev: DeleteTenantState,
+  formData: FormData
+): Promise<DeleteTenantState> {
+  const me = await requireOwnerOrAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "User tidak ditemukan." };
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      tenancies: {
+        include: {
+          room: { select: { id: true, status: true, kos: { select: { ownerId: true } } } },
+          payments: { select: { proofUrl: true } },
+          complaints: { select: { photoUrls: true, resolutionPhotoUrls: true } },
+        },
+      },
+    },
+  });
+  if (!target) return { error: "User tidak ditemukan." };
+  if (target.role !== "TENANT") {
+    return { error: "Hanya akun penghuni yang bisa dihapus dari sini." };
+  }
+
+  // Scope check untuk OWNER: tenant harus pernah tinggal di kos miliknya.
+  if (me.role === "OWNER") {
+    const inMyKos = target.tenancies.some(
+      (t) => t.room.kos.ownerId === me.id
+    );
+    if (!inMyKos) {
+      return { error: "Anda tidak punya akses untuk menghapus penghuni ini." };
+    }
+  }
+
+  // === Step 1: kumpulkan semua file URL untuk dihapus dari disk ===
+  const fileUrls: string[] = [];
+  if (target.ktpPhotoUrl) fileUrls.push(target.ktpPhotoUrl);
+  if (target.selfiePhotoUrl) fileUrls.push(target.selfiePhotoUrl);
+  for (const ten of target.tenancies) {
+    for (const p of ten.payments) {
+      if (p.proofUrl) fileUrls.push(p.proofUrl);
+    }
+    for (const c of ten.complaints) {
+      // photoUrls & resolutionPhotoUrls disimpan sebagai JSON string array.
+      for (const raw of [c.photoUrls, c.resolutionPhotoUrls]) {
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            for (const u of parsed) {
+              if (typeof u === "string") fileUrls.push(u);
+            }
+          }
+        } catch {
+          // raw bukan JSON valid — skip
+        }
+      }
+    }
+  }
+
+  // === Step 2: kumpulkan kamar yang perlu dibebaskan ===
+  const roomsToFree = target.tenancies
+    .filter((t) => t.room.status === "OCCUPIED")
+    .map((t) => t.room.id);
+
+  // === Step 3: DB transaction — free rooms + delete user (cascade) ===
+  try {
+    await prisma.$transaction([
+      ...roomsToFree.map((roomId) =>
+        prisma.room.update({
+          where: { id: roomId },
+          data: { status: "AVAILABLE" },
+        })
+      ),
+      prisma.user.delete({ where: { id: target.id } }),
+    ]);
+  } catch (e) {
+    return {
+      error: `Gagal menghapus penghuni: ${e instanceof Error ? e.message : "unknown"}`,
+    };
+  }
+
+  // === Step 4: best-effort file cleanup (jalan setelah DB sukses) ===
+  await deleteUploadsByUrls(fileUrls);
+  // Helper di atas membungkus deleteUploadByUrl per file & sudah
+  // swallowing error per file, jadi aman dipanggil di sini.
+  void deleteUploadByUrl; // mark as used (re-export guard)
+
+  revalidatePath("/tenants");
+  revalidatePath("/kos");
+  revalidatePath("/admin/users");
+  return {
+    success: `Penghuni "${target.name}" beserta ${target.tenancies.length} tenancy & ${fileUrls.length} file terkait telah dihapus permanen.`,
+  };
 }
 
 /**

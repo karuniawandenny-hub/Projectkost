@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { approveUser, rejectUser, setUserStatus } from "../../actions";
 import { EmptyState, UsersIcon } from "@/components/EmptyState";
 import { BulkActions, BulkCheckbox } from "./BulkActions";
+import { DeleteTenantButton } from "../../../(app)/tenants/DeleteTenantButton";
 
 type SearchParams = {
   role?: string;
@@ -180,6 +181,13 @@ export default async function AdminUsersPage({
                       Aktifkan
                     </button>
                   </form>
+                )}
+                {u.role === "TENANT" && (
+                  <DeleteTenantButton
+                    userId={u.id}
+                    tenantName={u.name}
+                    buttonLabel="Hapus permanen"
+                  />
                 )}
               </div>
             </div>
