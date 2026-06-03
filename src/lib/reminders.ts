@@ -460,9 +460,10 @@ export async function processReminders(): Promise<ProcessResult> {
 }
 
 /**
- * Cache bytes og-image.jpg di memory supaya tidak fetch berulang ke
- * kosbaiti.com setiap kirim WA. Lazy-load saat pertama dipakai, expire
- * setelah 1 jam supaya update logo (kalau ganti file) ke-pickup.
+ * Cache bytes og-image.jpg di memory supaya tidak baca berulang dari
+ * disk setiap kirim WA. Lazy-load saat pertama dipakai, expire setelah
+ * 1 jam supaya kalau image di-update (mis. ganti logo), perubahan
+ * ke-pickup tanpa restart container.
  */
 let cachedLogoBytes: { bytes: ArrayBuffer; loadedAt: number } | null = null;
 const LOGO_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -471,27 +472,65 @@ async function getLogoBytes(): Promise<ArrayBuffer | null> {
   if (cachedLogoBytes && Date.now() - cachedLogoBytes.loadedAt < LOGO_CACHE_TTL_MS) {
     return cachedLogoBytes.bytes;
   }
+
+  // === Strategy 1: Baca file langsung dari local filesystem ===
+  // Di container produksi (Railway/Docker), og-image.jpg ada di
+  // /app/public/og-image.jpg (dicopy oleh Dockerfile).
+  //
+  // Cara ini SANGAT preferable dibanding fetch via HTTPS karena:
+  //  - Container Railway TIDAK BISA fetch URL eksternal-nya sendiri
+  //    (Docker loopback DNS issue: DNS resolve ke IP Railway, lalu
+  //    edge proxy refuse koneksi inbound dari container yang sama).
+  //  - Tanpa network call: lebih cepat, no timeout, no DNS issue.
+  //  - Tidak tergantung NEXT_PUBLIC_SITE_URL benar atau tidak.
+  try {
+    const { readFile } = await import("fs/promises");
+    const path = await import("path");
+    const localPath = path.join(process.cwd(), "public", "og-image.jpg");
+    const buffer = await readFile(localPath);
+    // Convert Buffer → ArrayBuffer (Blob membutuhkan ArrayBuffer).
+    const ab = buffer.buffer.slice(
+      buffer.byteOffset,
+      buffer.byteOffset + buffer.byteLength
+    );
+    cachedLogoBytes = { bytes: ab, loadedAt: Date.now() };
+    // eslint-disable-next-line no-console
+    console.log(
+      `[wa][logo-local] ${buffer.byteLength} bytes from ${localPath}`
+    );
+    return ab;
+  } catch (localErr) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[wa][logo-local-fail] ${localErr instanceof Error ? localErr.message : localErr} — coba fallback HTTP fetch`
+    );
+  }
+
+  // === Strategy 2 (fallback): fetch via HTTPS ===
+  // Mode ini cuma jalan kalau env / network memungkinkan. Berguna untuk
+  // dev mode (run via `next dev`, working dir mungkin lain) atau kalau
+  // suatu saat image di-host CDN eksternal.
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
   const imgUrl = `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`;
   try {
     // eslint-disable-next-line no-console
-    console.log(`[wa][logo-fetch] ${imgUrl}`);
+    console.log(`[wa][logo-http-fetch] ${imgUrl}`);
     const ctrl = AbortSignal.timeout(8000);
     const resp = await fetch(imgUrl, { signal: ctrl });
     if (!resp.ok) {
       // eslint-disable-next-line no-console
-      console.error(`[wa][logo-fetch-fail] HTTP ${resp.status}`);
+      console.error(`[wa][logo-http-fetch-fail] HTTP ${resp.status}`);
       return null;
     }
     const bytes = await resp.arrayBuffer();
     cachedLogoBytes = { bytes, loadedAt: Date.now() };
     // eslint-disable-next-line no-console
-    console.log(`[wa][logo-cached] ${bytes.byteLength} bytes`);
+    console.log(`[wa][logo-http-cached] ${bytes.byteLength} bytes`);
     return bytes;
   } catch (e) {
     // eslint-disable-next-line no-console
-    console.error(`[wa][logo-fetch-error]`, e);
+    console.error(`[wa][logo-http-fetch-error]`, e);
     return null;
   }
 }
