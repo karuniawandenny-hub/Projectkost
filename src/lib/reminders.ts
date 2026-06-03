@@ -516,8 +516,14 @@ export async function fonnteSend(
   message: string
 ): Promise<void> {
   const target = phone.startsWith("+") ? phone.slice(1) : phone;
+  // === Mode preview reliable: image+caption via multipart upload ===
+  // WA_INLINE_PREVIEW default "false" karena Fonnte FREE TRIAL terbukti
+  // diam-diam buang media upload (log Railway konfirmasi: multipart
+  // POST sukses, status:true, quota dipotong, tapi recipient cuma
+  // terima text). Aktifkan hanya kalau Anda upgrade Fonnte ke paid
+  // plan & terverifikasi recipient benar terima image.
   const inlinePreview =
-    (process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false";
+    (process.env.WA_INLINE_PREVIEW ?? "false").toLowerCase() === "true";
 
   let res: Response;
   let mode_used: string;
