@@ -168,8 +168,11 @@ export default async function MaintenanceDetailPage({
         )}
       </div>
 
-      {/* Aksi sesuai status (CORRECTIVE tidak punya aksi — datanya turunan komplain) */}
-      {m.type === "PREVENTIVE" && m.status !== "COMPLETED" && (
+      {/* Aksi tersedia kalau:
+          - Belum COMPLETED, DAN
+          - Bukan CORRECTIVE turunan komplain (complaintId set).
+          CORRECTIVE manual (input pemilik langsung) tetap bisa diubah. */}
+      {m.status !== "COMPLETED" && !m.complaintId && (
         <div className="card space-y-3">
           <h2 className="font-semibold">Aksi</h2>
           <div className="flex flex-wrap gap-2">

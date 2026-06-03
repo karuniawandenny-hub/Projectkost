@@ -46,13 +46,27 @@ async function assertOwnsScope(
 }
 
 /**
- * Buat record maintenance PREVENTIVE oleh pemilik.
+ * Buat record maintenance PREVENTIVE atau CORRECTIVE manual oleh pemilik.
+ *
+ * Beda dengan syncCorrectiveFromComplaint:
+ *  - Manual: owner bisa pilih scope, status awal SCHEDULED → owner
+ *    lanjut "Tandai selesai" di detail page kalau sudah dikerjakan.
+ *  - Dari komplain: complaintId di-set, status langsung COMPLETED.
+ *  Keduanya hidup di tabel yang sama; pembeda = ada/tidak complaintId.
+ *
+ * Untuk CORRECTIVE manual: recurrenceMonths selalu null (perbaikan
+ * sifatnya one-shot, bukan jadwal rutin).
  */
-export async function createPreventive(
+export async function createMaintenance(
   _prev: MaintActionState,
   formData: FormData
 ): Promise<MaintActionState> {
   const me = await requireOwnerOrAdmin();
+
+  const type = String(formData.get("type") ?? "PREVENTIVE");
+  if (type !== "PREVENTIVE" && type !== "CORRECTIVE") {
+    return { error: "Jenis perawatan tidak valid." };
+  }
 
   const kosId = String(formData.get("kosId") ?? "");
   const roomIdRaw = String(formData.get("roomId") ?? "");
@@ -70,8 +84,9 @@ export async function createPreventive(
     return { error: "Format tanggal jadwal tidak valid." };
   }
 
+  // Rekurensi hanya berlaku untuk PREVENTIVE. CORRECTIVE one-shot.
   let recurrenceMonths: number | null = null;
-  if (recurrenceRaw && recurrenceRaw !== "0") {
+  if (type === "PREVENTIVE" && recurrenceRaw && recurrenceRaw !== "0") {
     const n = Number.parseInt(recurrenceRaw, 10);
     if (!Number.isFinite(n) || n <= 0 || n > 60) {
       return { error: "Interval rekurensi tidak valid." };
@@ -87,7 +102,7 @@ export async function createPreventive(
 
   await prisma.maintenance.create({
     data: {
-      type: "PREVENTIVE",
+      type,
       kosId,
       roomId,
       title,
@@ -102,6 +117,13 @@ export async function createPreventive(
   if (roomId) revalidatePath(`/kos/${kosId}`);
   redirect("/maintenance?created=1");
 }
+
+/**
+ * @deprecated Gunakan createMaintenance. Dipertahankan sebagai alias
+ * supaya tidak breaking change untuk pemanggil lama (kalau ada cache
+ * action ID di klien).
+ */
+export const createPreventive = createMaintenance;
 
 /**
  * Update status: SCHEDULED → IN_PROGRESS, atau cancel kapan saja.

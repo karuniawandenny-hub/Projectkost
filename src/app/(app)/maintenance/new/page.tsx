@@ -31,10 +31,12 @@ export default async function NewMaintenancePage() {
         >
           ← Kembali ke Perawatan
         </Link>
-        <h1 className="text-2xl font-bold mt-1">Jadwalkan perawatan preventif</h1>
+        <h1 className="text-2xl font-bold mt-1">Catat perawatan baru</h1>
         <p className="text-sm text-slate-600">
-          Mis. service AC tiap 3 bulan, cek pompa air tiap bulan, dll. Sistem
-          akan kirim pengingat ke Anda H-7, H-3, dan H-1 sebelum jadwal.
+          Pilih <strong>Preventif</strong> untuk perawatan rutin (mis. service
+          AC tiap 3 bulan) — bisa di-set berulang otomatis dan dapat pengingat
+          H-7/H-3/H-1. Pilih <strong>Korektif</strong> untuk catat kerusakan
+          yang Anda temukan sendiri (tanpa lewat komplain penghuni).
         </p>
       </div>
 
