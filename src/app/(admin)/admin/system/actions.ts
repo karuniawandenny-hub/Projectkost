@@ -9,6 +9,85 @@ import {
   type ReminderType,
 } from "@/lib/reminders";
 import { normalizePhone } from "@/lib/phone";
+import { pingCloudApi } from "@/lib/wa-cloud";
+import { sendKosBaitiTemplate, TEMPLATES } from "@/lib/wa-templates";
+
+/**
+ * Cek kesehatan setup WhatsApp Cloud API Meta.
+ * Tidak kirim pesan — hanya validasi token + phone ID.
+ */
+export async function pingCloudApiAction(): Promise<TestActionState> {
+  await requireUser().then((u) => {
+    if (u.role !== "ADMIN") throw new Error("FORBIDDEN");
+  });
+  const result = await pingCloudApi();
+  return {
+    ok: result.ok,
+    message: result.ok
+      ? `✓ Cloud API OK — ${result.detail}`
+      : `❌ Setup belum siap: ${result.detail}`,
+    detail: JSON.stringify(result.raw, null, 2),
+  };
+}
+
+/**
+ * Kirim pesan test pakai 1 template Cloud API ke nomor admin.
+ * Wajib template `tenant_assigned` sudah di-approve Meta.
+ */
+export async function testCloudTemplateAction(
+  to: string
+): Promise<TestActionState> {
+  const me = await requireUser();
+  if (me.role !== "ADMIN") throw new Error("FORBIDDEN");
+  const normalized = normalizePhone(to);
+  if (!normalized) return { ok: false, message: "Format nomor HP tidak valid." };
+  if (!process.env.META_WA_PHONE_ID || !process.env.META_WA_TOKEN) {
+    return {
+      ok: false,
+      message: "META_WA_PHONE_ID / META_WA_TOKEN belum diset di Railway. Lihat docs/wa-cloud/setup.md.",
+    };
+  }
+  const target = normalized.replace(/^\+/, "");
+  try {
+    const result = await sendKosBaitiTemplate(target, "tenant_assigned", [
+      "Test Admin",
+      "A1",
+      "Kos Baiti (test)",
+      "01 Januari 2026",
+      "Rp 1.000.000",
+    ]);
+    return {
+      ok: true,
+      message: `✓ Template terkirim ke ${normalized}. Cek WA dalam 5-30 detik. Harusnya muncul: image header (logo) + body + button. Message ID: ${result.messageId ?? "?"}`,
+      detail: JSON.stringify(result.raw, null, 2),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Error",
+    };
+  }
+}
+
+/**
+ * Daftar template yang ter-registry di kode + helper untuk lihat
+ * isinya. Berguna saat submit ke Meta Business Manager.
+ */
+export async function listCloudTemplatesAction(): Promise<TestActionState> {
+  const me = await requireUser();
+  if (me.role !== "ADMIN") throw new Error("FORBIDDEN");
+  const names = Object.keys(TEMPLATES);
+  return {
+    ok: true,
+    message: `${names.length} template di registry: ${names.join(", ")}. Submit semua di Meta Business Manager → WhatsApp Manager → Message Templates. Detail di docs/wa-cloud/templates.md.`,
+    detail: names
+      .map((k) => {
+        const t = TEMPLATES[k];
+        return `${k}\n${"-".repeat(k.length)}\n${t.body.text}\n\nSample: ${t.body.sampleParams.join(", ")}\n`;
+      })
+      .join("\n"),
+  };
+}
 
 export type TestActionState = {
   ok: boolean;

@@ -633,6 +633,40 @@ async function sendWhatsAppGeneric(phone: string, message: string): Promise<void
     await fonnteSend(token, phone, message);
     return;
   }
+  if (mode === "cloud") {
+    // WhatsApp Business Cloud API resmi Meta. Native support template
+    // dengan IMAGE header + URL preview di session messages.
+    //
+    // CATATAN PENTING:
+    // Mode ini di-trigger oleh OTP_MODE=cloud, TAPI sendWhatsAppGeneric()
+    // adalah fungsi text-generic — Meta Cloud API butuh struktur
+    // berbeda (template name + body params, BUKAN free text).
+    //
+    // Untuk migrasi proper, caller (welcome / reminder / komplain / dst)
+    // wajib di-refactor untuk panggil sendKosBaitiTemplate() langsung
+    // dengan template name + params. Lihat docs/wa-cloud/migration.md.
+    //
+    // Sebagai TRANSISI: di sini kita coba kirim sebagai free-text dengan
+    // preview_url=true. Itu HANYA jalan kalau recipient lagi dalam 24h
+    // window setelah balas pesan kita (session messages). Di luar window
+    // ini, Meta tolak dengan error 131047.
+    const { sendFreeText } = await import("./wa-cloud");
+    try {
+      await sendFreeText(phone, message, { previewUrl: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Error 131047 = no session, butuh template. Log warning yang jelas.
+      if (msg.includes("131047") || msg.toLowerCase().includes("re-engagement")) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[wa][cloud-no-session] Recipient ${phone} di luar 24h window. ` +
+            `Tidak bisa kirim free-text — caller harus pakai sendKosBaitiTemplate().`
+        );
+      }
+      throw e;
+    }
+    return;
+  }
   // Generic gateway: POST JSON.
   const url = process.env.WA_GATEWAY_URL;
   const token = process.env.WA_GATEWAY_TOKEN;
