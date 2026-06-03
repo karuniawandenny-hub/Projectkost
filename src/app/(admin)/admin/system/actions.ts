@@ -288,6 +288,12 @@ export async function previewReminderAction(
       form.set("target", target);
       form.set("message", previewBody);
       form.set("countryCode", "62");
+      // Sertakan og-image untuk preview reliable (lihat sendWhatsAppGeneric)
+      if ((process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false") {
+        const siteUrl =
+          process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+        form.set("url", `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`);
+      }
       const res = await fetch("https://api.fonnte.com/send", {
         method: "POST",
         headers: { Authorization: token },
@@ -436,6 +442,12 @@ export async function testWaAction(to: string): Promise<TestActionState> {
       form.set("target", target);
       form.set("message", message);
       form.set("countryCode", "62");
+      // Sertakan og-image untuk preview reliable (lihat sendWhatsAppGeneric)
+      if ((process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false") {
+        const siteUrl =
+          process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+        form.set("url", `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`);
+      }
       const res = await fetch("https://api.fonnte.com/send", {
         method: "POST",
         headers: { Authorization: token },

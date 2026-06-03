@@ -486,6 +486,26 @@ async function sendWhatsAppGeneric(phone: string, message: string): Promise<void
     form.set("target", target);
     form.set("message", message);
     form.set("countryCode", "62");
+
+    // === Link preview reliable via mode image+caption ===
+    // WhatsApp text mode link preview tidak konsisten (cache scraper
+    // WA suka miss untuk URL baru / domain belum populer). Solusi
+    // reliable: pakai parameter Fonnte `url` untuk attach og-image.jpg
+    // — Fonnte download image dari kosbaiti.com, kirim sebagai media
+    // WA dengan teks pesan sebagai caption. Hasilnya RECIPIENT
+    // SELALU LIHAT LOGO di setiap pesan, tidak tergantung cache WA.
+    //
+    // Bisa di-off via env WA_INLINE_PREVIEW=false (mis. saat kuota
+    // bandwidth Fonnte terbatas, atau testing pesan polos).
+    const inlinePreview =
+      (process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false";
+    if (inlinePreview) {
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+      const previewUrl = `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`;
+      form.set("url", previewUrl);
+    }
+
     const res = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: { Authorization: token },
