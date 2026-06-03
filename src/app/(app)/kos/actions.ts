@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
-import { sendWhatsAppGeneric } from "@/lib/reminders";
+import { sendWAWithTemplate } from "@/lib/wa-templates";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -219,7 +219,24 @@ export async function assignTenant(
   }
   if (tenant.phone) {
     try {
-      await sendWhatsAppGeneric(tenant.phone, buildTenantAssignedWaText(welcomeParams));
+      await sendWAWithTemplate({
+        phone: tenant.phone,
+        text: buildTenantAssignedWaText(welcomeParams),
+        template: {
+          name: "tenant_assigned",
+          params: [
+            tenant.name,
+            room.name,
+            room.kos.name,
+            startDate.toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            }),
+            "Rp " + room.monthlyPrice.toLocaleString("id-ID"),
+          ],
+        },
+      });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[assignTenantToRoom] welcome WA gagal:", e);

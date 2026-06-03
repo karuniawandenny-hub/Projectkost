@@ -265,6 +265,56 @@ export async function sendKosBaitiTemplate(
 }
 
 /**
+ * Helper terpusat untuk kirim pesan WA dengan dual-mode routing:
+ *
+ *  - OTP_MODE=cloud + template diset → kirim via Meta Cloud API
+ *    template (preview card / image header muncul reliable).
+ *  - OTP_MODE=fonnte / dev / default → kirim text via gateway lama
+ *    (Fonnte text-only, atau dev log).
+ *
+ * Caller cukup panggil sekali dengan keduanya — sistem auto-route.
+ *
+ * Migration story:
+ *  - Sebelum Anda finish setup Meta: tetap pakai mode fonnte, text saja.
+ *  - Setelah Meta setup + template approved + OTP_MODE=cloud di Railway:
+ *    semua caller otomatis switch ke template, preview muncul.
+ *  - Mau rollback ke Fonnte? Cukup OTP_MODE=fonnte. Code unchanged.
+ */
+export async function sendWAWithTemplate(opts: {
+  /** Nomor recipient (format +62... atau 628...). */
+  phone: string;
+  /** Fallback text untuk mode fonnte/dev. */
+  text: string;
+  /** Template info untuk mode cloud. Kalau tidak diset di cloud mode, fallback ke text via sendFreeText (cuma jalan di 24h session). */
+  template?: {
+    name: keyof typeof TEMPLATES;
+    params: string[];
+  };
+}): Promise<void> {
+  const { sendWhatsAppGeneric } = await import("./reminders");
+  const mode = (process.env.OTP_MODE ?? "dev").toLowerCase();
+
+  if (mode === "cloud" && opts.template) {
+    try {
+      await sendKosBaitiTemplate(opts.phone, opts.template.name, opts.template.params);
+      return;
+    } catch (e) {
+      // Cloud gagal (template belum approved? token expired?) — fallback
+      // ke text via sendWhatsAppGeneric supaya tenant tetap dapat info.
+      // eslint-disable-next-line no-console
+      console.error(
+        `[wa-route][cloud-fail-fallback-text] template=${opts.template.name}:`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+
+  // Default path: text via fonnte/dev/generic (atau cloud free-text kalau
+  // mode=cloud tapi template tidak disediakan).
+  await sendWhatsAppGeneric(opts.phone, opts.text);
+}
+
+/**
  * Format JSON contoh untuk submit ke Meta Business Manager.
  * Bisa di-print via script untuk paste ke dashboard Meta saat create
  * template baru. Lihat docs/wa-cloud/templates.md.

@@ -15,7 +15,13 @@
  */
 
 import { prisma } from "./prisma";
-import { sendWhatsAppGeneric, sendEmailGeneric } from "./reminders";
+import { sendEmailGeneric } from "./reminders";
+import { sendWAWithTemplate } from "./wa-templates";
+
+const MONTH_NAMES_ID = [
+  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+];
 
 const MONTH_LABELS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -129,7 +135,25 @@ export async function sendPaymentVerifiedConfirmation(
     out.skipped.push({ channel: "WA", reason: "tenant tidak punya nomor HP" });
   } else {
     try {
-      await sendWhatsAppGeneric(tenant.phone, body);
+      await sendWAWithTemplate({
+        phone: tenant.phone,
+        text: body,
+        template: {
+          name: "payment_verified",
+          params: [
+            tenant.name,
+            `${MONTH_NAMES_ID[payment.periodMonth - 1]} ${payment.periodYear}`,
+            "Rp " + payment.amount.toLocaleString("id-ID"),
+            (payment.reviewedAt ?? new Date()).toLocaleString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          ],
+        },
+      });
       await prisma.reminderLog.create({
         data: { paymentId, type: "CONFIRM", channel: "WA" },
       });

@@ -331,7 +331,45 @@ export async function processReminders(): Promise<ProcessResult> {
     // 3) WhatsApp (kalau ada, dan tidak dalam quiet hours).
     if (!alreadyH.has("WA") && tenant.phone && !waBlockedByQuietHours) {
       try {
-        await sendWhatsAppGeneric(tenant.phone, body);
+        // Pakai sendWAWithTemplate supaya kalau OTP_MODE=cloud,
+        // otomatis kirim via template (preview card muncul reliable).
+        // Mode fonnte / dev tetap pakai text body original via fallback.
+        const { sendWAWithTemplate } = await import("./wa-templates");
+        const tplMap = {
+          H7: {
+            name: "payment_reminder_h7" as const,
+            params: [
+              tenant.name,
+              periodLabel,
+              p.tenancy.room.kos.name,
+              p.tenancy.room.name,
+              amountFmt,
+              dueStr,
+            ],
+          },
+          H3: {
+            name: "payment_reminder_h3" as const,
+            params: [tenant.name, periodLabel, amountFmt, dueStr],
+          },
+          H1: {
+            name: "payment_reminder_h1" as const,
+            params: [tenant.name, periodLabel, amountFmt],
+          },
+          OVERDUE: {
+            name: "payment_overdue" as const,
+            params: [
+              tenant.name,
+              periodLabel,
+              String(Math.abs(dayDiff)),
+              amountFmt,
+            ],
+          },
+        };
+        await sendWAWithTemplate({
+          phone: tenant.phone,
+          text: body,
+          template: tplMap[type],
+        });
         await prisma.reminderLog.create({
           data: { paymentId: p.id, type, channel: "WA" },
         });
@@ -418,7 +456,23 @@ export async function processReminders(): Promise<ProcessResult> {
     // WA (skip kalau quiet hours)
     if (owner.phone && !waBlockedByQuietHours) {
       try {
-        await sendWhatsAppGeneric(owner.phone, body);
+        const { sendWAWithTemplate } = await import("./wa-templates");
+        await sendWAWithTemplate({
+          phone: owner.phone,
+          text: body,
+          template: {
+            name: "maintenance_reminder_owner",
+            params: [
+              owner.name.split(/\s+/)[0],
+              horizon,
+              m.title,
+              scope === "Fasilitas kos"
+                ? `${m.kos.name} (fasilitas kos)`
+                : `${m.kos.name} - ${scope}`,
+              dueStr,
+            ],
+          },
+        });
         if ((process.env.WA_ENABLED ?? "true").toLowerCase() !== "false") {
           await new Promise((r) =>
             setTimeout(r, 5000 + Math.floor(Math.random() * 10000))

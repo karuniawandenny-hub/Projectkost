@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
-import { sendWhatsAppGeneric } from "@/lib/reminders";
+import { sendWAWithTemplate } from "@/lib/wa-templates";
 import { sendComplaintResolvedEmail } from "@/lib/email";
 import { syncCorrectiveFromComplaint } from "../maintenance/actions";
 
@@ -189,7 +189,18 @@ export async function replyComplaint(
         `— Kos Baiti`
       );
       try {
-        await sendWhatsAppGeneric(tenant.phone, lines.join("\n"));
+        await sendWAWithTemplate({
+          phone: tenant.phone,
+          text: lines.join("\n"),
+          template: {
+            name: "complaint_resolved",
+            params: [
+              tenant.name,
+              complaint.title,
+              finalReply ?? "(tidak ada catatan tambahan)",
+            ],
+          },
+        });
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("[complaint-resolved][wa] gagal:", e);

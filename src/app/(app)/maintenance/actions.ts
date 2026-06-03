@@ -6,7 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile, deleteUploadsByUrls } from "@/lib/upload";
 import { notify } from "@/lib/notify";
-import { sendWhatsAppGeneric, sendEmailGeneric } from "@/lib/reminders";
+import { sendEmailGeneric } from "@/lib/reminders";
+import { sendWAWithTemplate } from "@/lib/wa-templates";
 import {
   formatDateID,
   nextScheduledDate,
@@ -107,7 +108,27 @@ async function notifyAffectedTenant(
   // 2. WA (best-effort)
   if (tenant.phone) {
     try {
-      await sendWhatsAppGeneric(tenant.phone, waBody);
+      // Untuk Cloud API: hanya event SCHEDULED yang punya template
+      // (maintenance_notify_tenant). Untuk IN_PROGRESS/COMPLETED tidak
+      // ada template — fallback ke text via sendWAWithTemplate yang
+      // route ke sendWhatsAppGeneric kalau template kosong.
+      const cloudTemplate =
+        event === "SCHEDULED"
+          ? {
+              name: "maintenance_notify_tenant" as const,
+              params: [
+                tenant.name,
+                m.title,
+                `${m.kos.name} - ${m.room?.name ? `Kamar ${m.room.name}` : "Fasilitas kos"}`,
+                formatDateID(m.scheduledDate),
+              ],
+            }
+          : undefined;
+      await sendWAWithTemplate({
+        phone: tenant.phone,
+        text: waBody,
+        template: cloudTemplate,
+      });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[maint-notify-tenant][wa]", e);

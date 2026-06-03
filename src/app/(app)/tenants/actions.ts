@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
-import { sendWhatsAppGeneric } from "@/lib/reminders";
+import { sendWAWithTemplate } from "@/lib/wa-templates";
 import { deleteUploadByUrl, deleteUploadsByUrls } from "@/lib/upload";
 
 function originFromHeaders(): string {
@@ -126,7 +126,24 @@ export async function approveAndAssignTenant(
   }
   if (target.phone) {
     try {
-      await sendWhatsAppGeneric(target.phone, buildTenantAssignedWaText(welcomeParams));
+      await sendWAWithTemplate({
+        phone: target.phone,
+        text: buildTenantAssignedWaText(welcomeParams),
+        template: {
+          name: "tenant_assigned",
+          params: [
+            target.name,
+            room.name,
+            room.kos.name,
+            startDate.toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            }),
+            "Rp " + room.monthlyPrice.toLocaleString("id-ID"),
+          ],
+        },
+      });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[approveAndAssignTenant] welcome WA gagal:", e);
