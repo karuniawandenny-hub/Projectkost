@@ -563,26 +563,32 @@ async function sendEmailGeneric(
 
 
 /**
- * Tempel call-to-action + link aplikasi di paling bawah pesan WA.
- * - Baris CTA: ajak penerima simpan nomor pengirim supaya pesan
- *   berikutnya tidak masuk spam / unknown.
- * - Baris URL: shortcut buka aplikasi.
+ * Tempel link aplikasi di ATAS pesan + CTA simpan nomor di BAWAH.
  *
- * Idempotent: kalau pesan sudah berisi URL ini, tidak di-append ulang.
- * URL diambil dari NEXT_PUBLIC_SITE_URL supaya konsisten dengan domain
- * di metadata (OG image, canonical, dst).
+ * Kenapa URL di atas:
+ *  WhatsApp render preview card untuk URL yang muncul di awal pesan.
+ *  Kalau URL di akhir, WA sering skip render preview (terutama untuk
+ *  pesan dari WA Business API / gateway Fonnte). Pindah URL ke baris
+ *  pertama bikin preview card kepala (logo + judul + deskripsi) konsisten
+ *  muncul di semua client penerima.
  *
- * Normalisasi defensif: kalau env diset ke apex `https://kosbaiti.com`
- * (tanpa www), paksa jadi `https://www.kosbaiti.com` — domain canonical
- * Railway terdaftar dengan www, apex tidak ter-handle Railway & kasih
- * 403 ke scraper/preview.
+ * Format final:
+ *    https://www.kosbaiti.com         ← URL di baris pertama → preview
+ *                                       fire reliably
+ *    {body pesan asli}                ← greeting + body + sign-off
+ *    Simpan nomor ini agar ...        ← CTA di bawah (tanpa URL ganda)
+ *
+ * Idempotent: kalau pesan sudah berisi URL (mis. dipanggil ulang
+ * karena retry), tidak akan double.
+ *
+ * Normalisasi defensif: env diset apex tanpa www → paksa jadi www.
  */
 export function appendWaSignature(message: string): string {
   let url = process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
   url = url.replace(/^https?:\/\/kosbaiti\.com/i, "https://www.kosbaiti.com");
   if (message.includes(url)) return message;
   const cta = "Simpan nomor ini agar update dari Kos Baiti tidak terlewat.";
-  return `${message.trimEnd()}\n\n${cta}\n${url}`;
+  return `${url}\n\n${message.trimEnd()}\n\n${cta}`;
 }
 
 export { sendWhatsAppGeneric, sendEmailGeneric };
