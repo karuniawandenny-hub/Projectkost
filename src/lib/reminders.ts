@@ -460,10 +460,9 @@ export async function processReminders(): Promise<ProcessResult> {
 }
 
 /**
- * Cache bytes og-image.jpg di memory supaya tidak baca berulang dari
- * disk setiap kirim WA. Lazy-load saat pertama dipakai, expire setelah
- * 1 jam supaya kalau image di-update (mis. ganti logo), perubahan
- * ke-pickup tanpa restart container.
+ * Cache bytes wa-logo.jpg (800x800 versi khusus WhatsApp media — bukan
+ * og-image.jpg yang dipakai untuk browser tab/link preview). Cache di
+ * memory 1 jam supaya tidak baca disk berulang.
  */
 let cachedLogoBytes: { bytes: ArrayBuffer; loadedAt: number } | null = null;
 const LOGO_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -473,22 +472,13 @@ async function getLogoBytes(): Promise<ArrayBuffer | null> {
     return cachedLogoBytes.bytes;
   }
 
-  // === Strategy 1: Baca file langsung dari local filesystem ===
-  // Di container produksi (Railway/Docker), og-image.jpg ada di
-  // /app/public/og-image.jpg (dicopy oleh Dockerfile).
-  //
-  // Cara ini SANGAT preferable dibanding fetch via HTTPS karena:
-  //  - Container Railway TIDAK BISA fetch URL eksternal-nya sendiri
-  //    (Docker loopback DNS issue: DNS resolve ke IP Railway, lalu
-  //    edge proxy refuse koneksi inbound dari container yang sama).
-  //  - Tanpa network call: lebih cepat, no timeout, no DNS issue.
-  //  - Tidak tergantung NEXT_PUBLIC_SITE_URL benar atau tidak.
+  // Strategy 1: baca dari local fs (cara paling reliable, atasi Docker
+  // loopback DNS issue di Railway/cloud).
   try {
     const { readFile } = await import("fs/promises");
     const path = await import("path");
-    const localPath = path.join(process.cwd(), "public", "og-image.jpg");
+    const localPath = path.join(process.cwd(), "public", "wa-logo.jpg");
     const buffer = await readFile(localPath);
-    // Convert Buffer → ArrayBuffer (Blob membutuhkan ArrayBuffer).
     const ab = buffer.buffer.slice(
       buffer.byteOffset,
       buffer.byteOffset + buffer.byteLength
@@ -502,35 +492,8 @@ async function getLogoBytes(): Promise<ArrayBuffer | null> {
   } catch (localErr) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[wa][logo-local-fail] ${localErr instanceof Error ? localErr.message : localErr} — coba fallback HTTP fetch`
+      `[wa][logo-local-fail] ${localErr instanceof Error ? localErr.message : localErr}`
     );
-  }
-
-  // === Strategy 2 (fallback): fetch via HTTPS ===
-  // Mode ini cuma jalan kalau env / network memungkinkan. Berguna untuk
-  // dev mode (run via `next dev`, working dir mungkin lain) atau kalau
-  // suatu saat image di-host CDN eksternal.
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
-  const imgUrl = `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`;
-  try {
-    // eslint-disable-next-line no-console
-    console.log(`[wa][logo-http-fetch] ${imgUrl}`);
-    const ctrl = AbortSignal.timeout(8000);
-    const resp = await fetch(imgUrl, { signal: ctrl });
-    if (!resp.ok) {
-      // eslint-disable-next-line no-console
-      console.error(`[wa][logo-http-fetch-fail] HTTP ${resp.status}`);
-      return null;
-    }
-    const bytes = await resp.arrayBuffer();
-    cachedLogoBytes = { bytes, loadedAt: Date.now() };
-    // eslint-disable-next-line no-console
-    console.log(`[wa][logo-http-cached] ${bytes.byteLength} bytes`);
-    return bytes;
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(`[wa][logo-http-fetch-error]`, e);
     return null;
   }
 }
@@ -561,22 +524,33 @@ export async function fonnteSend(
   if (inlinePreview) {
     const imgBytes = await getLogoBytes();
     if (imgBytes) {
+      // STRATEGY: kirim sebagai multipart dengan field `file` (Fonnte
+      // documented param untuk upload media).
+      //
+      // Investigasi sebelumnya: Fonnte free trial dan Fonnte Lite paid
+      // SAMA-SAMA accept request (status:true, quota deduct) tapi
+      // tidak forward media ke WhatsApp. Recipient cuma terima text.
+      //
+      // Hipotesis: Fonnte's `file` parameter butuh struktur multipart
+      // yang spesifik. Atau image dimensions <800px di-reject di sisi
+      // WhatsApp. Sekarang pakai wa-logo.jpg 800x800 (vs og-image.jpg
+      // 256x256 sebelumnya) supaya size cukup untuk WA media spec.
       const fd = new FormData();
       fd.append("target", target);
-      // Fonnte: saat ada file, beberapa versi pakai `caption` bukan `message`.
-      // Append KEDUANYA untuk safety — Fonnte versi mana pun ke-cover.
+      // SINGLE field name untuk caption supaya tidak ada konflik.
+      // Fonnte docs: saat sending file, `message` jadi caption.
       fd.append("message", message);
-      fd.append("caption", message);
       fd.append("countryCode", "62");
       fd.append(
         "file",
         new Blob([imgBytes], { type: "image/jpeg" }),
         "kos-baiti-logo.jpg"
       );
-      mode_used = "multipart-file";
+      fd.append("filename", "kos-baiti-logo.jpg");
+      mode_used = "multipart-file-800";
       // eslint-disable-next-line no-console
       console.log(
-        `[wa][fonnte-${mode_used}] ${target} (${imgBytes.byteLength}B img + ${message.length} chars caption)`
+        `[wa][fonnte-${mode_used}] ${target} (${imgBytes.byteLength}B img 800x800 + ${message.length} chars caption)`
       );
       res = await fetch("https://api.fonnte.com/send", {
         method: "POST",
