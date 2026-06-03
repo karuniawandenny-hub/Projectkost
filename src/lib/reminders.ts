@@ -518,21 +518,26 @@ export async function fonnteSend(
     (process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false";
 
   let res: Response;
+  let mode_used: string;
   if (inlinePreview) {
     const imgBytes = await getLogoBytes();
     if (imgBytes) {
       const fd = new FormData();
       fd.append("target", target);
+      // Fonnte: saat ada file, beberapa versi pakai `caption` bukan `message`.
+      // Append KEDUANYA untuk safety — Fonnte versi mana pun ke-cover.
       fd.append("message", message);
+      fd.append("caption", message);
       fd.append("countryCode", "62");
       fd.append(
         "file",
         new Blob([imgBytes], { type: "image/jpeg" }),
         "kos-baiti-logo.jpg"
       );
+      mode_used = "multipart-file";
       // eslint-disable-next-line no-console
       console.log(
-        `[wa][fonnte-media] ${target} (${imgBytes.byteLength}B img + ${message.length} chars caption)`
+        `[wa][fonnte-${mode_used}] ${target} (${imgBytes.byteLength}B img + ${message.length} chars caption)`
       );
       res = await fetch("https://api.fonnte.com/send", {
         method: "POST",
@@ -540,8 +545,9 @@ export async function fonnteSend(
         body: fd,
       });
     } else {
+      mode_used = "fallback-text-no-image";
       // eslint-disable-next-line no-console
-      console.warn(`[wa][fonnte-fallback-text] image gagal, kirim text-only`);
+      console.warn(`[wa][fonnte-${mode_used}] image gagal, kirim text-only`);
       const form = new URLSearchParams();
       form.set("target", target);
       form.set("message", message);
@@ -553,6 +559,7 @@ export async function fonnteSend(
       });
     }
   } else {
+    mode_used = "text-only-explicit";
     const form = new URLSearchParams();
     form.set("target", target);
     form.set("message", message);
@@ -565,8 +572,11 @@ export async function fonnteSend(
   }
 
   const txt = await res.text().catch(() => "");
+  // Log FULL Fonnte response untuk diagnosa — tampak di Railway logs.
+  // eslint-disable-next-line no-console
+  console.log(`[wa][fonnte-response] mode=${mode_used} http=${res.status} body=${txt.slice(0, 400)}`);
   if (!res.ok) throw new Error(`Fonnte HTTP ${res.status}: ${txt}`);
-  let parsed: { status?: boolean; reason?: string; detail?: string } = {};
+  let parsed: { status?: boolean; reason?: string; detail?: string; id?: number[] } = {};
   try {
     parsed = JSON.parse(txt);
   } catch {
