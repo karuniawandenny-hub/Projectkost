@@ -5,6 +5,7 @@ import {
   processReminders,
   buildReminderMessage,
   appendWaSignature,
+  fonnteSend,
   type ReminderType,
 } from "@/lib/reminders";
 import { normalizePhone } from "@/lib/phone";
@@ -283,46 +284,18 @@ export async function previewReminderAction(
     const token = process.env.WA_GATEWAY_TOKEN;
     if (!token) return { ok: false, message: "WA_GATEWAY_TOKEN belum diset." };
     try {
-      const target = normalized.startsWith("+") ? normalized.slice(1) : normalized;
-      const form = new URLSearchParams();
-      form.set("target", target);
-      form.set("message", previewBody);
-      form.set("countryCode", "62");
-      // Sertakan og-image untuk preview reliable (lihat sendWhatsAppGeneric)
-      if ((process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false") {
-        const siteUrl =
-          process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
-        form.set("url", `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`);
-      }
-      const res = await fetch("https://api.fonnte.com/send", {
-        method: "POST",
-        headers: { Authorization: token },
-        body: form,
-      });
-      const txt = await res.text().catch(() => "");
-      if (!res.ok) {
-        return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
-      }
-      let parsed: { status?: boolean; reason?: string } = {};
-      try {
-        parsed = JSON.parse(txt);
-      } catch {
-        return { ok: false, message: "Response Fonnte bukan JSON.", detail: txt };
-      }
-      if (parsed.status === false) {
-        return {
-          ok: false,
-          message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
-          detail: txt,
-        };
-      }
+      await fonnteSend(token, normalized, previewBody);
       return {
         ok: true,
         message: `Preview ${type} diantrikan ke Fonnte untuk ${normalized}. Tunggu beberapa detik & cek WA penerima.`,
         detail: previewBody,
       };
     } catch (e) {
-      return { ok: false, message: e instanceof Error ? e.message : "Error" };
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "Error",
+        detail: e instanceof Error ? e.message : undefined,
+      };
     }
   }
   return { ok: false, message: `OTP_MODE='${mode}' belum didukung untuk preview.` };
@@ -436,48 +409,21 @@ export async function testWaAction(to: string): Promise<TestActionState> {
       );
     }
 
-    // ===== Send =====
+    // ===== Send (via helper terpusat — pakai multipart image+caption) =====
     try {
-      const form = new URLSearchParams();
-      form.set("target", target);
-      form.set("message", message);
-      form.set("countryCode", "62");
-      // Sertakan og-image untuk preview reliable (lihat sendWhatsAppGeneric)
-      if ((process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false") {
-        const siteUrl =
-          process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
-        form.set("url", `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`);
-      }
-      const res = await fetch("https://api.fonnte.com/send", {
-        method: "POST",
-        headers: { Authorization: token },
-        body: form,
-      });
-      const txt = await res.text().catch(() => "");
-      if (!res.ok) {
-        return { ok: false, message: `Fonnte HTTP ${res.status}`, detail: txt };
-      }
-      let parsed: { status?: boolean; reason?: string; id?: number[] } = {};
-      try {
-        parsed = JSON.parse(txt);
-      } catch {
-        return { ok: false, message: "Response Fonnte bukan JSON.", detail: txt };
-      }
-      if (parsed.status === false) {
-        return {
-          ok: false,
-          message: `Fonnte tolak: ${parsed.reason ?? "unknown"}`,
-          detail: diagnostics.join("\n") + "\n\nRaw send:\n" + txt,
-        };
-      }
-      diagnostics.push(`[Kirim] msgId=${parsed.id?.[0] ?? "?"}, state=queued`);
+      await fonnteSend(token, normalized, message);
+      diagnostics.push(`[Kirim] OK (mode image+caption kalau WA_INLINE_PREVIEW aktif)`);
       return {
         ok: true,
-        message: `✓ Pre-flight pass + dikirim ke ${normalized}. Cek WA penerima 5-30 detik. Kalau belum sampai juga, kemungkinan WA Meta drop diam-diam (akun probation) - penerima perlu save nomor sender dulu.`,
-        detail: diagnostics.join("\n") + "\n\nRaw send:\n" + txt,
+        message: `✓ Pre-flight pass + dikirim ke ${normalized}. Cek WA penerima 5-30 detik. Kalau preview logo tidak muncul, cek log Railway untuk pesan [wa][fonnte-media] vs [wa][fonnte-fallback-text].`,
+        detail: diagnostics.join("\n"),
       };
     } catch (e) {
-      return { ok: false, message: e instanceof Error ? e.message : "Error" };
+      return {
+        ok: false,
+        message: e instanceof Error ? e.message : "Error",
+        detail: diagnostics.join("\n"),
+      };
     }
   }
   // Generic gateway

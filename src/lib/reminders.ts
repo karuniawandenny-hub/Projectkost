@@ -459,6 +459,126 @@ export async function processReminders(): Promise<ProcessResult> {
   return result;
 }
 
+/**
+ * Cache bytes og-image.jpg di memory supaya tidak fetch berulang ke
+ * kosbaiti.com setiap kirim WA. Lazy-load saat pertama dipakai, expire
+ * setelah 1 jam supaya update logo (kalau ganti file) ke-pickup.
+ */
+let cachedLogoBytes: { bytes: ArrayBuffer; loadedAt: number } | null = null;
+const LOGO_CACHE_TTL_MS = 60 * 60 * 1000;
+
+async function getLogoBytes(): Promise<ArrayBuffer | null> {
+  if (cachedLogoBytes && Date.now() - cachedLogoBytes.loadedAt < LOGO_CACHE_TTL_MS) {
+    return cachedLogoBytes.bytes;
+  }
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+  const imgUrl = `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`;
+  try {
+    // eslint-disable-next-line no-console
+    console.log(`[wa][logo-fetch] ${imgUrl}`);
+    const ctrl = AbortSignal.timeout(8000);
+    const resp = await fetch(imgUrl, { signal: ctrl });
+    if (!resp.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`[wa][logo-fetch-fail] HTTP ${resp.status}`);
+      return null;
+    }
+    const bytes = await resp.arrayBuffer();
+    cachedLogoBytes = { bytes, loadedAt: Date.now() };
+    // eslint-disable-next-line no-console
+    console.log(`[wa][logo-cached] ${bytes.byteLength} bytes`);
+    return bytes;
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[wa][logo-fetch-error]`, e);
+    return null;
+  }
+}
+
+/**
+ * Helper terpusat: kirim 1 pesan via Fonnte. Pakai mode image+caption
+ * (multipart upload bytes og-image.jpg) kalau WA_INLINE_PREVIEW=true,
+ * fallback ke text-only kalau image gagal fetch atau env diset false.
+ *
+ * Throws kalau Fonnte tolak (HTTP error atau status:false di response).
+ * Caller wajib token sudah ada.
+ *
+ * Dipakai oleh sendWhatsAppGeneric + admin preview/test actions supaya
+ * semua pesan WA konsisten format-nya (selalu lihat logo kalau preview
+ * mode aktif).
+ */
+export async function fonnteSend(
+  token: string,
+  phone: string,
+  message: string
+): Promise<void> {
+  const target = phone.startsWith("+") ? phone.slice(1) : phone;
+  const inlinePreview =
+    (process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false";
+
+  let res: Response;
+  if (inlinePreview) {
+    const imgBytes = await getLogoBytes();
+    if (imgBytes) {
+      const fd = new FormData();
+      fd.append("target", target);
+      fd.append("message", message);
+      fd.append("countryCode", "62");
+      fd.append(
+        "file",
+        new Blob([imgBytes], { type: "image/jpeg" }),
+        "kos-baiti-logo.jpg"
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[wa][fonnte-media] ${target} (${imgBytes.byteLength}B img + ${message.length} chars caption)`
+      );
+      res = await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: { Authorization: token },
+        body: fd,
+      });
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(`[wa][fonnte-fallback-text] image gagal, kirim text-only`);
+      const form = new URLSearchParams();
+      form.set("target", target);
+      form.set("message", message);
+      form.set("countryCode", "62");
+      res = await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: { Authorization: token },
+        body: form,
+      });
+    }
+  } else {
+    const form = new URLSearchParams();
+    form.set("target", target);
+    form.set("message", message);
+    form.set("countryCode", "62");
+    res = await fetch("https://api.fonnte.com/send", {
+      method: "POST",
+      headers: { Authorization: token },
+      body: form,
+    });
+  }
+
+  const txt = await res.text().catch(() => "");
+  if (!res.ok) throw new Error(`Fonnte HTTP ${res.status}: ${txt}`);
+  let parsed: { status?: boolean; reason?: string; detail?: string } = {};
+  try {
+    parsed = JSON.parse(txt);
+  } catch {
+    throw new Error(`Fonnte response bukan JSON: ${txt.slice(0, 200)}`);
+  }
+  if (parsed.status === false) {
+    throw new Error(
+      `Fonnte gagal: ${parsed.reason ?? parsed.detail ?? "unknown"}`
+    );
+  }
+}
+
 async function sendWhatsAppGeneric(phone: string, message: string): Promise<void> {
   // Tempel signature URL aplikasi di paling bawah setiap pesan WA.
   // Idempotent — kalau pemanggil sudah pasang URL, tidak akan double.
@@ -481,51 +601,7 @@ async function sendWhatsAppGeneric(phone: string, message: string): Promise<void
   if (mode === "fonnte") {
     const token = process.env.WA_GATEWAY_TOKEN;
     if (!token) throw new Error("WA_GATEWAY_TOKEN belum diset");
-    const target = phone.startsWith("+") ? phone.slice(1) : phone;
-    const form = new URLSearchParams();
-    form.set("target", target);
-    form.set("message", message);
-    form.set("countryCode", "62");
-
-    // === Link preview reliable via mode image+caption ===
-    // WhatsApp text mode link preview tidak konsisten (cache scraper
-    // WA suka miss untuk URL baru / domain belum populer). Solusi
-    // reliable: pakai parameter Fonnte `url` untuk attach og-image.jpg
-    // — Fonnte download image dari kosbaiti.com, kirim sebagai media
-    // WA dengan teks pesan sebagai caption. Hasilnya RECIPIENT
-    // SELALU LIHAT LOGO di setiap pesan, tidak tergantung cache WA.
-    //
-    // Bisa di-off via env WA_INLINE_PREVIEW=false (mis. saat kuota
-    // bandwidth Fonnte terbatas, atau testing pesan polos).
-    const inlinePreview =
-      (process.env.WA_INLINE_PREVIEW ?? "true").toLowerCase() !== "false";
-    if (inlinePreview) {
-      const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
-      const previewUrl = `${siteUrl.replace(/\/+$/, "")}/og-image.jpg`;
-      form.set("url", previewUrl);
-    }
-
-    const res = await fetch("https://api.fonnte.com/send", {
-      method: "POST",
-      headers: { Authorization: token },
-      body: form,
-    });
-    const txt = await res.text().catch(() => "");
-    if (!res.ok) throw new Error(`Fonnte HTTP ${res.status}: ${txt}`);
-    // Fonnte selalu return HTTP 200 sekalipun gagal kirim. Status real
-    // ada di field `status` body JSON; reason di field `reason`.
-    let parsed: { status?: boolean; reason?: string; detail?: string } = {};
-    try {
-      parsed = JSON.parse(txt);
-    } catch {
-      throw new Error(`Fonnte response bukan JSON: ${txt.slice(0, 200)}`);
-    }
-    if (parsed.status === false) {
-      throw new Error(
-        `Fonnte gagal: ${parsed.reason ?? parsed.detail ?? "unknown"}`
-      );
-    }
+    await fonnteSend(token, phone, message);
     return;
   }
   // Generic gateway: POST JSON.
