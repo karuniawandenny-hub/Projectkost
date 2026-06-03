@@ -776,20 +776,20 @@ async function sendEmailGeneric(
 
 
 /**
- * Tempel link aplikasi di ATAS pesan + CTA simpan nomor di BAWAH.
+ * Tempel signature di paling BAWAH pesan WA:
+ *  - Baris CTA: ajak penerima simpan nomor pengirim
+ *  - Baris URL: shortcut buka aplikasi (signature line)
  *
- * Kenapa URL di atas:
- *  WhatsApp render preview card untuk URL yang muncul di awal pesan.
- *  Kalau URL di akhir, WA sering skip render preview (terutama untuk
- *  pesan dari WA Business API / gateway Fonnte). Pindah URL ke baris
- *  pertama bikin preview card kepala (logo + judul + deskripsi) konsisten
- *  muncul di semua client penerima.
+ * Catatan tentang link preview:
+ *  Karena pakai Fonnte (gateway tanpa native preview support), preview
+ *  card TIDAK muncul untuk URL di mana pun di pesan. URL di akhir
+ *  (sebagai signature) lebih natural dibaca, dan tetap clickable.
  *
  * Format final:
- *    https://www.kosbaiti.com         ← URL di baris pertama → preview
- *                                       fire reliably
  *    {body pesan asli}                ← greeting + body + sign-off
- *    Simpan nomor ini agar ...        ← CTA di bawah (tanpa URL ganda)
+ *
+ *    Simpan nomor ini agar ...        ← CTA simpan nomor
+ *    https://www.kosbaiti.com         ← URL signature di paling bawah
  *
  * Idempotent: kalau pesan sudah berisi URL (mis. dipanggil ulang
  * karena retry), tidak akan double.
@@ -801,7 +801,7 @@ export function appendWaSignature(message: string): string {
   url = url.replace(/^https?:\/\/kosbaiti\.com/i, "https://www.kosbaiti.com");
   if (message.includes(url)) return message;
   const cta = "Simpan nomor ini agar update dari Kos Baiti tidak terlewat.";
-  return `${url}\n\n${message.trimEnd()}\n\n${cta}`;
+  return `${message.trimEnd()}\n\n${cta}\n${url}`;
 }
 
 export { sendWhatsAppGeneric, sendEmailGeneric };
