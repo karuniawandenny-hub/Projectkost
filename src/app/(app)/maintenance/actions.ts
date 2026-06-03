@@ -6,10 +6,124 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { saveUploadedFile, deleteUploadsByUrls } from "@/lib/upload";
 import { notify } from "@/lib/notify";
+import { sendWhatsAppGeneric, sendEmailGeneric } from "@/lib/reminders";
 import {
+  formatDateID,
   nextScheduledDate,
   type MaintenanceStatus,
 } from "@/lib/maintenance";
+
+/**
+ * Kirim notif (in-app + WA + email) ke penghuni kamar yang terdampak.
+ * Best-effort: error per-channel ditelan (dicatat ke console) supaya
+ * gagal kirim notif tidak menggagalkan aksi maintenance.
+ *
+ * Aturan trigger:
+ *  - notifyTenant === true (flag dari form, default false)
+ *  - roomId set DAN kamar OCCUPIED (ada tenancy ACTIVE)
+ *  - event tertentu: SCHEDULED (saat create), IN_PROGRESS (saat mulai
+ *    kerja), atau COMPLETED (saat selesai)
+ */
+async function notifyAffectedTenant(
+  maintenanceId: string,
+  event: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED"
+) {
+  const m = await prisma.maintenance.findUnique({
+    where: { id: maintenanceId },
+    include: {
+      kos: { select: { name: true } },
+      room: {
+        include: {
+          tenancies: {
+            where: { status: "ACTIVE" },
+            include: {
+              tenant: { select: { id: true, name: true, email: true, phone: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!m) return;
+  if (!m.notifyTenant) return;
+  if (!m.room) return;
+  const active = m.room.tenancies[0];
+  if (!active) return;
+  const tenant = active.tenant;
+
+  let title: string;
+  let waBody: string;
+  let inAppMsg: string;
+  const scope = `${m.kos.name} • Kamar ${m.room.name}`;
+  const greeting = `Halo ${tenant.name.split(/\s+/)[0]},`;
+
+  if (event === "SCHEDULED") {
+    title = "Pemberitahuan jadwal perawatan";
+    inAppMsg = `Akan ada perawatan "${m.title}" pada ${formatDateID(m.scheduledDate)}. Akses kamar mungkin terbatas selama perawatan.`;
+    waBody =
+      `${greeting}\n\n` +
+      `Pemilik kos memberitahu bahwa akan ada perawatan kamar Anda.\n\n` +
+      `Judul: ${m.title}\n` +
+      `Kamar: ${scope}\n` +
+      `Tanggal rencana: ${formatDateID(m.scheduledDate)}\n\n` +
+      `Akses ke kamar mungkin terbatas selama perawatan berlangsung. ` +
+      `Mohon kerja samanya.\n\n— Kos Baiti`;
+  } else if (event === "IN_PROGRESS") {
+    title = "Perawatan kamar Anda sedang berlangsung";
+    inAppMsg = `Perawatan "${m.title}" sedang dikerjakan. Akses kamar mungkin terbatas.`;
+    waBody =
+      `${greeting}\n\n` +
+      `Pemilik kos memulai perawatan kamar Anda hari ini:\n\n` +
+      `Judul: ${m.title}\n` +
+      `Kamar: ${scope}\n\n` +
+      `Mohon maaf bila mengganggu kenyamanan. ` +
+      `Akses ke kamar mungkin terbatas selama perawatan berlangsung.\n\n— Kos Baiti`;
+  } else {
+    title = "Perawatan kamar Anda selesai";
+    inAppMsg = `Perawatan "${m.title}" sudah selesai. Terima kasih atas pengertiannya.`;
+    waBody =
+      `${greeting}\n\n` +
+      `Perawatan kamar Anda sudah selesai dikerjakan:\n\n` +
+      `Judul: ${m.title}\n` +
+      `Kamar: ${scope}\n` +
+      `Tanggal selesai: ${formatDateID(m.completedDate ?? new Date())}\n\n` +
+      `Terima kasih atas pengertiannya selama perawatan berlangsung.\n\n— Kos Baiti`;
+  }
+
+  // 1. in-app (selalu)
+  try {
+    await notify({
+      userId: tenant.id,
+      type: `MAINT_TENANT_${event}`,
+      title,
+      message: inAppMsg,
+      link: "/dashboard",
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[maint-notify-tenant][in-app]", e);
+  }
+
+  // 2. WA (best-effort)
+  if (tenant.phone) {
+    try {
+      await sendWhatsAppGeneric(tenant.phone, waBody);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[maint-notify-tenant][wa]", e);
+    }
+  }
+
+  // 3. Email (best-effort, format text saja)
+  if (tenant.email) {
+    try {
+      await sendEmailGeneric(tenant.email, title, waBody);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[maint-notify-tenant][email]", e);
+    }
+  }
+}
 
 export type MaintActionState = { error?: string; success?: string };
 
@@ -100,7 +214,10 @@ export async function createMaintenance(
     return { error: "Anda tidak punya akses ke kos/kamar tersebut." };
   }
 
-  await prisma.maintenance.create({
+  const notifyTenant =
+    formData.get("notifyTenant") === "on" && roomId !== null;
+
+  const created = await prisma.maintenance.create({
     data: {
       type,
       kosId,
@@ -110,8 +227,20 @@ export async function createMaintenance(
       scheduledDate,
       recurrenceMonths,
       status: "SCHEDULED",
+      notifyTenant,
     },
   });
+
+  // Notif ke penghuni kalau pemilik centang & ada penghuni aktif di
+  // kamar. Best-effort: error notif tidak menggagalkan create.
+  if (notifyTenant) {
+    try {
+      await notifyAffectedTenant(created.id, "SCHEDULED");
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[create-maintenance][notify]", e);
+    }
+  }
 
   revalidatePath("/maintenance");
   if (roomId) revalidatePath(`/kos/${kosId}`);
@@ -154,6 +283,15 @@ export async function setMaintenanceStatus(
     where: { id },
     data: { status: newStatus },
   });
+
+  if (newStatus === "IN_PROGRESS") {
+    try {
+      await notifyAffectedTenant(id, "IN_PROGRESS");
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[setStatus][notify]", e);
+    }
+  }
 
   revalidatePath("/maintenance");
   revalidatePath(`/maintenance/${id}`);
@@ -231,7 +369,16 @@ export async function completeMaintenance(
     },
   });
 
+  // Notif ke penghuni bahwa perawatan selesai (kalau flag aktif).
+  try {
+    await notifyAffectedTenant(id, "COMPLETED");
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[complete][notify]", e);
+  }
+
   // Auto-generate next occurrence kalau ini preventif berulang.
+  // Copy notifyTenant juga supaya konsisten dengan setting awal.
   if (m.type === "PREVENTIVE" && m.recurrenceMonths && m.recurrenceMonths > 0) {
     const next = nextScheduledDate(completedDate, m.recurrenceMonths);
     await prisma.maintenance.create({
@@ -245,6 +392,7 @@ export async function completeMaintenance(
         recurrenceMonths: m.recurrenceMonths,
         parentMaintenanceId: m.id,
         status: "SCHEDULED",
+        notifyTenant: m.notifyTenant,
       },
     });
   }

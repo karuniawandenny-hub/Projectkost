@@ -79,13 +79,20 @@ export default async function MaintenancePage({
         <div>
           <h1 className="text-2xl font-bold">Perawatan kos</h1>
           <p className="text-sm text-slate-600">
-            Catat jadwal perawatan preventif & lihat riwayat perbaikan korektif
-            dari komplain penghuni.
+            Catat jadwal perawatan preventif, perbaikan korektif manual, dan
+            riwayat dari komplain penghuni.
           </p>
         </div>
-        <Link href="/maintenance/new" className="btn-primary">
-          + Jadwal perawatan baru
-        </Link>
+        <div className="flex gap-2 flex-wrap">
+          <ExportButton
+            type={typeFilter}
+            status={statusFilter}
+            kosId={kosFilter}
+          />
+          <Link href="/maintenance/new" className="btn-primary">
+            + Catat perawatan baru
+          </Link>
+        </div>
       </div>
 
       {searchParams?.created && (
@@ -246,5 +253,44 @@ function FilterPill({
     >
       {children}
     </Link>
+  );
+}
+
+/**
+ * Tombol export CSV dengan rentang tanggal opsional. Pakai <a download>
+ * langsung supaya browser handle download tanpa JS — file ter-stream
+ * dari API route dengan Content-Disposition.
+ */
+function ExportButton({
+  type,
+  status,
+  kosId,
+}: {
+  type?: string;
+  status?: string;
+  kosId?: string;
+}) {
+  // Default rentang: 1 tahun terakhir supaya laporan tahunan default OK.
+  const now = new Date();
+  const yearAgo = new Date(now);
+  yearAgo.setFullYear(now.getFullYear() - 1);
+  const toIso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (status) params.set("status", status);
+  if (kosId) params.set("kosId", kosId);
+  params.set("from", toIso(yearAgo));
+  params.set("to", toIso(now));
+  const href = `/api/maintenance/export?${params.toString()}`;
+  return (
+    <a
+      href={href}
+      download
+      className="btn-secondary inline-flex items-center gap-1"
+      title="Download laporan biaya CSV (default: 1 tahun terakhir, mengikuti filter saat ini)"
+    >
+      📊 Export CSV
+    </a>
   );
 }

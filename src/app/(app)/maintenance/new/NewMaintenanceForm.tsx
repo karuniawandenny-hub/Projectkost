@@ -33,10 +33,12 @@ export function NewMaintenanceForm({ kosOptions }: { kosOptions: KosOpt[] }) {
   const [state, formAction] = useFormState(createMaintenance, initial);
   const [selectedKosId, setSelectedKosId] = useState(kosOptions[0]?.id ?? "");
   const [type, setType] = useState<"PREVENTIVE" | "CORRECTIVE">("PREVENTIVE");
+  const [selectedRoomId, setSelectedRoomId] = useState<string>("__none__");
   const rooms = useMemo(
     () => kosOptions.find((k) => k.id === selectedKosId)?.rooms ?? [],
     [selectedKosId, kosOptions]
   );
+  const showNotifyOption = selectedRoomId !== "__none__" && selectedRoomId !== "";
 
   return (
     <form action={formAction} className="card space-y-4">
@@ -110,7 +112,12 @@ export function NewMaintenanceForm({ kosOptions }: { kosOptions: KosOpt[] }) {
 
       <div>
         <label className="label">3. Cakupan</label>
-        <select name="roomId" className="input" defaultValue="__none__">
+        <select
+          name="roomId"
+          value={selectedRoomId}
+          onChange={(e) => setSelectedRoomId(e.target.value)}
+          className="input"
+        >
           <option value="__none__">
             Fasilitas kos (tidak terikat ke kamar tertentu)
           </option>
@@ -125,6 +132,30 @@ export function NewMaintenanceForm({ kosOptions }: { kosOptions: KosOpt[] }) {
           untuk barang bersama (pompa air, taman, dll).
         </p>
       </div>
+
+      {showNotifyOption && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              name="notifyTenant"
+              className="mt-0.5 h-4 w-4 rounded"
+            />
+            <span>
+              <span className="font-semibold text-amber-900">
+                Beritahu penghuni kamar ini
+              </span>
+              <span className="block text-xs text-amber-800 mt-0.5">
+                Sistem akan kirim notifikasi (in-app + WA + email) ke penghuni:
+                saat jadwal dibuat, saat perawatan mulai dikerjakan, dan saat
+                selesai. Centang kalau akses kamar terganggu (mis. perbaikan
+                AC, ganti pintu, cat ulang). Lewati untuk perawatan kecil yang
+                tidak mengganggu.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
 
       <div>
         <label className="label">4. Judul perawatan</label>

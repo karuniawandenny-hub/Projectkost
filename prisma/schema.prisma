@@ -217,6 +217,12 @@ model Maintenance {
   // Korektif linkage
   complaintId     String?  @unique // 1:1 dengan Complaint
 
+  // Apakah penghuni kamar yang terdampak perlu diberitahu (perawatan
+  // mengganggu akses kamar mereka). Default false — kebanyakan perawatan
+  // tidak perlu disampaikan ke penghuni. Hanya berlaku kalau roomId set
+  // dan kamar terisi (status OCCUPIED).
+  notifyTenant    Boolean  @default(false)
+
   // Reminder log per-jenis (anti-duplikat WA/email)
   reminderH7Sent  Boolean  @default(false)
   reminderH3Sent  Boolean  @default(false)
