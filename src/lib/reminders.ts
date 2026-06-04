@@ -601,6 +601,9 @@ export async function fonnteSend(
       // Fonnte docs: saat sending file, `message` jadi caption.
       fd.append("message", message);
       fd.append("countryCode", "62");
+      // Aktifkan link preview card di WA client (default Fonnte memang
+      // true tapi explicit lebih reliable di plan free trial).
+      fd.append("preview", "true");
       fd.append(
         "file",
         new Blob([imgBytes], { type: "image/jpeg" }),
@@ -625,6 +628,7 @@ export async function fonnteSend(
       form.set("target", target);
       form.set("message", message);
       form.set("countryCode", "62");
+      form.set("preview", "true");
       res = await fetch("https://api.fonnte.com/send", {
         method: "POST",
         headers: { Authorization: token },
@@ -637,6 +641,7 @@ export async function fonnteSend(
     form.set("target", target);
     form.set("message", message);
     form.set("countryCode", "62");
+    form.set("preview", "true");
     res = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: { Authorization: token },
@@ -781,9 +786,11 @@ async function sendEmailGeneric(
  *  - Baris URL: shortcut buka aplikasi (signature line)
  *
  * Catatan tentang link preview:
- *  Karena pakai Fonnte (gateway tanpa native preview support), preview
- *  card TIDAK muncul untuk URL di mana pun di pesan. URL di akhir
- *  (sebagai signature) lebih natural dibaca, dan tetap clickable.
+ *  Fonnte support param `preview=true` (dikirim di fonnteSend()) yang
+ *  meneruskan URL apa adanya ke WhatsApp. WA client lalu fetch OG meta
+ *  tags dari URL untuk render preview card. Pastikan OG image PERTAMA
+ *  di src/app/layout.tsx adalah versi 1200x630 — kalau image pertama
+ *  <300px, WA tolak preview dan link tampil polos.
  *
  * Format final:
  *    {body pesan asli}                ← greeting + body + sign-off

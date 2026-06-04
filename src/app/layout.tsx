@@ -31,19 +31,22 @@ export const metadata: Metadata = {
     title: "Kos Baiti — Satu aplikasi, semua terkoneksi",
     description:
       "Forum komunikasi pemilik & penghuni kos: data penghuni, pembayaran, dan komplain — semua tercatat rapi.",
+    // WA / FB crawler pakai image PERTAMA sebagai preview card.
+    // Wajib ≥1200x630 supaya preview di-render — kalau image pertama
+    // <300px (mis. 256x256), WhatsApp tolak dan link tampil polos.
     images: [
-      {
-        url: "/og-image.jpg",
-        width: 256,
-        height: 256,
-        alt: "Logo Kos Baiti",
-        type: "image/jpeg",
-      },
       {
         url: "/og-image-wide.jpg",
         width: 1200,
         height: 630,
         alt: "Kos Baiti — Forum Komunikasi Pemilik & Penghuni Kos",
+        type: "image/jpeg",
+      },
+      {
+        url: "/og-image.jpg",
+        width: 256,
+        height: 256,
+        alt: "Logo Kos Baiti",
         type: "image/jpeg",
       },
     ],
