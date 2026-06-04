@@ -8,6 +8,7 @@ import {
   previewReminderAction,
   checkFonnteDeviceAction,
   validateWaNumberAction,
+  refreshWaLinkPreviewAction,
   type TestActionState,
 } from "./actions";
 
@@ -40,12 +41,26 @@ export function TestActions() {
   const [previewState, setPreviewState] = useState<TestActionState | null>(null);
   const [deviceState, setDeviceState] = useState<TestActionState | null>(null);
   const [validateState, setValidateState] = useState<TestActionState | null>(null);
+  const [previewCacheState, setPreviewCacheState] =
+    useState<TestActionState | null>(null);
   const [validateTo, setValidateTo] = useState("");
   const [previewTo, setPreviewTo] = useState("");
   const [previewType, setPreviewType] = useState<ReminderType>("H7");
   const [emailTo, setEmailTo] = useState("");
   const [waTo, setWaTo] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+
+  async function runRefreshPreviewCache() {
+    setLoading("previewCache");
+    const result = await refreshWaLinkPreviewAction();
+    setPreviewCacheState(result);
+    // Kalau cek OG metadata sukses, buka FB Debugger di tab baru
+    // supaya admin tinggal klik "Scrape Again" di sana.
+    if (result.ok && result.debuggerUrl) {
+      window.open(result.debuggerUrl, "_blank", "noopener,noreferrer");
+    }
+    setLoading(null);
+  }
 
   async function runCheckDevice() {
     setLoading("device");
@@ -232,13 +247,39 @@ export function TestActions() {
         <ResultBox result={deviceState} />
       </div>
 
+      {/* Refresh WA link preview cache */}
+      <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+        <div className="text-xs font-medium text-slate-700">
+          2. Refresh WA Link Preview Cache
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Kalau link <code>kosbaiti.com</code> di pesan WA tidak menampilkan
+          preview card (thumbnail + judul), kemungkinan WhatsApp cache versi
+          lama tanpa preview. Tombol ini cek OG metadata live + buka tab FB
+          Sharing Debugger. Di sana klik <strong>"Scrape Again"</strong> 2x
+          untuk paksa Meta refresh — cache WA akan ikut update dalam
+          beberapa menit.
+        </p>
+        <button
+          type="button"
+          onClick={runRefreshPreviewCache}
+          disabled={loading === "previewCache"}
+          className="btn-primary mt-2 w-full"
+        >
+          {loading === "previewCache"
+            ? "Cek OG metadata…"
+            : "Cek & buka FB Debugger"}
+        </button>
+        <ResultBox result={previewCacheState} />
+      </div>
+
       {/* Validate WA number */}
       <form
         onSubmit={runValidate}
         className="mt-3 rounded-md border border-slate-200 bg-white p-3"
       >
         <div className="text-xs font-medium text-slate-700">
-          2. Validasi nomor target di WA
+          3. Validasi nomor target di WA
         </div>
         <p className="mt-1 text-xs text-slate-500">
           Cek apakah nomor target benar-benar terdaftar di WhatsApp dan

@@ -238,6 +238,119 @@ export async function validateWaNumberAction(
   }
 }
 
+/**
+ * Cek OG metadata yang dilihat crawler WA + sediakan link FB Sharing
+ * Debugger supaya admin bisa force Meta refresh cache.
+ *
+ * Konteks: WhatsApp cache OG metadata per URL sangat agresif (bisa
+ * berminggu-minggu). Kalau pernah kirim URL tanpa preview yang valid,
+ * recipient akan terus melihat versi cached tanpa preview meski OG
+ * tags sudah diperbaiki di layout.tsx.
+ *
+ * Aksi ini:
+ *  1. Fetch homepage pakai User-Agent facebookexternalhit (sama dengan
+ *     yang dipakai WA & FB crawler).
+ *  2. Parse meta og:image / og:title / og:description.
+ *  3. HEAD check ke og:image untuk memastikan publik & cukup besar.
+ *  4. Generate URL FB Sharing Debugger — caller (client) akan auto-
+ *     open di tab baru supaya admin tinggal klik "Scrape Again".
+ */
+export async function refreshWaLinkPreviewAction(): Promise<
+  TestActionState & { debuggerUrl?: string }
+> {
+  await requireAdmin();
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+
+  try {
+    const res = await fetch(siteUrl, {
+      headers: {
+        // Identifikasi sebagai FB/WA crawler — beberapa server beda
+        // response untuk bot vs browser (mis. SSR vs CSR).
+        "User-Agent": "facebookexternalhit/1.1 (kosbaiti-admin-check)",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        message: `${siteUrl} balas HTTP ${res.status}. URL tidak bisa diakses publik?`,
+      };
+    }
+    const html = await res.text();
+
+    const pick = (prop: string): string | undefined => {
+      // Cocokkan kedua urutan atribut: property dulu atau content dulu.
+      const a = new RegExp(
+        `<meta\\s+property=["']${prop}["']\\s+content=["']([^"']+)["']`,
+        "i"
+      ).exec(html);
+      if (a) return a[1];
+      const b = new RegExp(
+        `<meta\\s+content=["']([^"']+)["']\\s+property=["']${prop}["']`,
+        "i"
+      ).exec(html);
+      return b?.[1];
+    };
+
+    const ogImage = pick("og:image");
+    const ogTitle = pick("og:title");
+    const ogDesc = pick("og:description");
+
+    if (!ogImage) {
+      return {
+        ok: false,
+        message:
+          "Meta og:image tidak ditemukan di HTML. Cek src/app/layout.tsx atau pastikan deploy terbaru sudah live.",
+      };
+    }
+
+    // HEAD check og:image — kalau 404 / bukan image / terlalu kecil,
+    // WhatsApp akan tolak preview.
+    let imgInfo = `OG image: ${ogImage}`;
+    let imgOk = false;
+    try {
+      const absoluteImg = ogImage.startsWith("http")
+        ? ogImage
+        : new URL(ogImage, siteUrl).toString();
+      const imgRes = await fetch(absoluteImg, { method: "HEAD" });
+      const size = imgRes.headers.get("content-length");
+      const type = imgRes.headers.get("content-type") ?? "?";
+      const sizeKb = size ? `${Math.round(Number(size) / 1024)}KB` : "?";
+      imgInfo = `OG image: ${absoluteImg}\n  HTTP ${imgRes.status} • ${type} • ${sizeKb}`;
+      imgOk = imgRes.ok && type.startsWith("image/");
+    } catch (e) {
+      imgInfo += `\n  (HEAD check gagal: ${e instanceof Error ? e.message : "?"})`;
+    }
+
+    const debuggerUrl = `https://developers.facebook.com/tools/debug/?q=${encodeURIComponent(siteUrl)}`;
+
+    return {
+      ok: imgOk,
+      message: imgOk
+        ? `OG metadata OK. Tab FB Debugger akan terbuka — klik "Scrape Again" 2x di sana untuk paksa Meta + WA refresh cache.`
+        : `OG image tidak accessible / bukan image valid. Cek deploy & path file.`,
+      detail: [
+        `Site URL : ${siteUrl}`,
+        `og:title : ${ogTitle ?? "(missing)"}`,
+        `og:desc  : ${ogDesc ?? "(missing)"}`,
+        imgInfo,
+        ``,
+        `Setelah "Scrape Again" di FB Debugger, test kirim URL ke nomor`,
+        `BARU (yang belum pernah terima URL ini) untuk verify preview muncul.`,
+        `Trik bust cache per-nomor: tambah query string unik:`,
+        `${siteUrl}?v=${Date.now()}`,
+      ].join("\n"),
+      debuggerUrl,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Error",
+    };
+  }
+}
+
 export async function testReminderAction(): Promise<TestActionState> {
   await requireAdmin();
   try {
