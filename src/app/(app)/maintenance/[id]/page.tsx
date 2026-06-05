@@ -19,9 +19,6 @@ export default async function MaintenanceDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
 
   const m = await prisma.maintenance.findUnique({
     where: { id: params.id },
@@ -41,9 +38,31 @@ export default async function MaintenanceDetailPage({
     },
   });
   if (!m) notFound();
-  if (user.role === "OWNER" && m.kos.ownerId !== user.id) {
+
+  // Permission:
+  //  - ADMIN: bebas.
+  //  - OWNER: hanya kos miliknya.
+  //  - TENANT: hanya kalau ini perawatan untuk kamar yang sedang
+  //    dia sewa aktif (tenancy.status=ACTIVE). Read-only — semua
+  //    tombol aksi di-hide di bawah.
+  const isOwnerOfKos = user.role === "OWNER" && m.kos.ownerId === user.id;
+  const isAdmin = user.role === "ADMIN";
+  let isAffectedTenant = false;
+  if (user.role === "TENANT" && m.room) {
+    const tenancy = await prisma.tenancy.findFirst({
+      where: {
+        tenantId: user.id,
+        roomId: m.room.id,
+        status: "ACTIVE",
+      },
+      select: { id: true },
+    });
+    isAffectedTenant = !!tenancy;
+  }
+  if (!isOwnerOfKos && !isAdmin && !isAffectedTenant) {
     notFound();
   }
+  const canManage = isOwnerOfKos || isAdmin;
 
   const photos: string[] = m.photoUrls ? JSON.parse(m.photoUrls) : [];
 
@@ -169,10 +188,12 @@ export default async function MaintenanceDetailPage({
       </div>
 
       {/* Aksi tersedia kalau:
+          - User punya hak manage (OWNER kos terkait / ADMIN), DAN
           - Belum COMPLETED, DAN
           - Bukan CORRECTIVE turunan komplain (complaintId set).
-          CORRECTIVE manual (input pemilik langsung) tetap bisa diubah. */}
-      {m.status !== "COMPLETED" && !m.complaintId && (
+          CORRECTIVE manual (input pemilik langsung) tetap bisa diubah.
+          Tenant masuk ke halaman ini dalam mode read-only. */}
+      {canManage && m.status !== "COMPLETED" && !m.complaintId && (
         <div className="card space-y-3">
           <h2 className="font-semibold">Aksi</h2>
           <div className="flex flex-wrap gap-2">

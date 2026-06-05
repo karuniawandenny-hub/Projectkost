@@ -24,9 +24,8 @@ export default async function MaintenancePage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+
+  const isTenant = user.role === "TENANT";
 
   // Filter param
   const typeFilter =
@@ -42,14 +41,42 @@ export default async function MaintenancePage({
       : undefined;
   const kosFilter = searchParams?.kosId || undefined;
 
-  // Scope: OWNER hanya lihat kos miliknya. ADMIN bebas.
+  // Scope:
+  //  - ADMIN: bebas.
+  //  - OWNER: hanya kos miliknya.
+  //  - TENANT: hanya perawatan untuk kamar yang sedang dia sewa aktif.
+  //    Untuk fasilitas kos (roomId=null) ikut ditampilkan kalau kos yang
+  //    sama, karena itu memengaruhi penghuni juga (mis. perbaikan pagar,
+  //    pompa air). Kalau tenant tidak sedang punya tenancy aktif, daftar
+  //    kosong.
   const where: Record<string, unknown> = {};
   if (user.role === "OWNER") {
     where.kos = { ownerId: user.id };
+  } else if (isTenant) {
+    const activeTenancies = await prisma.tenancy.findMany({
+      where: { tenantId: user.id, status: "ACTIVE" },
+      select: { roomId: true, room: { select: { kosId: true } } },
+    });
+    const roomIds = activeTenancies.map((t) => t.roomId);
+    const kosIds = Array.from(
+      new Set(activeTenancies.map((t) => t.room.kosId))
+    );
+    if (roomIds.length === 0) {
+      where.id = "__no-match__"; // pasti kosong
+    } else {
+      // OR: perawatan langsung di kamar tenant, ATAU fasilitas kos
+      // (roomId null) di kos yang sama. Pemilik biasanya tidak set
+      // notifyTenant=true untuk fasilitas, tapi info-nya tetap relevan
+      // ditampilkan agar tenant aware.
+      where.OR = [
+        { roomId: { in: roomIds } },
+        { roomId: null, kosId: { in: kosIds } },
+      ];
+    }
   }
   if (typeFilter) where.type = typeFilter;
   if (statusFilter) where.status = statusFilter;
-  if (kosFilter) where.kosId = kosFilter;
+  if (kosFilter && !isTenant) where.kosId = kosFilter;
 
   const [items, kosList] = await Promise.all([
     prisma.maintenance.findMany({
@@ -61,11 +88,14 @@ export default async function MaintenancePage({
       orderBy: [{ status: "asc" }, { scheduledDate: "asc" }],
       take: 200,
     }),
-    prisma.kos.findMany({
-      where: user.role === "OWNER" ? { ownerId: user.id } : {},
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    // Tenant tidak butuh dropdown kos — filter ditiadakan untuknya.
+    isTenant
+      ? Promise.resolve([])
+      : prisma.kos.findMany({
+          where: user.role === "OWNER" ? { ownerId: user.id } : {},
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        }),
   ]);
 
   const scheduled = items.filter((m) => m.status === "SCHEDULED");
@@ -77,25 +107,30 @@ export default async function MaintenancePage({
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">Perawatan kos</h1>
+          <h1 className="text-2xl font-bold">
+            {isTenant ? "Perawatan kamar Anda" : "Perawatan kos"}
+          </h1>
           <p className="text-sm text-slate-600">
-            Catat jadwal perawatan preventif, perbaikan korektif manual, dan
-            riwayat dari komplain penghuni.
+            {isTenant
+              ? "Jadwal & riwayat perawatan kamar Anda dan fasilitas kos. Pemilik akan memberi tahu sebelum perawatan dilakukan."
+              : "Catat jadwal perawatan preventif, perbaikan korektif manual, dan riwayat dari komplain penghuni."}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <ExportButton
-            type={typeFilter}
-            status={statusFilter}
-            kosId={kosFilter}
-          />
-          <Link href="/maintenance/new" className="btn-primary">
-            + Catat perawatan baru
-          </Link>
-        </div>
+        {!isTenant && (
+          <div className="flex gap-2 flex-wrap">
+            <ExportButton
+              type={typeFilter}
+              status={statusFilter}
+              kosId={kosFilter}
+            />
+            <Link href="/maintenance/new" className="btn-primary">
+              + Catat perawatan baru
+            </Link>
+          </div>
+        )}
       </div>
 
-      {searchParams?.created && (
+      {searchParams?.created && !isTenant && (
         <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
           ✓ Jadwal perawatan tersimpan. Anda akan dapat pengingat H-7, H-3,
           dan H-1 sebelum tanggal jadwal.
@@ -124,7 +159,7 @@ export default async function MaintenancePage({
         </FilterPill>
       </div>
 
-      {kosList.length > 1 && (
+      {!isTenant && kosList.length > 1 && (
         <form className="flex items-center gap-2">
           <label className="text-sm text-slate-600">Kos:</label>
           <select
@@ -147,8 +182,9 @@ export default async function MaintenancePage({
 
       {items.length === 0 ? (
         <div className="card text-sm text-slate-500">
-          Belum ada catatan perawatan. Buat jadwal preventif baru, atau
-          tunggu penghuni mengirim komplain untuk auto-create record korektif.
+          {isTenant
+            ? "Belum ada catatan perawatan untuk kamar Anda. Anda akan mendapat notifikasi di sini ketika pemilik menjadwalkan perawatan."
+            : "Belum ada catatan perawatan. Buat jadwal preventif baru, atau tunggu penghuni mengirim komplain untuk auto-create record korektif."}
         </div>
       ) : (
         <>

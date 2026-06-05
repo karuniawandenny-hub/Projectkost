@@ -51,6 +51,7 @@ export default async function Shell({ user, children }: Props) {
         { href: "/move-request", label: "Pindah Kamar" },
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
+        { href: "/maintenance", label: "Perawatan" },
         { href: "/profile", label: "Profil" },
       ];
 

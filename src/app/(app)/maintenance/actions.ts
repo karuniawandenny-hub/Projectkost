@@ -98,7 +98,10 @@ async function notifyAffectedTenant(
       type: `MAINT_TENANT_${event}`,
       title,
       message: inAppMsg,
-      link: "/dashboard",
+      // Arahkan ke detail perawatan supaya penghuni bisa baca info
+      // lengkap (jadwal, deskripsi, foto). Detail page sudah meng-allow
+      // tenant kalau itu kamarnya.
+      link: `/maintenance/${m.id}`,
     });
   } catch (e) {
     // eslint-disable-next-line no-console

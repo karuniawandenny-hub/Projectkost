@@ -352,6 +352,32 @@ async function TenantDashboard({
     }),
   ]);
 
+  // Perawatan aktif (SCHEDULED / IN_PROGRESS) untuk kamar tenant.
+  // Ditampilkan sebagai card di dashboard supaya tenant tidak perlu
+  // mengandalkan notifikasi saja — saat buka aplikasi langsung lihat.
+  // Query bergantung pada tenancy: kalau belum punya, skip.
+  const upcomingMaintenance = tenancy
+    ? await prisma.maintenance.findMany({
+        where: {
+          status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+          OR: [
+            { roomId: tenancy.room.id },
+            { roomId: null, kosId: tenancy.room.kos.id },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          status: true,
+          scheduledDate: true,
+          room: { select: { name: true } },
+        },
+        orderBy: [{ status: "asc" }, { scheduledDate: "asc" }],
+        take: 3,
+      })
+    : [];
+
   /* ---------- Chart 1: jadwal pembayaran 6 bulan SEJAK tenant masuk ---------- */
   //  - Bulan-bulan yang ditampilkan: 6 bulan berurutan mulai dari bulan
   //    yang lebih besar antara Tenancy.startDate dan Tenancy.createdAt
@@ -464,6 +490,9 @@ async function TenantDashboard({
             </div>
           </div>
           <BillingCard tenancy={tenancy} payments={payments} />
+          {upcomingMaintenance.length > 0 && (
+            <MaintenanceCard items={upcomingMaintenance} />
+          )}
         </>
       ) : (
         <div className="card border-amber-300 bg-amber-50">
@@ -702,5 +731,72 @@ function BillingCard({
         </p>
       </div>
     </>
+  );
+}
+
+/**
+ * Kartu ringkas jadwal/proses perawatan untuk dashboard penghuni.
+ * Hanya tampil kalau ada perawatan dengan status SCHEDULED atau
+ * IN_PROGRESS yang menyangkut kamar tenant atau fasilitas kos-nya.
+ * Detail penuh ada di /maintenance dan /maintenance/[id].
+ */
+function MaintenanceCard({
+  items,
+}: {
+  items: {
+    id: string;
+    title: string;
+    type: string;
+    status: string;
+    scheduledDate: Date;
+    room: { name: string } | null;
+  }[];
+}) {
+  return (
+    <div className="card border-amber-200 bg-amber-50/40">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-amber-900">🛠️ Perawatan kamar Anda</h2>
+        <Link
+          href="/maintenance"
+          className="text-sm text-brand-700 hover:underline"
+        >
+          Lihat semua
+        </Link>
+      </div>
+      <div className="mt-3 space-y-2">
+        {items.map((m) => {
+          const isInProgress = m.status === "IN_PROGRESS";
+          const typeLabelText =
+            m.type === "PREVENTIVE" ? "Preventif" : "Korektif";
+          return (
+            <Link
+              key={m.id}
+              href={`/maintenance/${m.id}`}
+              className="block rounded-lg border border-amber-200 bg-white p-3 transition hover:bg-amber-50"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="badge badge-blue">{typeLabelText}</span>
+                <span
+                  className={
+                    isInProgress
+                      ? "badge bg-emerald-100 text-emerald-800"
+                      : "badge bg-amber-100 text-amber-800"
+                  }
+                >
+                  {isInProgress ? "Sedang berlangsung" : "Terjadwal"}
+                </span>
+              </div>
+              <div className="mt-1.5 font-medium">{m.title}</div>
+              <div className="text-xs text-slate-600">
+                {m.room ? `Kamar ${m.room.name}` : "Fasilitas kos"} •{" "}
+                {isInProgress
+                  ? `Mulai ${formatDateID(m.scheduledDate)}`
+                  : `Jadwal ${formatDateID(m.scheduledDate)}`}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }
