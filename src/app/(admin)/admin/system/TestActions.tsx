@@ -41,8 +41,9 @@ export function TestActions() {
   const [previewState, setPreviewState] = useState<TestActionState | null>(null);
   const [deviceState, setDeviceState] = useState<TestActionState | null>(null);
   const [validateState, setValidateState] = useState<TestActionState | null>(null);
-  const [previewCacheState, setPreviewCacheState] =
-    useState<TestActionState | null>(null);
+  const [previewCacheState, setPreviewCacheState] = useState<
+    (TestActionState & { debuggerUrl?: string }) | null
+  >(null);
   const [validateTo, setValidateTo] = useState("");
   const [previewTo, setPreviewTo] = useState("");
   const [previewType, setPreviewType] = useState<ReminderType>("H7");
@@ -54,9 +55,10 @@ export function TestActions() {
     setLoading("previewCache");
     const result = await refreshWaLinkPreviewAction();
     setPreviewCacheState(result);
-    // Kalau cek OG metadata sukses, buka FB Debugger di tab baru
-    // supaya admin tinggal klik "Scrape Again" di sana.
-    if (result.ok && result.debuggerUrl) {
+    // SELALU buka FB Debugger kalau URL-nya ada — scrape dilakukan server
+    // Meta dari luar, jadi tetap berguna walau cek lokal gagal (loopback)
+    // atau crawler diblok (FB Debugger justru menunjukkan 403-nya).
+    if (result.debuggerUrl) {
       window.open(result.debuggerUrl, "_blank", "noopener,noreferrer");
     }
     setLoading(null);
@@ -271,6 +273,18 @@ export function TestActions() {
             : "Cek & buka FB Debugger"}
         </button>
         <ResultBox result={previewCacheState} />
+        {previewCacheState?.debuggerUrl && (
+          // Fallback kalau popup diblok browser (window.open setelah await
+          // bisa di-block). Admin tinggal klik manual.
+          <a
+            href={previewCacheState.debuggerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-xs font-medium text-brand-700 hover:underline"
+          >
+            Tab tidak terbuka? Buka FB Debugger manual →
+          </a>
+        )}
       </div>
 
       {/* Validate WA number */}

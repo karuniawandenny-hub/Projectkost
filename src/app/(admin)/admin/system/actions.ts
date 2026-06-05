@@ -239,21 +239,54 @@ export async function validateWaNumberAction(
 }
 
 /**
- * Cek OG metadata yang dilihat crawler WA + sediakan link FB Sharing
- * Debugger supaya admin bisa force Meta refresh cache.
+ * Baca dimensi JPEG dari SOF marker, tanpa library eksternal.
+ * Dipakai untuk konfirmasi og-image cukup besar (≥600x315) supaya
+ * WhatsApp/Facebook mau render preview card.
+ */
+function readJpegDimensions(
+  buf: Buffer
+): { width: number; height: number } | null {
+  if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null; // bukan JPEG
+  let off = 2;
+  while (off + 9 < buf.length) {
+    if (buf[off] !== 0xff) {
+      off++;
+      continue;
+    }
+    const marker = buf[off + 1];
+    // SOF0..SOF15 (frame headers) — kecuali DHT(C4), DNL(C8), DAC(CC).
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const height = buf.readUInt16BE(off + 5);
+      const width = buf.readUInt16BE(off + 7);
+      return { width, height };
+    }
+    // Lewati segmen pakai panjang 2-byte setelah marker.
+    const len = buf.readUInt16BE(off + 2);
+    if (len < 2) break;
+    off += 2 + len;
+  }
+  return null;
+}
+
+/**
+ * Diagnosa + perbaiki link preview WA yang tidak muncul.
  *
- * Konteks: WhatsApp cache OG metadata per URL sangat agresif (bisa
- * berminggu-minggu). Kalau pernah kirim URL tanpa preview yang valid,
- * recipient akan terus melihat versi cached tanpa preview meski OG
- * tags sudah diperbaiki di layout.tsx.
+ * Akar masalah preview tidak muncul biasanya salah satu dari:
+ *  (a) Aset og-image tidak ke-deploy / dimensi terlalu kecil.
+ *  (b) Crawler (facebookexternalhit / WhatsApp) DIBLOK oleh CDN/host →
+ *      balas 403 → tidak ada yang bisa baca OG tags.
+ *  (c) Cache preview lama di Meta/WA masih nempel meski OG sudah benar.
  *
- * Aksi ini:
- *  1. Fetch homepage pakai User-Agent facebookexternalhit (sama dengan
- *     yang dipakai WA & FB crawler).
- *  2. Parse meta og:image / og:title / og:description.
- *  3. HEAD check ke og:image untuk memastikan publik & cukup besar.
- *  4. Generate URL FB Sharing Debugger — caller (client) akan auto-
- *     open di tab baru supaya admin tinggal klik "Scrape Again".
+ * Strategi aksi ini (tahan terhadap loopback NAT Railway, yang bikin
+ * "fetch failed" kalau container fetch domain-nya sendiri):
+ *  1. Verifikasi aset OG dari FILE LOKAL di public/ (tanpa network) +
+ *     baca dimensi JPEG asli. Ini sumber kebenaran paling reliable.
+ *  2. Best-effort: coba GET live URL pakai UA crawler untuk deteksi
+ *     403 (crawler diblok). Gagal koneksi = wajar di Railway, diabaikan.
+ *  3. SELALU kembalikan URL FB Sharing Debugger. Scrape-nya dilakukan
+ *     server Meta dari luar (bukan container kita), jadi tetap jalan
+ *     walau loopback gagal — sekaligus jadi bukti definitif apakah
+ *     crawler diblok (FB Debugger tampilkan hasil curl mentahnya).
  */
 export async function refreshWaLinkPreviewAction(): Promise<
   TestActionState & { debuggerUrl?: string }
@@ -261,94 +294,99 @@ export async function refreshWaLinkPreviewAction(): Promise<
   await requireAdmin();
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://www.kosbaiti.com";
+  const debuggerUrl = `https://developers.facebook.com/tools/debug/?q=${encodeURIComponent(siteUrl)}`;
 
+  const lines: string[] = [`Site URL : ${siteUrl}`];
+
+  // === 1. Verifikasi aset OG dari file lokal (reliable, no network) ===
+  // Min WhatsApp/Facebook untuk render preview: 600x315. Ideal 1200x630.
+  let assetOk = false;
   try {
+    const { readFile } = await import("fs/promises");
+    const path = await import("path");
+    const file = path.join(process.cwd(), "public", "og-image-wide.jpg");
+    const buf = await readFile(file);
+    const kb = Math.round(buf.byteLength / 1024);
+    const dim = readJpegDimensions(buf);
+    if (dim) {
+      assetOk = dim.width >= 600 && dim.height >= 315;
+      lines.push(
+        `OG image : /og-image-wide.jpg • ${dim.width}x${dim.height} • ${kb}KB ${
+          assetOk ? "✓" : "✗ DI BAWAH min WA 600x315"
+        }`
+      );
+    } else {
+      assetOk = kb > 1;
+      lines.push(`OG image : /og-image-wide.jpg • ${kb}KB (dimensi tak terbaca)`);
+    }
+  } catch (e) {
+    lines.push(
+      `OG image : ✗ public/og-image-wide.jpg TIDAK ADA (${e instanceof Error ? e.message : "?"})`
+    );
+  }
+
+  // === 2. Best-effort live check: deteksi crawler diblok (403) ===
+  let crawlerBlocked = false;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(siteUrl, {
       headers: {
-        // Identifikasi sebagai FB/WA crawler — beberapa server beda
-        // response untuk bot vs browser (mis. SSR vs CSR).
-        "User-Agent": "facebookexternalhit/1.1 (kosbaiti-admin-check)",
+        // UA identik dengan crawler resmi WhatsApp/Facebook.
+        "User-Agent":
+          "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
       },
       cache: "no-store",
+      signal: ctrl.signal,
     });
-    if (!res.ok) {
-      return {
-        ok: false,
-        message: `${siteUrl} balas HTTP ${res.status}. URL tidak bisa diakses publik?`,
-      };
+    clearTimeout(t);
+    if (res.status === 401 || res.status === 403) {
+      crawlerBlocked = true;
+      lines.push(
+        "",
+        `⚠️ CRAWLER DIBLOK: GET ${siteUrl} → HTTP ${res.status}.`,
+        `   WhatsApp & Fonnte TIDAK bisa baca OG tags → preview mustahil muncul.`,
+        `   Fix: allowlist User-Agent 'facebookexternalhit' & 'WhatsApp' di`,
+        `   CDN/proxy (Cloudflare bot-fight, dll), atau matikan bot protection`,
+        `   untuk path "/".`
+      );
+    } else if (res.ok) {
+      lines.push("", `Live check: HTTP ${res.status} OK — crawler bisa akses ✓`);
+    } else {
+      lines.push("", `Live check: HTTP ${res.status} (cek status deploy).`);
     }
-    const html = await res.text();
-
-    const pick = (prop: string): string | undefined => {
-      // Cocokkan kedua urutan atribut: property dulu atau content dulu.
-      const a = new RegExp(
-        `<meta\\s+property=["']${prop}["']\\s+content=["']([^"']+)["']`,
-        "i"
-      ).exec(html);
-      if (a) return a[1];
-      const b = new RegExp(
-        `<meta\\s+content=["']([^"']+)["']\\s+property=["']${prop}["']`,
-        "i"
-      ).exec(html);
-      return b?.[1];
-    };
-
-    const ogImage = pick("og:image");
-    const ogTitle = pick("og:title");
-    const ogDesc = pick("og:description");
-
-    if (!ogImage) {
-      return {
-        ok: false,
-        message:
-          "Meta og:image tidak ditemukan di HTML. Cek src/app/layout.tsx atau pastikan deploy terbaru sudah live.",
-      };
-    }
-
-    // HEAD check og:image — kalau 404 / bukan image / terlalu kecil,
-    // WhatsApp akan tolak preview.
-    let imgInfo = `OG image: ${ogImage}`;
-    let imgOk = false;
-    try {
-      const absoluteImg = ogImage.startsWith("http")
-        ? ogImage
-        : new URL(ogImage, siteUrl).toString();
-      const imgRes = await fetch(absoluteImg, { method: "HEAD" });
-      const size = imgRes.headers.get("content-length");
-      const type = imgRes.headers.get("content-type") ?? "?";
-      const sizeKb = size ? `${Math.round(Number(size) / 1024)}KB` : "?";
-      imgInfo = `OG image: ${absoluteImg}\n  HTTP ${imgRes.status} • ${type} • ${sizeKb}`;
-      imgOk = imgRes.ok && type.startsWith("image/");
-    } catch (e) {
-      imgInfo += `\n  (HEAD check gagal: ${e instanceof Error ? e.message : "?"})`;
-    }
-
-    const debuggerUrl = `https://developers.facebook.com/tools/debug/?q=${encodeURIComponent(siteUrl)}`;
-
-    return {
-      ok: imgOk,
-      message: imgOk
-        ? `OG metadata OK. Tab FB Debugger akan terbuka — klik "Scrape Again" 2x di sana untuk paksa Meta + WA refresh cache.`
-        : `OG image tidak accessible / bukan image valid. Cek deploy & path file.`,
-      detail: [
-        `Site URL : ${siteUrl}`,
-        `og:title : ${ogTitle ?? "(missing)"}`,
-        `og:desc  : ${ogDesc ?? "(missing)"}`,
-        imgInfo,
-        ``,
-        `Setelah "Scrape Again" di FB Debugger, test kirim URL ke nomor`,
-        `BARU (yang belum pernah terima URL ini) untuk verify preview muncul.`,
-        `Trik bust cache per-nomor: tambah query string unik:`,
-        `${siteUrl}?v=${Date.now()}`,
-      ].join("\n"),
-      debuggerUrl,
-    };
   } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Error",
-    };
+    const msg = e instanceof Error ? e.message : String(e);
+    lines.push(
+      "",
+      `Live check dari server gagal (${msg}).`,
+      `   Ini NORMAL di Railway (loopback NAT — container tak bisa fetch`,
+      `   domain sendiri). Tidak memengaruhi preview: FB Debugger & WA`,
+      `   crawl dari luar. Lanjutkan dengan "Scrape Again" di tab yang dibuka.`
+    );
   }
+
+  lines.push(
+    "",
+    `Langkah selanjutnya:`,
+    `1. Tab FB Debugger terbuka otomatis → klik "Scrape Again" 2x.`,
+    `2. Pastikan di sana muncul thumbnail + og:title (bukan error 403/curl).`,
+    `3. Verify: kirim URL + query unik ke nomor BARU (yang belum pernah`,
+    `   terima link ini, untuk bypass cache per-nomor):`,
+    `   ${siteUrl}?v=${Date.now()}`
+  );
+
+  const ok = assetOk && !crawlerBlocked;
+  return {
+    ok,
+    message: crawlerBlocked
+      ? "Crawler diblok di sisi host (HTTP 403) — itu penyebab preview tak muncul. Lihat detail untuk cara fix."
+      : assetOk
+        ? 'Aset OG valid. Tab FB Debugger dibuka — klik "Scrape Again" 2x untuk paksa Meta + WA refresh cache.'
+        : "Aset OG bermasalah (lihat detail). Perbaiki dulu sebelum refresh cache.",
+    detail: lines.join("\n"),
+    debuggerUrl,
+  };
 }
 
 export async function testReminderAction(): Promise<TestActionState> {
