@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TestActions } from "./TestActions";
 import { CronUrlCard } from "./CronUrlCard";
+import { MaintenanceWaToggle } from "./MaintenanceWaToggle";
+import { getSettingBool, SETTING_KEYS } from "@/lib/settings";
 
 function getBaseUrl() {
   const h = headers();
@@ -34,6 +36,7 @@ export default async function AdminSystemPage() {
     remindersToday,
     totalGatewayTx,
     paidGatewayTx,
+    maintWaEnabled,
   ] = await Promise.all([
     prisma.payment.count(),
     prisma.payment.count({ where: { status: "DUE" } }),
@@ -43,6 +46,7 @@ export default async function AdminSystemPage() {
     }),
     prisma.gatewayTransaction.count(),
     prisma.gatewayTransaction.count({ where: { status: "PAID" } }),
+    getSettingBool(SETTING_KEYS.MAINTENANCE_WA_ENABLED, false),
   ]);
 
   const emailMode = process.env.EMAIL_MODE ?? "dev";
@@ -105,6 +109,9 @@ export default async function AdminSystemPage() {
                 ? "Gateway WA siap mengirim pesan."
                 : "Token belum diset."}
           </p>
+          <div className="mt-4 border-t border-slate-200 pt-3">
+            <MaintenanceWaToggle initialEnabled={maintWaEnabled} />
+          </div>
         </div>
 
         <div className="card">

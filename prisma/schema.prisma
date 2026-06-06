@@ -276,3 +276,13 @@ model Notification {
 
   @@index([userId, read])
 }
+
+// Key-value store untuk toggle/konfigurasi runtime yang admin bisa ubah
+// lewat /admin/system tanpa redeploy. Bedanya dengan env var: nilainya
+// bisa diubah hidup-hidup. Konsumen pakai helper getSetting() di
+// src/lib/settings.ts yang punya cache memory.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

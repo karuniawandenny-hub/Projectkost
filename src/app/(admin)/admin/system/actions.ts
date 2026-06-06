@@ -11,6 +11,8 @@ import {
 import { normalizePhone } from "@/lib/phone";
 import { pingCloudApi } from "@/lib/wa-cloud";
 import { sendKosBaitiTemplate, TEMPLATES } from "@/lib/wa-templates";
+import { setSetting, SETTING_KEYS } from "@/lib/settings";
+import { revalidatePath } from "next/cache";
 
 /**
  * Cek kesehatan setup WhatsApp Cloud API Meta.
@@ -99,6 +101,27 @@ async function requireAdmin() {
   const me = await requireUser();
   if (me.role !== "ADMIN") throw new Error("FORBIDDEN");
   return me;
+}
+
+/**
+ * Set toggle WA untuk notifikasi perawatan (in-app + email tetap kirim).
+ * Berlaku langsung tanpa redeploy — cache di-clear di sisi server.
+ */
+export async function setMaintenanceWaEnabledAction(
+  enabled: boolean
+): Promise<TestActionState> {
+  await requireAdmin();
+  await setSetting(
+    SETTING_KEYS.MAINTENANCE_WA_ENABLED,
+    enabled ? "true" : "false"
+  );
+  revalidatePath("/admin/system");
+  return {
+    ok: true,
+    message: enabled
+      ? "WA untuk notifikasi perawatan diaktifkan. Penghuni akan terima 3 channel (in-app, email, WA) saat pemilik trigger perawatan."
+      : "WA untuk notifikasi perawatan dimatikan. Penghuni hanya terima in-app + email — WA disisakan untuk reminder pembayaran.",
+  };
 }
 
 /**
