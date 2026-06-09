@@ -25,6 +25,25 @@ type State = "loading" | "unsupported" | "off" | "on" | "denied" | "working";/**
  * reminder pembayaran, pengumuman, dan update perawatan akan masuk ke
  * HP meski app tidak dibuka.
  */
+/** Apakah app sedang berjalan terpasang (dari ikon home screen), bukan tab browser. */
+function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia?.("(display-mode: standalone)").matches === true ||
+    // iOS Safari pakai properti non-standar ini untuk Home Screen web app.
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    // iPadOS 13+ menyamar sebagai Mac; deteksi lewat touch.
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 export function PushToggle() {
   const [state, setState] = useState<State>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +51,12 @@ export function PushToggle() {
     null
   );
   const [testing, setTesting] = useState(false);
+  // Diagnostik runtime — membantu menelusuri masalah Web Push di iOS.
+  const [diag, setDiag] = useState<{
+    standalone: boolean;
+    ios: boolean;
+    permission: NotificationPermission | "n/a";
+  } | null>(null);
 
   const supported =
     typeof window !== "undefined" &&
@@ -40,6 +65,14 @@ export function PushToggle() {
     "Notification" in window;
 
   useEffect(() => {
+    const ios = isIOS();
+    const standalone = isStandalone();
+    setDiag({
+      standalone,
+      ios,
+      permission: "Notification" in window ? Notification.permission : "n/a",
+    });
+
     if (!supported || !VAPID_PUBLIC_KEY) {
       setState("unsupported");
       return;
@@ -59,6 +92,7 @@ export function PushToggle() {
     setState("working");
     try {
       const permission = await Notification.requestPermission();
+      setDiag((d) => (d ? { ...d, permission } : d));
       if (permission !== "granted") {
         setState(permission === "denied" ? "denied" : "off");
         return;
@@ -106,12 +140,40 @@ export function PushToggle() {
     setTestMsg(null);
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
-      const data = (await res.json()) as { ok: boolean; reason?: string };
-      setTestMsg(
-        data.ok
-          ? { ok: true, text: "Terkirim! Cek notifikasi di HP Anda." }
-          : { ok: false, text: data.reason ?? "Gagal mengirim percobaan." }
-      );
+      const data = (await res.json()) as {
+        ok: boolean;
+        reason?: string;
+        devices?: number;
+        hosts?: string[];
+      };
+      if (data.ok) {
+        // Tampilkan ke berapa & device mana terkirim. Kalau iPhone Anda
+        // tidak termasuk, host-nya tidak akan ada "apple".
+        const hasApple = (data.hosts ?? []).some((h) => h.includes("apple"));
+        const where = (data.hosts ?? [])
+          .map((h) =>
+            h.includes("apple")
+              ? "iPhone/iPad"
+              : h.includes("google") || h.includes("fcm")
+                ? "Chrome/Android"
+                : h.includes("mozilla")
+                  ? "Firefox"
+                  : h
+          )
+          .join(", ");
+        setTestMsg({
+          ok: true,
+          text: `Terkirim ke ${data.devices ?? 0} device${
+            where ? ` (${where})` : ""
+          }.${
+            hasApple
+              ? " Cek banner di iPhone Anda."
+              : " ⚠️ iPhone ini belum termasuk — aktifkan dulu dari app yang dibuka via ikon home screen."
+          }`,
+        });
+      } else {
+        setTestMsg({ ok: false, text: data.reason ?? "Gagal mengirim percobaan." });
+      }
     } catch {
       setTestMsg({ ok: false, text: "Gagal menghubungi server." });
     } finally {
@@ -119,23 +181,85 @@ export function PushToggle() {
     }
   }
 
+  // Panel status kecil — tampil di semua kondisi supaya mudah menelusuri
+  // masalah (terutama di iOS yang ketat soal Web Push).
+  const statusPanel = diag && (
+    <div className="mt-2 rounded-md bg-slate-50 px-2.5 py-2 text-[11px] leading-relaxed text-slate-500">
+      <div>
+        Mode:{" "}
+        <span className={diag.standalone ? "text-emerald-700" : "text-amber-700"}>
+          {diag.standalone ? "Terpasang (home screen) ✓" : "Browser — belum terpasang"}
+        </span>
+      </div>
+      <div>
+        Izin notifikasi:{" "}
+        <span
+          className={
+            diag.permission === "granted"
+              ? "text-emerald-700"
+              : diag.permission === "denied"
+                ? "text-red-600"
+                : "text-slate-600"
+          }
+        >
+          {diag.permission === "granted"
+            ? "Diizinkan ✓"
+            : diag.permission === "denied"
+              ? "Diblokir"
+              : diag.permission === "default"
+                ? "Belum diminta"
+                : "Tidak tersedia"}
+        </span>
+      </div>
+      <div>
+        Langganan device ini:{" "}
+        <span className={state === "on" ? "text-emerald-700" : "text-slate-600"}>
+          {state === "on" ? "Aktif ✓" : "Belum"}
+        </span>
+      </div>
+    </div>
+  );
+
+  // iOS: Web Push HANYA jalan dari app terpasang. Kalau dibuka via Safari,
+  // beri instruksi pasti, bukan sekadar "tidak didukung".
+  const iosBrowserWarning = diag?.ios && !diag.standalone && (
+    <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+      <strong>Notifikasi iPhone butuh app terpasang.</strong> Di Safari, tap
+      tombol Bagikan (kotak panah ↑) → <strong>Add to Home Screen</strong> →
+      Add. Lalu <strong>tutup Safari</strong> dan buka aplikasi dari ikon di
+      home screen — aktifkan notifikasi dari sana.
+    </div>
+  );
+
   if (state === "loading") {
     return <div className="text-xs text-slate-400">Memeriksa dukungan notifikasi…</div>;
   }
   if (state === "unsupported") {
     return (
-      <div className="text-xs text-slate-500">
-        Notifikasi push belum tersedia di browser/device ini. Buka lewat
-        Chrome/Safari terbaru dan pasang aplikasi (Add to Home Screen) untuk
-        mengaktifkannya.
+      <div>
+        {iosBrowserWarning}
+        {!diag?.ios && (
+          <div className="text-xs text-slate-500">
+            Notifikasi push belum tersedia di browser/device ini. Buka lewat
+            Chrome/Safari terbaru dan pasang aplikasi (Add to Home Screen)
+            untuk mengaktifkannya.
+          </div>
+        )}
+        {diag?.ios && !diag.standalone ? null : (
+          <div className="text-xs text-slate-500">
+            Pastikan iOS Anda versi 16.4 atau lebih baru.
+          </div>
+        )}
+        {statusPanel}
       </div>
     );
   }
   if (state === "denied") {
     return (
       <div className="text-xs text-amber-700">
-        Notifikasi diblokir di pengaturan browser. Izinkan notifikasi untuk
-        situs ini dari setelan browser, lalu muat ulang halaman.
+        Notifikasi diblokir. Buka Setelan iPhone → Notifikasi → Kos Baiti →
+        aktifkan Izinkan Notifikasi, lalu muat ulang halaman ini.
+        {statusPanel}
       </div>
     );
   }
@@ -143,6 +267,7 @@ export function PushToggle() {
   const on = state === "on";
   return (
     <div>
+      {iosBrowserWarning}
       <button
         type="button"
         onClick={on ? disable : enable}
@@ -182,6 +307,7 @@ export function PushToggle() {
           )}
         </div>
       )}
+      {statusPanel}
     </div>
   );
 }
