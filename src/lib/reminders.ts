@@ -233,13 +233,24 @@ export async function processReminders(): Promise<ProcessResult> {
     include: {
       tenancy: {
         include: {
-          tenant: { select: { id: true, email: true, phone: true, name: true } },
+          tenant: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+              name: true,
+              notifPrefs: true,
+            },
+          },
           room: { include: { kos: true } },
         },
       },
       reminders: { select: { type: true, channel: true } },
     },
   });
+
+  // Lazy-import biar modul ini tetap ringan untuk caller yang tidak butuh.
+  const { categorize, parsePrefs, shouldSend } = await import("./notif-prefs");
 
   for (const p of candidates) {
     result.scanned++;
@@ -307,14 +318,16 @@ export async function processReminders(): Promise<ProcessResult> {
       }
     }
 
-    // 2) Email (kalau ada).
-    if (!alreadyH.has("EMAIL") && tenant.email) {
+    // Resolve preferensi notifikasi penghuni → menentukan email/WA
+    // boleh kirim atau tidak. PAYMENT kategori (reminder + verify) selalu
+    // termasuk di sini.
+    const tenantPrefs = parsePrefs(tenant.notifPrefs ?? null);
+    const reminderCategory = categorize(`REMINDER_${type}`);
+
+    // 2) Email (kalau ada & user mengizinkan).
+    const emailAllowed = shouldSend(tenantPrefs, reminderCategory, "email");
+    if (!alreadyH.has("EMAIL") && tenant.email && emailAllowed) {
       try {
-        // Pakai sendPasswordResetEmail sebagai pembungkus tipis untuk
-        // mengirim email biasa via Resend. Anggap body sebagai "url"
-        // alternatif — tapi sebenarnya kita butuh fungsi email umum.
-        // Untuk MVP, kita kirim via fetch ke Resend langsung di sini
-        // (kalau RESEND_API_KEY ada).
         await sendEmailGeneric(tenant.email, subject, body);
         await prisma.reminderLog.create({
           data: { paymentId: p.id, type, channel: "EMAIL" },
@@ -328,8 +341,14 @@ export async function processReminders(): Promise<ProcessResult> {
       }
     }
 
-    // 3) WhatsApp (kalau ada, dan tidak dalam quiet hours).
-    if (!alreadyH.has("WA") && tenant.phone && !waBlockedByQuietHours) {
+    // 3) WhatsApp (kalau ada, tidak dalam quiet hours global, & user mengizinkan).
+    const waAllowed = shouldSend(tenantPrefs, reminderCategory, "wa");
+    if (
+      !alreadyH.has("WA") &&
+      tenant.phone &&
+      !waBlockedByQuietHours &&
+      waAllowed
+    ) {
       try {
         // Pakai sendWAWithTemplate supaya kalau OTP_MODE=cloud,
         // otomatis kirim via template (preview card muncul reliable).

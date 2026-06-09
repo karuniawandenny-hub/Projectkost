@@ -3,10 +3,13 @@ import { getCurrentUser } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
 import { PushToggle } from "@/components/PushToggle";
 import { PhoneEditForm } from "./PhoneEditForm";
+import { NotifPrefsForm } from "./NotifPrefsForm";
+import { getMyNotifPrefs } from "./actions";
 
 export default async function ProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const notifPrefs = await getMyNotifPrefs();
 
   return (
     <div className="space-y-4">
@@ -53,6 +56,15 @@ export default async function ProfilePage() {
           dan update perawatan langsung di HP — meski aplikasi tidak dibuka.
         </p>
         <PushToggle />
+      </div>
+
+      <div className="card">
+        <h2 className="text-lg font-semibold">Preferensi notifikasi</h2>
+        <p className="mt-1 mb-3 text-sm text-slate-600">
+          Pilih jenis notifikasi apa yang dikirim lewat HP, email, atau
+          WhatsApp. Atur jam tenang agar tidak terganggu malam hari.
+        </p>
+        <NotifPrefsForm initialPrefs={notifPrefs} />
       </div>
 
       <form action="/logout" method="POST">
