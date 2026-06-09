@@ -12,7 +12,7 @@
  * koneksi.
  */
 
-const CACHE_VERSION = "kos-baiti-v3";
+const CACHE_VERSION = "kos-baiti-v4";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/kos-baiti-logo.png",
@@ -54,9 +54,12 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Kos Baiti";
   const options = {
     body: data.body || "",
-    icon: "/icon.png",
-    badge: "/icon.png",
+    // Icon WAJIB resolve. iOS Safari diam-diam buang notifikasi kalau
+    // path icon 404. Pakai icon PWA yang sudah pasti ada di /public.
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
     tag: data.tag || undefined,
+    requireInteraction: false,
     data: { url: data.url || "/notifications" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

@@ -33,6 +33,25 @@ export async function POST() {
     });
   }
 
+  // Ambil endpoint host (apple.com/google.com/mozilla.com) untuk
+  // diagnostik — beberapa masalah spesifik vendor (mis. iOS Web Push
+  // butuh PWA terpasang & SW versi yang punya handler push).
+  const subs = await prisma.pushSubscription.findMany({
+    where: { userId: user.id },
+    select: { endpoint: true, createdAt: true },
+  });
+  const hosts = Array.from(
+    new Set(
+      subs.map((s) => {
+        try {
+          return new URL(s.endpoint).host;
+        } catch {
+          return "unknown";
+        }
+      })
+    )
+  );
+
   await sendPushToUser(user.id, {
     title: "🔔 Notifikasi percobaan",
     body: "Berhasil! Push dari Kos Baiti sudah aktif di device ini.",
@@ -40,5 +59,11 @@ export async function POST() {
     tag: "test-push",
   });
 
-  return NextResponse.json({ ok: true, devices: count });
+  return NextResponse.json({
+    ok: true,
+    devices: count,
+    hosts,
+    hint:
+      "Server berhasil kirim. Kalau popup tidak muncul di HP: (1) keluar dari PWA, hapus dari home screen, install ulang via Add to Home Screen — supaya service worker terbaru (v4) yang aktif. (2) Cek Setelan iOS → Notifikasi → Kos Baiti → Izinkan Notifikasi ON.",
+  });
 }
