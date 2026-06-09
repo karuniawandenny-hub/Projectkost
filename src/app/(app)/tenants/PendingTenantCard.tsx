@@ -7,6 +7,7 @@ import {
   rejectTenant,
   type ApproveTenantState,
 } from "./actions";
+import { viewerUrl } from "@/lib/viewer";
 
 const initial: ApproveTenantState = {};
 
@@ -115,7 +116,7 @@ export function PendingTenantCard({
             )}
             {tenant.ktpPhotoUrl ? (
               <a
-                href={tenant.ktpPhotoUrl}
+                href={viewerUrl(tenant.ktpPhotoUrl, "Foto KTP")}
                 className="badge-blue hover:underline"
               >
                 Lihat KTP

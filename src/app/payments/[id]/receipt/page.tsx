@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { PrintButton } from "@/components/PrintButton";
+import { BackButton } from "@/components/BackButton";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -81,7 +82,8 @@ export default async function ReceiptPage({
       <div className="mx-auto max-w-2xl bg-white text-slate-900 shadow-md print:shadow-none">
         {/* Print controls */}
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-3 flex items-center justify-between print:hidden">
-          <div className="text-xs text-slate-500">
+          <BackButton fallbackHref="/payments" />
+          <div className="flex-1 text-center text-xs text-slate-500">
             Kuitansi pembayaran — Kos Baiti
           </div>
           <PrintButton />

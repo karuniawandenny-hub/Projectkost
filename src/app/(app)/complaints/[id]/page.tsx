@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { viewerUrl } from "@/lib/viewer";
 import { removeResolutionPhoto } from "../actions";
 import { OwnerReplyForm } from "./OwnerReplyForm";
 
@@ -77,7 +78,7 @@ export default async function ComplaintDetailPage({
               {photos.map((src, i) => (
                 <a
                   key={i}
-                  href={src}
+                  href={viewerUrl(src, "Foto komplain")}
                   className="block"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -109,7 +110,7 @@ export default async function ComplaintDetailPage({
                   {resolutionPhotos.map((src, i) => (
                     <div key={i} className="relative">
                       <a
-                        href={src}
+                        href={viewerUrl(src, "Foto penyelesaian")}
                         className="block"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}

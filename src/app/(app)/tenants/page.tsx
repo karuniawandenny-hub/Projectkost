@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { viewerUrl } from "@/lib/viewer";
 import { endTenancy } from "../kos/actions";
 import {
   approveMoveRequest,
@@ -233,7 +234,7 @@ export default async function TenantsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     {t.tenant.ktpPhotoUrl && (
                       <a
-                        href={t.tenant.ktpPhotoUrl}
+                        href={viewerUrl(t.tenant.ktpPhotoUrl, "Foto KTP")}
                         className="btn-secondary"
                       >
                         Lihat KTP

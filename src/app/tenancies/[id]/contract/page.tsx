@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { formatDateID } from "@/lib/billing";
 import { PrintButton } from "@/components/PrintButton";
+import { BackButton } from "@/components/BackButton";
 
 function formatDate(d: Date | null | undefined): string {
   return d ? formatDateID(d) : "—";
@@ -61,7 +62,8 @@ export default async function ContractPage({
       <div className="mx-auto max-w-3xl bg-white text-slate-900 shadow-md print:shadow-none">
         {/* Print controls */}
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-3 flex items-center justify-between print:hidden">
-          <div className="text-xs text-slate-500">
+          <BackButton fallbackHref="/dashboard" />
+          <div className="flex-1 text-center text-xs text-slate-500">
             Kontrak sewa kos — Kos Baiti
           </div>
           <PrintButton />

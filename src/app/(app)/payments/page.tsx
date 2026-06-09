@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
+import { viewerUrl } from "@/lib/viewer";
 import { verifyPayment } from "./actions";
 
 function rupiah(n: number) {
@@ -113,7 +114,7 @@ export default async function PaymentsPage({
                   <StatusBadge status={p.status} />
                   {p.proofUrl ? (
                     <a
-                      href={p.proofUrl}
+                      href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
                       className="text-sm text-brand-700 hover:underline"
                     >
                       Lihat bukti
@@ -244,7 +245,7 @@ function PaymentRow({ p, verifyMode }: { p: PaymentWith; verifyMode?: boolean })
           <StatusBadge status={p.status} />
           {p.proofUrl ? (
             <a
-              href={p.proofUrl}
+              href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
               className="text-sm text-brand-700 hover:underline"
             >
               Lihat bukti

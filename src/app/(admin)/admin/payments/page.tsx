@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { TestControls } from "./TestControls";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
+import { viewerUrl } from "@/lib/viewer";
 
 const MONTHS = [
   "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -158,7 +159,7 @@ export default async function AdminPaymentsPage({
                 <StatusBadge status={p.status} />
                 {p.proofUrl ? (
                 <a
-                  href={p.proofUrl}
+                  href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
                   className="text-sm text-brand-700 hover:underline"
                 >
                   Bukti
