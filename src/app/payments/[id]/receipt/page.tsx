@@ -50,7 +50,9 @@ export default async function ReceiptPage({
     where: { id: params.id },
     include: {
       tenancy: {
-        include: {
+        select: {
+          ownerSignatureUrl: true,
+          ownerSignedAt: true,
           tenant: { select: { id: true, name: true, email: true } },
           room: {
             include: {
@@ -188,12 +190,37 @@ export default async function ReceiptPage({
             </div>
           </div>
 
+          {/* Tandatangan pemilik kalau sudah pernah tandatangan kontrak.
+              Memberi kesan resmi tanpa butuh tandatangan ulang per
+              kwitansi. */}
+          {payment.tenancy.ownerSignatureUrl && (
+            <div className="mt-6 flex flex-col items-end">
+              <div className="text-xs text-slate-500">
+                Diterima &amp; diverifikasi oleh,
+              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={payment.tenancy.ownerSignatureUrl}
+                alt="Tandatangan pemilik"
+                className="my-1 h-16 w-auto object-contain"
+              />
+              <div className="text-sm font-semibold">
+                {payment.tenancy.room.kos.owner.name}
+              </div>
+              <div className="text-xs text-slate-500">
+                Pemilik / Pengelola Kos
+              </div>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="mt-6 border-t border-slate-200 pt-4 text-center text-xs text-slate-500">
             Kuitansi ini dicetak otomatis dari sistem Kos Baiti pada{" "}
             {formatDateTime(new Date())}.
             <br />
-            Dokumen ini sah tanpa tanda tangan.
+            {payment.tenancy.ownerSignatureUrl
+              ? "Tandatangan di atas tersimpan secara elektronik dan terikat dengan kontrak sewa."
+              : "Dokumen ini sah tanpa tanda tangan."}
           </div>
         </div>
       </div>

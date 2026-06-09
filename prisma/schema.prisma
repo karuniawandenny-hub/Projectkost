@@ -96,6 +96,12 @@ model Tenancy {
   startDate  DateTime  @default(now())
   endDate    DateTime?
   status     String    @default("ACTIVE") // "ACTIVE" | "ENDED"
+  // E-signature kontrak. Disimpan sebagai data URL PNG (base64) supaya
+  // tidak perlu file upload terpisah. Kecil (~5-30 KB per tandatangan).
+  tenantSignatureUrl String?
+  tenantSignedAt     DateTime?
+  ownerSignatureUrl  String?
+  ownerSignedAt      DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/session";
 import { formatDateID } from "@/lib/billing";
 import { PrintButton } from "@/components/PrintButton";
 import { BackButton } from "@/components/BackButton";
+import { SignatureBlock } from "./SignatureBlock";
 
 function formatDate(d: Date | null | undefined): string {
   return d ? formatDateID(d) : "—";
@@ -209,20 +210,31 @@ export default async function ContractPage({
             Baiti dan dapat dijadikan rujukan resmi.
           </p>
 
-          {/* Tanda tangan */}
+          {/* Tanda tangan elektronik. Pemilik tanda tangan sebagai pihak
+              pertama, penghuni sebagai pihak kedua. Status sinkron
+              dengan database — kalau sudah pernah tandatangan, blok
+              menampilkan gambar; jika belum, tampil kanvas. */}
           <div className="mt-8 grid gap-8 sm:grid-cols-2">
             <div className="text-center text-sm">
-              <div className="text-slate-500">PIHAK PERTAMA</div>
-              <div className="my-12 border-b border-slate-400" />
-              <div className="font-semibold">
+              <SignatureBlock
+                tenancyId={tenancy.id}
+                role="OWNER"
+                signedUrl={tenancy.ownerSignatureUrl ?? null}
+                signedAt={tenancy.ownerSignedAt ?? null}
+              />
+              <div className="mt-1 font-semibold">
                 {tenancy.room.kos.owner.name}
               </div>
               <div className="text-xs text-slate-500">Pemilik / Pengelola</div>
             </div>
             <div className="text-center text-sm">
-              <div className="text-slate-500">PIHAK KEDUA</div>
-              <div className="my-12 border-b border-slate-400" />
-              <div className="font-semibold">{tenancy.tenant.name}</div>
+              <SignatureBlock
+                tenancyId={tenancy.id}
+                role="TENANT"
+                signedUrl={tenancy.tenantSignatureUrl ?? null}
+                signedAt={tenancy.tenantSignedAt ?? null}
+              />
+              <div className="mt-1 font-semibold">{tenancy.tenant.name}</div>
               <div className="text-xs text-slate-500">Penghuni</div>
             </div>
           </div>
