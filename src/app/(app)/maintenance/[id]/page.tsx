@@ -9,7 +9,7 @@ import {
   statusLabel,
   typeLabel,
 } from "@/lib/maintenance";
-import { viewerUrl } from "@/lib/viewer";
+import { galleryViewerUrl } from "@/lib/viewer";
 import { CompleteForm } from "./CompleteForm";
 import { SimpleActionButton } from "./SimpleActionButton";
 
@@ -143,9 +143,9 @@ export default async function MaintenanceDetailPage({
           <div>
             <div className="text-xs font-medium text-slate-500 mb-1.5">Foto</div>
             <div className="grid grid-cols-3 gap-2">
-              {photos.map((p) => (
+              {photos.map((p, i) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <a key={p} href={viewerUrl(p, "Foto perawatan")}>
+                <a key={p} href={galleryViewerUrl(photos, i, "Foto perawatan")}>
                   <img
                     src={p}
                     alt="foto perawatan"
