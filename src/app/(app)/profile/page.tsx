@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
+import { PushToggle } from "@/components/PushToggle";
 import { PhoneEditForm } from "./PhoneEditForm";
 
 export default async function ProfilePage() {
@@ -43,6 +44,15 @@ export default async function ProfilePage() {
       <div className="card">
         <h2 className="mb-3 text-lg font-semibold">Kontak WhatsApp</h2>
         <PhoneEditForm currentPhone={user.phone} />
+      </div>
+
+      <div className="card">
+        <h2 className="text-lg font-semibold">Notifikasi di HP</h2>
+        <p className="mt-1 mb-3 text-sm text-slate-600">
+          Aktifkan untuk menerima pengingat pembayaran, pengumuman pemilik,
+          dan update perawatan langsung di HP — meski aplikasi tidak dibuka.
+        </p>
+        <PushToggle />
       </div>
 
       <form action="/logout" method="POST">

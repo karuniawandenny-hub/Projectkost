@@ -26,10 +26,12 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  ownedKos        Kos[]          @relation("OwnerKos")
-  tenancies       Tenancy[]
-  notifications   Notification[]
-  passwordResets  PasswordResetToken[]
+  ownedKos          Kos[]          @relation("OwnerKos")
+  tenancies         Tenancy[]
+  notifications     Notification[]
+  passwordResets    PasswordResetToken[]
+  pushSubscriptions PushSubscription[]
+  announcements     Announcement[] @relation("AnnouncementAuthor")
 }
 
 model PasswordResetToken {
@@ -58,6 +60,7 @@ model Kos {
   owner       User     @relation("OwnerKos", fields: [ownerId], references: [id], onDelete: Cascade)
   rooms       Room[]
   maintenances Maintenance[]
+  announcements Announcement[]
 
   @@index([ownerId])
 }
@@ -285,4 +288,41 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// Langganan Web Push (PWA) per device. 1 user bisa punya banyak device.
+// Dipakai src/lib/push.ts untuk kirim notifikasi push ke HP penghuni
+// tanpa buka app — mengurangi ketergantungan kuota WA.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Pengumuman broadcast dari pemilik ke seluruh penghuni 1 kos (atau
+// semua kos miliknya kalau kosId null). Saat dibuat, di-fan-out jadi
+// Notification + email + Web Push ke tiap penghuni aktif. Record ini
+// menyimpan riwayat broadcast (siapa, kapan, ke berapa orang).
+model Announcement {
+  id            String   @id @default(cuid())
+  authorId      String
+  kosId         String?  // null = semua kos milik author
+  title         String
+  body          String
+  audienceCount Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  author        User     @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  kos           Kos?     @relation(fields: [kosId], references: [id], onDelete: SetNull)
+
+  @@index([authorId])
+  @@index([kosId])
 }

@@ -12,7 +12,7 @@
  * koneksi.
  */
 
-const CACHE_VERSION = "kos-baiti-v2";
+const CACHE_VERSION = "kos-baiti-v3";
 const STATIC_ASSETS = [
   "/manifest.json",
   "/kos-baiti-logo.png",
@@ -38,6 +38,47 @@ self.addEventListener("activate", (event) => {
         )
       )
       .then(() => self.clients.claim())
+  );
+});
+
+// ===== Web Push =====
+// Tampilkan notifikasi saat server kirim push. Payload JSON:
+// { title, body, url, tag }.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: "Kos Baiti", body: event.data ? event.data.text() : "" };
+  }
+  const title = data.title || "Kos Baiti";
+  const options = {
+    body: data.body || "",
+    icon: "/icon.png",
+    badge: "/icon.png",
+    tag: data.tag || undefined,
+    data: { url: data.url || "/notifications" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Klik notifikasi → fokus tab app yang sudah buka, atau buka tab baru
+// ke URL tujuan notifikasi.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/notifications";
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if ("focus" in client) {
+            client.navigate(target);
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow(target);
+      })
   );
 });
 

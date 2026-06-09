@@ -44,6 +44,7 @@ export default async function Shell({ user, children }: Props) {
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
         { href: "/maintenance", label: "Perawatan" },
+        { href: "/announcements", label: "Pengumuman" },
         { href: "/reports", label: "Laporan" },
       ]
     : [
@@ -52,6 +53,7 @@ export default async function Shell({ user, children }: Props) {
         { href: "/payments", label: "Pembayaran" },
         { href: "/complaints", label: "Komplain" },
         { href: "/maintenance", label: "Perawatan" },
+        { href: "/announcements", label: "Pengumuman" },
         { href: "/profile", label: "Profil" },
       ];
 
