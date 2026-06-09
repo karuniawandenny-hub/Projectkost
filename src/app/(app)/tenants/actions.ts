@@ -8,6 +8,7 @@ import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
 import { deleteUploadByUrl, deleteUploadsByUrls } from "@/lib/upload";
+import { logAudit } from "@/lib/audit";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -81,7 +82,7 @@ export async function approveAndAssignTenant(
     return { error: "Penghuni sudah punya tenancy aktif." };
   }
 
-  await prisma.$transaction([
+  const [, newTenancy] = await prisma.$transaction([
     prisma.user.update({
       where: { id: target.id },
       data: { status: "ACTIVE" },
@@ -94,6 +95,21 @@ export async function approveAndAssignTenant(
       data: { status: "OCCUPIED" },
     }),
   ]);
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.APPROVE",
+    entityType: "User",
+    entityId: target.id,
+    metadata: {
+      tenantName: target.name,
+      kosName: room.kos.name,
+      roomName: room.name,
+      startDate: startDate.toISOString(),
+      tenancyId: newTenancy.id,
+    },
+  });
 
   const startStr = startDate.toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -362,7 +378,7 @@ export async function rejectTenant(
   _prev: ApproveTenantState,
   formData: FormData
 ): Promise<ApproveTenantState> {
-  await requireOwnerOrAdmin();
+  const me = await requireOwnerOrAdmin();
   const userId = String(formData.get("userId") ?? "");
   if (!userId) return { error: "User tidak ditemukan." };
 
@@ -374,6 +390,14 @@ export async function rejectTenant(
   await prisma.user.update({
     where: { id: target.id },
     data: { status: "SUSPENDED" },
+  });
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.REJECT",
+    entityType: "User",
+    entityId: target.id,
+    metadata: { tenantName: target.name, email: target.email },
   });
   await notify({
     userId: target.id,

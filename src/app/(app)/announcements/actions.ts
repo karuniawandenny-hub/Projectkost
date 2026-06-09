@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendEmailGeneric } from "@/lib/reminders";
+import { logAudit } from "@/lib/audit";
 
 export type AnnouncementState = { error?: string; success?: string };
 
@@ -108,6 +109,20 @@ export async function createAnnouncement(
       }
     }
   }
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "ANNOUNCEMENT.SEND",
+    entityType: "Announcement",
+    entityId: announcement.id,
+    metadata: {
+      title,
+      kosId,
+      audienceCount: announcement.audienceCount,
+      alsoEmail,
+    },
+  });
 
   revalidatePath("/announcements");
   return {

@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { TestActions } from "./TestActions";
 import { CronUrlCard } from "./CronUrlCard";
 import { MaintenanceWaToggle } from "./MaintenanceWaToggle";
+import { BackupCard } from "./BackupCard";
 import { getSettingBool, SETTING_KEYS } from "@/lib/settings";
+import { listBackups } from "@/lib/backup";
 
 function getBaseUrl() {
   const h = headers();
@@ -37,6 +39,8 @@ export default async function AdminSystemPage() {
     totalGatewayTx,
     paidGatewayTx,
     maintWaEnabled,
+    backups,
+    recentFailures,
   ] = await Promise.all([
     prisma.payment.count(),
     prisma.payment.count({ where: { status: "DUE" } }),
@@ -47,6 +51,15 @@ export default async function AdminSystemPage() {
     prisma.gatewayTransaction.count(),
     prisma.gatewayTransaction.count({ where: { status: "PAID" } }),
     getSettingBool(SETTING_KEYS.MAINTENANCE_WA_ENABLED, false),
+    listBackups(),
+    prisma.auditLog.count({
+      where: {
+        action: "BACKUP.FAIL",
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+    }),
   ]);
 
   const emailMode = process.env.EMAIL_MODE ?? "dev";
@@ -63,6 +76,9 @@ export default async function AdminSystemPage() {
     : "";
   const cronUrl = cronSecret
     ? `${getBaseUrl()}/api/cron/reminders?token=${cronSecret}`
+    : "";
+  const cronBackupUrl = cronSecret
+    ? `${getBaseUrl()}/api/cron/backup?token=${cronSecret}`
     : "";
 
   return (
@@ -161,6 +177,27 @@ export default async function AdminSystemPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section>
+        <BackupCard
+          backups={backups.map((b) => ({
+            name: b.name,
+            size: b.size,
+            modifiedAt: b.modifiedAt.toISOString(),
+          }))}
+          cronConfigured={cronConfigured}
+          cronUrl={cronBackupUrl}
+        />
+        {recentFailures > 0 && (
+          <div className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
+            ⚠️ {recentFailures} kegagalan backup dalam 7 hari terakhir. Cek{" "}
+            <a href="/admin/audit?action=BACKUP.FAIL" className="underline">
+              audit log
+            </a>{" "}
+            untuk detail.
+          </div>
+        )}
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { isExpenseCategory } from "@/lib/expenses";
+import { logAudit } from "@/lib/audit";
 
 export type ExpenseState = { error?: string; success?: string };
 
@@ -58,7 +59,7 @@ export async function createExpense(
   const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   if (Number.isNaN(date.getTime())) return { error: "Tanggal tidak valid." };
 
-  await prisma.expense.create({
+  const created = await prisma.expense.create({
     data: {
       kosId,
       createdById: me.id,
@@ -66,6 +67,21 @@ export async function createExpense(
       date,
       amount,
       note: note || null,
+    },
+    include: { kos: { select: { name: true } } },
+  });
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "EXPENSE.CREATE",
+    entityType: "Expense",
+    entityId: created.id,
+    metadata: {
+      kosName: created.kos.name,
+      category,
+      amount,
+      date: dateStr,
     },
   });
 
@@ -85,11 +101,24 @@ export async function deleteExpense(
   // Verifikasi kepemilikan via relasi kos.
   const expense = await prisma.expense.findFirst({
     where: { id, kos: { ownerId: me.id } },
-    select: { id: true },
+    include: { kos: { select: { name: true } } },
   });
   if (!expense) return { error: "Pengeluaran tidak ditemukan." };
 
   await prisma.expense.delete({ where: { id: expense.id } });
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "EXPENSE.DELETE",
+    entityType: "Expense",
+    entityId: expense.id,
+    metadata: {
+      kosName: expense.kos.name,
+      category: expense.category,
+      amount: expense.amount,
+      date: expense.date.toISOString(),
+    },
+  });
   revalidatePath("/expenses");
   revalidatePath("/reports");
   return { success: "Pengeluaran dihapus." };

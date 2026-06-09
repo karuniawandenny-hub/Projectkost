@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendPaymentVerifiedConfirmation } from "@/lib/payment-confirmation";
+import { logAudit } from "@/lib/audit";
 
 export type PaymentSubmitState = { error?: string };
 
@@ -145,6 +146,21 @@ export async function verifyPayment(formData: FormData) {
     data: {
       status: action === "VERIFY" ? "VERIFIED" : "REJECTED",
       reviewedAt: new Date(),
+      reviewNote,
+    },
+  });
+
+  await logAudit({
+    actorId: user.id,
+    actorName: user.name,
+    action: action === "VERIFY" ? "PAYMENT.VERIFY" : "PAYMENT.REJECT",
+    entityType: "Payment",
+    entityId: payment.id,
+    metadata: {
+      tenantName: payment.tenancy.tenant.name,
+      roomName: payment.tenancy.room.name,
+      period: `${payment.periodMonth}/${payment.periodYear}`,
+      amount: payment.amount,
       reviewNote,
     },
   });

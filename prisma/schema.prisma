@@ -33,6 +33,7 @@ model User {
   pushSubscriptions PushSubscription[]
   announcements     Announcement[] @relation("AnnouncementAuthor")
   expensesCreated   Expense[]      @relation("ExpenseCreator")
+  auditEntries      AuditLog[]
 }
 
 model PasswordResetToken {
@@ -331,6 +332,34 @@ model Expense {
   @@index([kosId, date])
   @@index([createdById])
   @@index([category])
+}
+
+/// Audit log untuk aksi sensitif. Tujuannya satu: kalau ada sengketa
+/// ("siapa yang verifikasi pembayaran ini?", "kapan akun ini disuspend?")
+/// kita punya jejak. Hanya admin/owner yang lihat.
+///
+/// Konvensi:
+///   - action: format "ENTITY.VERB" (mis. "PAYMENT.VERIFY", "USER.SUSPEND")
+///   - entityType + entityId: target aksi (boleh null untuk system action)
+///   - metadata: JSON string bebas dengan konteks (sebelum/sesudah, alasan)
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?  // null = system / cron
+  actorName  String?  // snapshot nama saat aksi (tahan terhadap user dihapus)
+  action     String   // "PAYMENT.VERIFY", "USER.SUSPEND", dst
+  entityType String?  // "Payment" | "User" | "Tenancy" | "Expense" | dst
+  entityId   String?
+  metadata   String?  // JSON
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
 
 // Pengumuman broadcast dari pemilik ke seluruh penghuni 1 kos (atau

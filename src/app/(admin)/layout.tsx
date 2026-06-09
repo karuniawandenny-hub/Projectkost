@@ -25,6 +25,7 @@ export default async function AdminLayout({
     { href: "/admin/payments", label: "Pembayaran" },
     { href: "/admin/complaints", label: "Komplain" },
     { href: "/admin/reminders", label: "Reminder" },
+    { href: "/admin/audit", label: "Audit" },
     { href: "/admin/system", label: "Sistem" },
   ];
 
