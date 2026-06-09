@@ -56,6 +56,8 @@ export function PushToggle() {
     standalone: boolean;
     ios: boolean;
     permission: NotificationPermission | "n/a";
+    hasVapidKey: boolean;
+    missing: string[];
   } | null>(null);
 
   const supported =
@@ -67,10 +69,19 @@ export function PushToggle() {
   useEffect(() => {
     const ios = isIOS();
     const standalone = isStandalone();
+    // Catat kapabilitas yang hilang supaya akar masalah terlihat jelas
+    // (mis. kunci VAPID tidak ikut ter-build ke bundle browser).
+    const missing: string[] = [];
+    if (!("serviceWorker" in navigator)) missing.push("Service Worker");
+    if (!("PushManager" in window)) missing.push("Push API");
+    if (!("Notification" in window)) missing.push("Notification API");
+    if (!VAPID_PUBLIC_KEY) missing.push("kunci VAPID app");
     setDiag({
       standalone,
       ios,
       permission: "Notification" in window ? Notification.permission : "n/a",
+      hasVapidKey: !!VAPID_PUBLIC_KEY,
+      missing,
     });
 
     if (!supported || !VAPID_PUBLIC_KEY) {
@@ -217,6 +228,11 @@ export function PushToggle() {
           {state === "on" ? "Aktif ✓" : "Belum"}
         </span>
       </div>
+      {diag.missing.length > 0 && (
+        <div className="text-red-600">
+          Tidak tersedia: {diag.missing.join(", ")}
+        </div>
+      )}
     </div>
   );
 
@@ -235,20 +251,38 @@ export function PushToggle() {
     return <div className="text-xs text-slate-400">Memeriksa dukungan notifikasi…</div>;
   }
   if (state === "unsupported") {
+    // Kasus khusus: API push & mode terpasang sudah benar, yang hilang
+    // hanya kunci VAPID — ini masalah konfigurasi server (build), bukan
+    // device. Tampilkan pesan yang tepat, bukan "iOS belum mendukung".
+    const onlyVapidMissing =
+      diag?.hasVapidKey === false &&
+      diag.missing.length === 1 &&
+      diag.missing[0] === "kunci VAPID app";
+
     return (
       <div>
         {iosBrowserWarning}
-        {!diag?.ios && (
-          <div className="text-xs text-slate-500">
-            Notifikasi push belum tersedia di browser/device ini. Buka lewat
-            Chrome/Safari terbaru dan pasang aplikasi (Add to Home Screen)
-            untuk mengaktifkannya.
+        {onlyVapidMissing ? (
+          <div className="text-xs text-red-600">
+            Notifikasi belum dikonfigurasi di aplikasi (kunci VAPID tidak
+            ikut ter-build). Ini perlu diperbaiki di sisi server/deploy,
+            bukan di HP Anda.
           </div>
-        )}
-        {diag?.ios && !diag.standalone ? null : (
-          <div className="text-xs text-slate-500">
-            Pastikan iOS Anda versi 16.4 atau lebih baru.
-          </div>
+        ) : (
+          <>
+            {!diag?.ios && (
+              <div className="text-xs text-slate-500">
+                Notifikasi push belum tersedia di browser/device ini. Buka
+                lewat Chrome/Safari terbaru dan pasang aplikasi (Add to Home
+                Screen) untuk mengaktifkannya.
+              </div>
+            )}
+            {diag?.ios && !diag.standalone ? null : (
+              <div className="text-xs text-slate-500">
+                Pastikan iOS Anda versi 16.4 atau lebih baru.
+              </div>
+            )}
+          </>
         )}
         {statusPanel}
       </div>

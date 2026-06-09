@@ -37,7 +37,27 @@ RUN ls -lh node_modules/@next/swc-linux-x64-gnu/next-swc.linux-x64-gnu.node \
 
 COPY . .
 
+# -------------------------------------------------------------------------
+# Build-time public env. Next.js meng-INLINE semua NEXT_PUBLIC_* ke dalam
+# bundle browser saat `next build` — jadi variabel ini WAJIB ada di sini,
+# bukan hanya di runtime. Tanpa ini, VAPID_PUBLIC_KEY = undefined di klien
+# dan tombol "Aktifkan notifikasi" jadi nonaktif (state "unsupported").
+#
+# Railway otomatis meneruskan service variable sebagai Docker build arg,
+# sehingga `ARG` dengan nama sama akan terisi dari variabel Railway.
+# -------------------------------------------------------------------------
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Peringatan (bukan fatal): kalau VAPID public key tidak ikut ter-build,
+# tombol "Aktifkan notifikasi" akan nonaktif di browser. Sengaja TIDAK
+# menggagalkan build supaya sisa situs tetap bisa deploy; diagnostik di
+# halaman Profil akan menunjukkan kunci hilang bila ini terjadi.
+RUN test -n "$NEXT_PUBLIC_VAPID_PUBLIC_KEY" \
+    || echo "WARNING: NEXT_PUBLIC_VAPID_PUBLIC_KEY kosong saat build — Web Push akan nonaktif di klien. Set di Railway -> Variables lalu redeploy."
+
 RUN npm run build
 
 # ----- Stage 2: runner -----
