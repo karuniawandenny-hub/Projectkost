@@ -19,9 +19,7 @@ function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
   return buffer;
 }
 
-type State = "loading" | "unsupported" | "off" | "on" | "denied" | "working";
-
-/**
+type State = "loading" | "unsupported" | "off" | "on" | "denied" | "working";/**
  * Tombol aktif/matikan notifikasi Web Push di device ini. Disimpan
  * per-device (1 user bisa langganan dari beberapa HP). Notifikasi
  * reminder pembayaran, pengumuman, dan update perawatan akan masuk ke
@@ -30,6 +28,10 @@ type State = "loading" | "unsupported" | "off" | "on" | "denied" | "working";
 export function PushToggle() {
   const [state, setState] = useState<State>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(
+    null
+  );
+  const [testing, setTesting] = useState(false);
 
   const supported =
     typeof window !== "undefined" &&
@@ -99,6 +101,24 @@ export function PushToggle() {
     }
   }
 
+  async function sendTest() {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data = (await res.json()) as { ok: boolean; reason?: string };
+      setTestMsg(
+        data.ok
+          ? { ok: true, text: "Terkirim! Cek notifikasi di HP Anda." }
+          : { ok: false, text: data.reason ?? "Gagal mengirim percobaan." }
+      );
+    } catch {
+      setTestMsg({ ok: false, text: "Gagal menghubungi server." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   if (state === "loading") {
     return <div className="text-xs text-slate-400">Memeriksa dukungan notifikasi…</div>;
   }
@@ -140,6 +160,28 @@ export function PushToggle() {
             : "🔔 Aktifkan notifikasi di device ini"}
       </button>
       {error && <div className="mt-1 text-xs text-red-600">{error}</div>}
+
+      {on && (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={sendTest}
+            disabled={testing}
+            className="text-sm text-brand-700 hover:underline disabled:opacity-50"
+          >
+            {testing ? "Mengirim…" : "Kirim notifikasi percobaan →"}
+          </button>
+          {testMsg && (
+            <div
+              className={`mt-1 text-xs ${
+                testMsg.ok ? "text-emerald-700" : "text-red-600"
+              }`}
+            >
+              {testMsg.text}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
