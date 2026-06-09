@@ -481,8 +481,6 @@ async function TenantDashboard({
             <div className="mt-3">
               <a
                 href={`/tenancies/${tenancy.id}/contract`}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline"
               >
                 📄 Lihat / cetak kontrak sewa

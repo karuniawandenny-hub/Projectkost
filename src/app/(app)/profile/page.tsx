@@ -56,7 +56,7 @@ function Field({ label, url }: { label: string; url: string | null }) {
     <div className="rounded-lg border border-slate-200 p-3">
       <div className="text-xs text-slate-500 mb-2">{label}</div>
       {url ? (
-        <a href={url} target="_blank" rel="noopener noreferrer">
+        <a href={url}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}

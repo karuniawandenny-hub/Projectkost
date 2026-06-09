@@ -159,8 +159,6 @@ export default async function AdminPaymentsPage({
                 {p.proofUrl ? (
                 <a
                   href={p.proofUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="text-sm text-brand-700 hover:underline"
                 >
                   Bukti
@@ -171,7 +169,6 @@ export default async function AdminPaymentsPage({
                 {p.status === "VERIFIED" && (
                   <Link
                     href={`/payments/${p.id}/receipt`}
-                    target="_blank"
                     className="text-sm text-emerald-700 hover:underline"
                   >
                     📄 Kuitansi

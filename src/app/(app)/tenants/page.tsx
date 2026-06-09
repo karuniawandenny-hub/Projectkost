@@ -234,8 +234,6 @@ export default async function TenantsPage() {
                     {t.tenant.ktpPhotoUrl && (
                       <a
                         href={t.tenant.ktpPhotoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="btn-secondary"
                       >
                         Lihat KTP
@@ -243,8 +241,6 @@ export default async function TenantsPage() {
                     )}
                     <a
                       href={`/tenancies/${t.id}/contract`}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="btn-secondary"
                     >
                       📄 Kontrak

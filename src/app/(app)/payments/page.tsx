@@ -114,8 +114,6 @@ export default async function PaymentsPage({
                   {p.proofUrl ? (
                     <a
                       href={p.proofUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
                       className="text-sm text-brand-700 hover:underline"
                     >
                       Lihat bukti
@@ -132,7 +130,6 @@ export default async function PaymentsPage({
                   {p.status === "VERIFIED" && (
                     <Link
                       href={`/payments/${p.id}/receipt`}
-                      target="_blank"
                       className="text-sm text-emerald-700 hover:underline"
                     >
                       📄 Kuitansi
@@ -248,8 +245,6 @@ function PaymentRow({ p, verifyMode }: { p: PaymentWith; verifyMode?: boolean })
           {p.proofUrl ? (
             <a
               href={p.proofUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="text-sm text-brand-700 hover:underline"
             >
               Lihat bukti

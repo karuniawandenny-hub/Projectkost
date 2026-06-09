@@ -78,8 +78,6 @@ export default async function ComplaintDetailPage({
                 <a
                   key={i}
                   href={src}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="block"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -112,8 +110,6 @@ export default async function ComplaintDetailPage({
                     <div key={i} className="relative">
                       <a
                         href={src}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="block"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}

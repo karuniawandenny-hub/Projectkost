@@ -116,8 +116,6 @@ export function PendingTenantCard({
             {tenant.ktpPhotoUrl ? (
               <a
                 href={tenant.ktpPhotoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="badge-blue hover:underline"
               >
                 Lihat KTP

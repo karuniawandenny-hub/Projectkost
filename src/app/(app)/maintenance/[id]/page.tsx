@@ -144,7 +144,7 @@ export default async function MaintenanceDetailPage({
             <div className="grid grid-cols-3 gap-2">
               {photos.map((p) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <a key={p} href={p} target="_blank" rel="noopener noreferrer">
+                <a key={p} href={p}>
                   <img
                     src={p}
                     alt="foto perawatan"
