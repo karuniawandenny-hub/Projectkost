@@ -32,6 +32,7 @@ model User {
   passwordResets    PasswordResetToken[]
   pushSubscriptions PushSubscription[]
   announcements     Announcement[] @relation("AnnouncementAuthor")
+  expensesCreated   Expense[]      @relation("ExpenseCreator")
 }
 
 model PasswordResetToken {
@@ -61,6 +62,7 @@ model Kos {
   rooms       Room[]
   maintenances Maintenance[]
   announcements Announcement[]
+  expenses     Expense[]
 
   @@index([ownerId])
 }
@@ -305,6 +307,30 @@ model PushSubscription {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// Pengeluaran operasional per kos. Penanggung pasangan dari Payment
+/// (pemasukan). Bersama-sama jadi sumber data laporan Profit & Loss.
+/// Kategori sengaja string supaya bisa di-extend tanpa migrasi; helper
+/// di src/lib/expenses.ts memvalidasi & memberi label.
+model Expense {
+  id          String   @id @default(cuid())
+  kosId       String
+  createdById String
+  category    String   // "UTILITY" | "STAFF" | "MAINTENANCE" | "SUPPLIES" | "TAX" | "OTHER"
+  date        DateTime // tanggal pengeluaran (untuk grouping bulanan)
+  amount      Int      // rupiah, positive integer
+  note        String?
+  attachmentUrl String? // optional /uploads/... untuk struk/nota
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  kos       Kos  @relation(fields: [kosId], references: [id], onDelete: Cascade)
+  createdBy User @relation("ExpenseCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([kosId, date])
+  @@index([createdById])
+  @@index([category])
 }
 
 // Pengumuman broadcast dari pemilik ke seluruh penghuni 1 kos (atau

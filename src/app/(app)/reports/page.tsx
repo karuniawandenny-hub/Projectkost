@@ -9,6 +9,12 @@ import {
 } from "@/lib/reports";
 import { ReportFiltersForm } from "./ReportFiltersForm";
 import { PrintButton } from "@/components/PrintButton";
+import {
+  buildProfitLoss,
+  EXPENSE_CATEGORY_SHORT,
+  type ExpenseCategory,
+} from "@/lib/expenses";
+import Link from "next/link";
 
 const STATUSES = ["all", "VERIFIED", "PENDING", "REJECTED", "UNPAID"] as const;
 
@@ -69,7 +75,10 @@ export default async function ReportsPage({
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
-  const { rows, summary } = await buildReport(user.id, filters);
+  const [{ rows, summary }, pnl] = await Promise.all([
+    buildReport(user.id, filters),
+    buildProfitLoss(user.id, filters),
+  ]);
 
   const periodLabel =
     filters.mode === "single"
@@ -163,6 +172,9 @@ export default async function ReportsPage({
       {/* Ringkasan keuangan per kos (J - P&L sederhana) */}
       <FinancialBreakdown rows={rows} />
 
+      {/* Laba bersih (gabungan: pemasukan VERIFIED − pengeluaran) */}
+      <ProfitLossSection pnl={pnl} />
+
       {/* Detail table */}
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
@@ -225,6 +237,173 @@ export default async function ReportsPage({
         tombol &quot;Cetak / Simpan PDF&quot; untuk menyimpan laporan ini sebagai
         PDF.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Bagian Laba & Rugi: gabungkan pemasukan VERIFIED + pengeluaran per kos
+ * dalam periode laporan. Pemilik bisa lihat laba bersih nyata, bukan
+ * sekadar tagihan masuk.
+ */
+function ProfitLossSection({
+  pnl,
+}: {
+  pnl: import("@/lib/expenses").ProfitLossSummary;
+}) {
+  const { rows, totals } = pnl;
+  const hasAnything = rows.length > 0 && (totals.income > 0 || totals.expense > 0);
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <h2 className="text-sm font-semibold text-slate-700">
+          Laba & Rugi (P&amp;L)
+        </h2>
+        <p className="text-xs text-slate-500">
+          Pemasukan diakui dari pembayaran <strong>terverifikasi</strong>;
+          pengeluaran dari{" "}
+          <Link
+            href="/expenses"
+            className="text-brand-700 hover:underline no-print"
+          >
+            halaman Pengeluaran
+          </Link>
+          <span className="hidden print:inline">halaman Pengeluaran</span>.
+        </p>
+      </div>
+
+      {!hasAnything ? (
+        <div className="px-4 py-8 text-center text-sm text-slate-500">
+          Belum ada pemasukan & pengeluaran pada periode ini. Catat pengeluaran
+          di <Link href="/expenses" className="text-brand-700 hover:underline no-print">/expenses</Link>{" "}
+          <span className="hidden print:inline">halaman Pengeluaran</span>
+          agar laba bersih bisa dihitung.
+        </div>
+      ) : (
+        <>
+          {/* Total cards */}
+          <div className="grid gap-3 p-4 sm:grid-cols-4">
+            <Stat label="Pemasukan" value={rupiah(totals.income)} tone="green" />
+            <Stat
+              label="Pengeluaran"
+              value={rupiah(totals.expense)}
+              tone="red"
+            />
+            <Stat
+              label="Laba bersih"
+              value={rupiah(totals.profit)}
+              tone={totals.profit >= 0 ? "green" : "red"}
+            />
+            <Stat
+              label="Margin"
+              value={`${totals.margin.toFixed(1)}%`}
+              tone={totals.margin >= 30 ? "green" : totals.margin >= 0 ? "yellow" : "red"}
+            />
+          </div>
+
+          {/* Per kos */}
+          <div className="overflow-x-auto border-t border-slate-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wider text-slate-600">
+                  <th className="px-3 py-2">Kos</th>
+                  <th className="px-3 py-2 text-right">Pemasukan</th>
+                  <th className="px-3 py-2 text-right">Pengeluaran</th>
+                  <th className="px-3 py-2 text-right">Laba</th>
+                  <th className="px-3 py-2 text-right">Margin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((r) => (
+                  <tr key={r.kosId} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium">{r.kosName}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                      {rupiah(r.income)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                      {rupiah(r.expense)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                        r.profit >= 0 ? "text-emerald-700" : "text-red-700"
+                      }`}
+                    >
+                      {rupiah(r.profit)}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-right tabular-nums ${
+                        r.margin >= 30
+                          ? "text-emerald-700"
+                          : r.margin >= 0
+                            ? "text-amber-700"
+                            : "text-red-700"
+                      }`}
+                    >
+                      {r.margin.toFixed(0)}%
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-slate-50 font-semibold">
+                  <td className="px-3 py-2">TOTAL</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                    {rupiah(totals.income)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-red-700">
+                    {rupiah(totals.expense)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-right tabular-nums ${
+                      totals.profit >= 0 ? "text-emerald-700" : "text-red-700"
+                    }`}
+                  >
+                    {rupiah(totals.profit)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {totals.margin.toFixed(0)}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Breakdown per kategori (kalau ada pengeluaran) */}
+          {totals.expense > 0 && (
+            <div className="border-t border-slate-200 px-4 py-3">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-600">
+                Pengeluaran per kategori
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(Object.keys(totals.byCategory) as ExpenseCategory[])
+                  .filter((c) => totals.byCategory[c] > 0)
+                  .sort((a, b) => totals.byCategory[b] - totals.byCategory[a])
+                  .map((c) => {
+                    const v = totals.byCategory[c];
+                    const pct = totals.expense > 0 ? (v / totals.expense) * 100 : 0;
+                    return (
+                      <div
+                        key={c}
+                        className="rounded-md border border-slate-200 px-3 py-2"
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="text-xs text-slate-600">
+                            {EXPENSE_CATEGORY_SHORT[c]}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            {pct.toFixed(0)}%
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {rupiah(v)}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

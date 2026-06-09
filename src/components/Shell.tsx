@@ -42,6 +42,7 @@ export default async function Shell({ user, children }: Props) {
           badge: ownerTenantsBadge,
         },
         { href: "/payments", label: "Pembayaran" },
+        { href: "/expenses", label: "Pengeluaran" },
         { href: "/complaints", label: "Komplain" },
         { href: "/maintenance", label: "Perawatan" },
         { href: "/announcements", label: "Pengumuman" },
