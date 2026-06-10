@@ -20,7 +20,10 @@ export default async function TenantsPage() {
   const [tenancies, pendingTenants, kosWithRooms, moveRequests] = await Promise.all([
     prisma.tenancy.findMany({
       where: { status: "ACTIVE", room: { kos: { ownerId: user.id } } },
-      include: { tenant: true, room: { include: { kos: true } } },
+      include: {
+        tenant: true,
+        room: { include: { kos: true } },
+      },
       orderBy: { startDate: "desc" },
     }),
     prisma.user.findMany({
@@ -242,9 +245,23 @@ export default async function TenantsPage() {
                     )}
                     <a
                       href={`/tenancies/${t.id}/contract`}
-                      className="btn-secondary"
+                      className={
+                        t.ownerSignatureUrl
+                          ? "btn-secondary"
+                          : "btn-secondary border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                      }
+                      title={
+                        t.ownerSignatureUrl
+                          ? "Kontrak sudah Anda tandatangani"
+                          : "Anda belum tandatangani sebagai PIHAK PERTAMA"
+                      }
                     >
                       📄 Kontrak
+                      {!t.ownerSignatureUrl && (
+                        <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
+                          Belum TTD
+                        </span>
+                      )}
                     </a>
                     <EditStartDateForm
                       tenancyId={t.id}

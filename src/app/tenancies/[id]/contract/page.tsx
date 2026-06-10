@@ -58,6 +58,11 @@ export default async function ContractPage({
   const contractNo = `KB-KT-${tenancy.id.slice(-8).toUpperCase()}`;
   const dueAnniversary = new Date(tenancy.startDate).getDate();
 
+  // Apakah viewer saat ini perlu diingatkan tanda tangan? Hanya tampil
+  // kalau dia yang berwenang ttd di kolom yang masih kosong.
+  const ownerNeedsToSign = isOwner && !tenancy.ownerSignatureUrl;
+  const tenantNeedsToSign = isTenant && !tenancy.tenantSignatureUrl;
+
   return (
     <main className="bg-slate-100 min-h-screen p-4 print:bg-white print:p-0">
       <div className="mx-auto max-w-3xl bg-white text-slate-900 shadow-md print:shadow-none">
@@ -69,6 +74,26 @@ export default async function ContractPage({
           </div>
           <PrintButton />
         </div>
+
+        {(ownerNeedsToSign || tenantNeedsToSign) && (
+          <div className="border-b border-amber-300 bg-amber-50 px-6 py-3 text-sm text-amber-900 no-print">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span>
+                ✍️ Anda belum menandatangani kontrak ini sebagai{" "}
+                <strong>
+                  {ownerNeedsToSign ? "PIHAK PERTAMA" : "PIHAK KEDUA"}
+                </strong>
+                . Scroll ke bawah untuk menandatangani.
+              </span>
+              <a
+                href="#signatures"
+                className="rounded-md bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+              >
+                Lompat ke tanda tangan ↓
+              </a>
+            </div>
+          </div>
+        )}
 
         <article className="px-8 py-8 sm:px-12 sm:py-10 print:px-12 print:py-10">
           {/* Header */}
@@ -214,7 +239,7 @@ export default async function ContractPage({
               pertama, penghuni sebagai pihak kedua. Status sinkron
               dengan database — kalau sudah pernah tandatangan, blok
               menampilkan gambar; jika belum, tampil kanvas. */}
-          <div className="mt-8 grid gap-8 sm:grid-cols-2">
+          <div id="signatures" className="mt-8 grid gap-8 scroll-mt-4 sm:grid-cols-2">
             <div className="text-center text-sm">
               <SignatureBlock
                 tenancyId={tenancy.id}

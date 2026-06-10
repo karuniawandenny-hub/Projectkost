@@ -94,6 +94,7 @@ async function OwnerDashboard({
     complaints,
     paymentsRecent,
     paymentsHistorical,
+    unsignedContracts,
   ] = await Promise.all([
     prisma.kos.count({ where: { ownerId } }),
     prisma.room.findMany({
@@ -145,6 +146,25 @@ async function OwnerDashboard({
         status: true,
         periodMonth: true,
         periodYear: true,
+      },
+    }),
+    // Kontrak tenancy ACTIVE yang owner belum tandatangan. Dipakai untuk
+    // call-to-action di dashboard supaya kontrak tidak terlupa.
+    prisma.tenancy.findMany({
+      where: {
+        status: "ACTIVE",
+        room: { kos: { ownerId } },
+        ownerSignatureUrl: null,
+      },
+      orderBy: { startDate: "desc" },
+      take: 6,
+      select: {
+        id: true,
+        startDate: true,
+        tenant: { select: { name: true } },
+        room: {
+          select: { name: true, kos: { select: { name: true } } },
+        },
       },
     }),
   ]);
@@ -231,6 +251,49 @@ async function OwnerDashboard({
           href="/payments"
         />
       </div>
+
+      {unsignedContracts.length > 0 && (
+        <div className="card border-amber-200 bg-amber-50/50">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold text-amber-900">
+                📄 Kontrak menunggu tanda tangan Anda
+              </h2>
+              <p className="mt-0.5 text-sm text-amber-800">
+                {unsignedContracts.length} kontrak penghuni aktif belum Anda
+                tandatangani sebagai PIHAK PERTAMA. Tanda tangan elektronik
+                sekali untuk membuat kwitansi pembayaran tampil resmi.
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 divide-y divide-amber-200">
+            {unsignedContracts.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between gap-3 py-2 text-sm"
+              >
+                <div>
+                  <div className="font-medium">{t.tenant.name}</div>
+                  <div className="text-xs text-amber-800">
+                    {t.room.kos.name} · Kamar {t.room.name} · mulai{" "}
+                    {t.startDate.toLocaleDateString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </div>
+                </div>
+                <Link
+                  href={`/tenancies/${t.id}/contract`}
+                  className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600"
+                >
+                  Tandatangani →
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ===== Charts row 1 ===== */}
       <div className="grid gap-4 lg:grid-cols-2">
