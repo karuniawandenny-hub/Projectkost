@@ -6,6 +6,7 @@ import { NotifBell } from "./NotifBell";
 import { UserMenu } from "./UserMenu";
 import { MobileNavMenu } from "./MobileNavMenu";
 import { DesktopNavLinks } from "./NavLinks";
+import { ChatBubble } from "./ChatBubble";
 
 type Props = {
   user: User;
@@ -116,6 +117,8 @@ export default async function Shell({ user, children }: Props) {
       <section className="relative z-10 mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6">
         {children}
       </section>
+
+      <ChatBubble role={isOwner ? "OWNER" : "TENANT"} />
     </main>
   );
 }

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { UserMenu } from "@/components/UserMenu";
 import { MobileNavMenu } from "@/components/MobileNavMenu";
 import { DesktopNavLinks } from "@/components/NavLinks";
+import { ChatBubble } from "@/components/ChatBubble";
 
 export default async function AdminLayout({
   children,
@@ -90,6 +91,8 @@ export default async function AdminLayout({
       <section className="relative z-10 mx-auto w-full max-w-6xl overflow-x-hidden px-3 py-4 sm:px-4 sm:py-6">
         {children}
       </section>
+
+      <ChatBubble role="ADMIN" />
     </main>
   );
 }
