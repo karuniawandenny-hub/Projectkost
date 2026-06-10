@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { isActiveNav } from "./NavLinks";
 
 type NavItem = { href: string; label: string; badge?: number };
 
@@ -18,6 +20,8 @@ type Props = {
  */
 export function MobileNavMenu({ items, buttonClassName }: Props) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname() ?? "";
+  const allHrefs = items.map((i) => i.href);
 
   useEffect(() => {
     if (!open) return;
@@ -89,21 +93,37 @@ export function MobileNavMenu({ items, buttonClassName }: Props) {
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto p-2">
-              {items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className="flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                >
-                  <span>{item.label}</span>
-                  {item.badge ? (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-slate-900">
-                      {item.badge}
+              {items.map((item) => {
+                const active = isActiveNav(item.href, pathname, allHrefs);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex items-center justify-between rounded-md px-3 py-2.5 text-sm font-medium ${
+                      active
+                        ? "bg-brand-50 text-brand-700"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {active && (
+                        <span
+                          aria-hidden
+                          className="h-4 w-1 rounded-full bg-brand-600"
+                        />
+                      )}
+                      {item.label}
                     </span>
-                  ) : null}
-                </Link>
-              ))}
+                    {item.badge ? (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-slate-900">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
         </div>

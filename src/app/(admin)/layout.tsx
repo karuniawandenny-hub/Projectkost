@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { UserMenu } from "@/components/UserMenu";
 import { MobileNavMenu } from "@/components/MobileNavMenu";
+import { DesktopNavLinks } from "@/components/NavLinks";
 
 export default async function AdminLayout({
   children,
@@ -54,20 +55,7 @@ export default async function AdminLayout({
 
             {/* Desktop nav (di tengah) */}
             <nav className="hidden flex-1 items-center justify-center gap-1 overflow-x-auto sm:flex">
-              {nav.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-slate-800 whitespace-nowrap inline-flex items-center gap-1"
-                >
-                  <span>{n.label}</span>
-                  {n.badge ? (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
-                      {n.badge}
-                    </span>
-                  ) : null}
-                </Link>
-              ))}
+              <DesktopNavLinks items={nav} variant="dark" />
             </nav>
 
             <div className="flex items-center gap-2 shrink-0">

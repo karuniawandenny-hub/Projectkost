@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { NotifBell } from "./NotifBell";
 import { UserMenu } from "./UserMenu";
 import { MobileNavMenu } from "./MobileNavMenu";
+import { DesktopNavLinks } from "./NavLinks";
 
 type Props = {
   user: User;
@@ -80,20 +81,7 @@ export default async function Shell({ user, children }: Props) {
 
             {/* Desktop nav (di tengah) */}
             <nav className="hidden flex-1 items-center justify-center gap-1 overflow-x-auto sm:flex">
-              {nav.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 whitespace-nowrap inline-flex items-center gap-1"
-                >
-                  <span>{n.label}</span>
-                  {n.badge ? (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-bold text-slate-900">
-                      {n.badge}
-                    </span>
-                  ) : null}
-                </Link>
-              ))}
+              <DesktopNavLinks items={nav} variant="light" />
             </nav>
 
             <div className="flex items-center gap-2 shrink-0">
