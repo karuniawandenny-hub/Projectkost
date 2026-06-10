@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import {
   buildReport,
   MONTH_LABELS,
+  periodsInRange,
   rupiah,
   type ReportFilters,
 } from "@/lib/reports";
@@ -15,6 +16,14 @@ import {
   type ExpenseCategory,
 } from "@/lib/expenses";
 import Link from "next/link";
+import {
+  BarChart,
+  PieChart,
+  StackedBarChart,
+  PALETTE,
+  type Segment,
+  type StackedBarPoint,
+} from "@/components/charts";
 
 const STATUSES = ["all", "VERIFIED", "PENDING", "REJECTED", "UNPAID"] as const;
 
@@ -168,6 +177,9 @@ export default async function ReportsPage({
           tone="slate"
         />
       </div>
+
+      {/* Visualisasi: cocok untuk periode bulan tunggal maupun rentang */}
+      <ChartsSection rows={rows} pnl={pnl} filters={filters} />
 
       {/* Ringkasan keuangan per kos (J - P&L sederhana) */}
       <FinancialBreakdown rows={rows} />
@@ -578,5 +590,288 @@ function FinancialBreakdown({
         </table>
       </div>
     </div>
+  );
+}
+
+function rupiahShort(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}jt`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}rb`;
+  return String(n);
+}
+
+function periodLabelShort(month: number, year: number): string {
+  return `${MONTH_LABELS[month - 1].slice(0, 3)} ${String(year).slice(2)}`;
+}
+
+/**
+ * Wrapper card untuk chart di /reports. Sengaja `break-inside-avoid`
+ * supaya saat dicetak / save-as-PDF chart tidak terpotong di tengah.
+ */
+function ChartCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="card break-inside-avoid">
+      <h3 className="font-semibold">{title}</h3>
+      {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Section visualisasi laporan — 5 chart yang menggambarkan satu periode
+ * tunggal maupun rentang multi-bulan:
+ *
+ *   1. Donut status pembayaran (Lunas/Menunggu/Ditolak/Belum bayar)
+ *   2. Bar pemasukan terverifikasi per kos
+ *   3. Donut pengeluaran per kategori
+ *   4. Bar pemasukan vs pengeluaran per kos (perbandingan langsung)
+ *   5. Tren waktu (HANYA muncul saat rentang berisi ≥2 bulan):
+ *      - Bar pemasukan terverifikasi per bulan
+ *      - Stacked bar status pembayaran per bulan
+ *
+ * Semua data dihitung dari `rows` (sudah dedupe per tenant/period) dan
+ * `pnl` (sudah punya income/expense per kos + kategori), tanpa query
+ * tambahan.
+ */
+function ChartsSection({
+  rows,
+  pnl,
+  filters,
+}: {
+  rows: import("@/lib/reports").ReportRow[];
+  pnl: import("@/lib/expenses").ProfitLossSummary;
+  filters: ReportFilters;
+}) {
+  // 1) Status pembayaran (count)
+  let cntVerified = 0,
+    cntPending = 0,
+    cntRejected = 0,
+    cntUnpaid = 0;
+  for (const r of rows) {
+    if (r.paymentStatus === "VERIFIED") cntVerified++;
+    else if (r.paymentStatus === "PENDING") cntPending++;
+    else if (r.paymentStatus === "REJECTED") cntRejected++;
+    else cntUnpaid++;
+  }
+  const statusPie: Segment[] = [
+    { label: "Lunas", value: cntVerified, color: PALETTE.emerald },
+    { label: "Menunggu", value: cntPending, color: PALETTE.amber },
+    { label: "Ditolak", value: cntRejected, color: PALETTE.red },
+    { label: "Belum bayar", value: cntUnpaid, color: PALETTE.slate },
+  ];
+  const totalRows = rows.length;
+
+  // 2) Pemasukan per kos — VERIFIED amount dari pnl.rows.
+  // Urutkan dari yang terbesar agar bar pertama paling tinggi.
+  const incomePerKos: Segment[] = [...pnl.rows]
+    .sort((a, b) => b.income - a.income)
+    .map((k) => ({
+      label: k.kosName,
+      value: k.income,
+      color: PALETTE.emerald,
+    }));
+
+  // 3) Pengeluaran per kategori (gabungan semua kos dalam rentang)
+  const expenseByCat: Segment[] = (
+    Object.keys(pnl.totals.byCategory) as ExpenseCategory[]
+  )
+    .filter((c) => pnl.totals.byCategory[c] > 0)
+    .sort((a, b) => pnl.totals.byCategory[b] - pnl.totals.byCategory[a])
+    .map((c, i) => {
+      const palette = [
+        PALETTE.brand,
+        PALETTE.violet,
+        PALETTE.amber,
+        PALETTE.red,
+        PALETTE.blue,
+        PALETTE.slate,
+      ];
+      return {
+        label: EXPENSE_CATEGORY_SHORT[c],
+        value: pnl.totals.byCategory[c],
+        color: palette[i % palette.length],
+      };
+    });
+
+  // 4) Pemasukan vs Pengeluaran per kos → stacked bar dua warna per kos.
+  // Total bar = income + expense (visual), tapi label menampilkan
+  // nilai masing-masing supaya pemilik bisa baca cepat.
+  const compareData: StackedBarPoint[] = pnl.rows.map((k) => ({
+    label: k.kosName,
+    segments: [
+      { label: "Pemasukan", value: k.income, color: PALETTE.emerald },
+      { label: "Pengeluaran", value: k.expense, color: PALETTE.red },
+    ],
+  }));
+  const compareLegend: Segment[] = [
+    { label: "Pemasukan", value: 0, color: PALETTE.emerald },
+    { label: "Pengeluaran", value: 0, color: PALETTE.red },
+  ];
+
+  // 5) Tren per-bulan — hanya kalau rentang berisi >1 bulan.
+  const periods = periodsInRange(filters);
+  const isRange = periods.length > 1;
+
+  let incomeByMonth: Segment[] = [];
+  let statusByMonth: StackedBarPoint[] = [];
+  if (isRange) {
+    incomeByMonth = periods.map((p) => {
+      const sum = rows
+        .filter(
+          (r) =>
+            r.periodMonth === p.month &&
+            r.periodYear === p.year &&
+            r.paymentStatus === "VERIFIED"
+        )
+        .reduce((s, r) => s + (r.paymentAmount ?? 0), 0);
+      return {
+        label: periodLabelShort(p.month, p.year),
+        value: sum,
+        color: PALETTE.emerald,
+      };
+    });
+
+    statusByMonth = periods.map((p) => {
+      let v = 0,
+        pd = 0,
+        rj = 0,
+        un = 0;
+      for (const r of rows) {
+        if (r.periodMonth !== p.month || r.periodYear !== p.year) continue;
+        if (r.paymentStatus === "VERIFIED") v++;
+        else if (r.paymentStatus === "PENDING") pd++;
+        else if (r.paymentStatus === "REJECTED") rj++;
+        else un++;
+      }
+      return {
+        label: periodLabelShort(p.month, p.year),
+        segments: [
+          { label: "Lunas", value: v, color: PALETTE.emerald },
+          { label: "Menunggu", value: pd, color: PALETTE.amber },
+          { label: "Ditolak", value: rj, color: PALETTE.red },
+          { label: "Belum bayar", value: un, color: PALETTE.slate },
+        ],
+      };
+    });
+  }
+
+  const collectionRate =
+    totalRows > 0
+      ? Math.round((cntVerified / totalRows) * 100)
+      : 0;
+  const hasData =
+    totalRows > 0 || pnl.totals.income > 0 || pnl.totals.expense > 0;
+
+  if (!hasData) return null;
+
+  return (
+    <section className="space-y-4 print:break-before-page">
+      <h2 className="text-lg font-semibold">Visualisasi</h2>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="Status pembayaran"
+          subtitle={`${cntVerified}/${totalRows} lunas · collection rate ${collectionRate}%`}
+        >
+          <PieChart data={statusPie} variant="donut" />
+        </ChartCard>
+
+        <ChartCard
+          title="Pemasukan terverifikasi per kos"
+          subtitle={`Total ${rupiah(pnl.totals.income)} dari ${
+            incomePerKos.length
+          } kos`}
+        >
+          <BarChart
+            data={incomePerKos}
+            formatValue={(n) => `Rp ${rupiahShort(n)}`}
+            emptyLabel="Belum ada pemasukan terverifikasi pada periode ini"
+          />
+        </ChartCard>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="Pengeluaran per kategori"
+          subtitle={
+            pnl.totals.expense > 0
+              ? `Total ${rupiah(pnl.totals.expense)}`
+              : "Belum ada pengeluaran tercatat"
+          }
+        >
+          {expenseByCat.length > 0 ? (
+            <PieChart data={expenseByCat} variant="pie" showSliceLabel />
+          ) : (
+            <div className="grid place-items-center py-6 text-sm text-slate-400">
+              Catat pengeluaran di{" "}
+              <Link
+                href="/expenses"
+                className="ml-1 text-brand-700 hover:underline no-print"
+              >
+                /expenses
+              </Link>
+              <span className="hidden print:inline ml-1">/expenses</span>
+              .
+            </div>
+          )}
+        </ChartCard>
+
+        <ChartCard
+          title="Pemasukan vs Pengeluaran per kos"
+          subtitle={
+            pnl.totals.profit >= 0
+              ? `Total laba bersih ${rupiah(pnl.totals.profit)}`
+              : `Total RUGI ${rupiah(Math.abs(pnl.totals.profit))}`
+          }
+        >
+          <StackedBarChart
+            data={compareData}
+            legend={compareLegend}
+            formatValue={(n) => `Rp ${rupiahShort(n)}`}
+            emptyLabel="Belum ada data finansial pada periode ini"
+          />
+        </ChartCard>
+      </div>
+
+      {isRange && (
+        <div className="grid gap-4 lg:grid-cols-2 print:break-before-page">
+          <ChartCard
+            title="Tren pemasukan per bulan"
+            subtitle={`${periods.length} bulan · pakai untuk lihat puncak & lembah`}
+          >
+            <BarChart
+              data={incomeByMonth}
+              formatValue={(n) => `Rp ${rupiahShort(n)}`}
+              emptyLabel="Belum ada pemasukan terverifikasi"
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="Status pembayaran per bulan"
+            subtitle="Lihat bulan mana paling banyak nunggak"
+          >
+            <StackedBarChart
+              data={statusByMonth}
+              legend={[
+                { label: "Lunas", value: 0, color: PALETTE.emerald },
+                { label: "Menunggu", value: 0, color: PALETTE.amber },
+                { label: "Ditolak", value: 0, color: PALETTE.red },
+                { label: "Belum bayar", value: 0, color: PALETTE.slate },
+              ]}
+              emptyLabel="Belum ada data pembayaran"
+            />
+          </ChartCard>
+        </div>
+      )}
+    </section>
   );
 }
