@@ -130,16 +130,18 @@ function SignaturePad({
         aria-label="Kotak tandatangan"
       />
       <input type="hidden" name={inputName} value={encoded} />
-      <div className="mt-2 flex items-center justify-between">
+      <div className="mt-2 flex items-center justify-between gap-2">
         <p className="text-xs text-slate-500">
-          Goreskan tanda tangan Anda di kotak — pakai jari di HP atau mouse.
+          Goreskan tanda tangan Anda di kotak — jari di HP, mouse di desktop.
         </p>
         <button
           type="button"
           onClick={clear}
-          className="text-xs text-slate-600 hover:underline"
+          disabled={!encoded}
+          className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label="Hapus dan tanda tangan ulang"
         >
-          Hapus & ulang
+          ↻ Hapus & ulang
         </button>
       </div>
     </div>
