@@ -761,3 +761,88 @@ export function toolsForApi(tools: ChatTool[]) {
     input_schema: t.input_schema,
   })) as unknown as Anthropic.Tool[];
 }
+
+// =============================================================
+// NON-STREAMING RUNNER — dipakai webhook WhatsApp (tidak ada SSE)
+// =============================================================
+
+const MAX_ITERATIONS = 6;
+
+/**
+ * Jalankan agentic loop sampai Claude balas tanpa tool_use, atau
+ * sampai MAX_ITERATIONS tercapai. Mengembalikan teks final yang siap
+ * dikirim ke user.
+ *
+ * Dipakai oleh /api/wa/inbound — di sana tidak ada streaming, kita
+ * butuh hasil sekali jadi untuk dikirim balik via WhatsApp Cloud API.
+ */
+export async function runChatTurn(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[]
+): Promise<string> {
+  const tools = buildTools(me);
+  const toolsByName = new Map<string, ChatTool>(tools.map((t) => [t.name, t]));
+  const apiTools = toolsForApi(tools);
+  const client = anthropic();
+
+  // Salinan lokal supaya tidak mutasi array caller
+  const convo: Anthropic.MessageParam[] = [...messages];
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const response = await client.messages.create({
+      model: MODEL_ID,
+      max_tokens: 4096,
+      system: systemPromptFor(me.role),
+      tools: apiTools,
+      messages: convo,
+    });
+
+    convo.push({ role: "assistant", content: response.content });
+
+    if (response.stop_reason !== "tool_use") {
+      // Selesai — gabung semua text block jadi satu string.
+      return response.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
+    }
+
+    const toolUseBlocks = response.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+    );
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      const tool = toolsByName.get(block.name);
+      let content: string;
+      let isError = false;
+      if (!tool) {
+        content = JSON.stringify({
+          ok: false,
+          message: `Tool ${block.name} tidak dikenal.`,
+        });
+        isError = true;
+      } else {
+        try {
+          const input = (block.input as Record<string, unknown>) ?? {};
+          content = await tool.execute(input);
+        } catch (e) {
+          content = JSON.stringify({
+            ok: false,
+            message: e instanceof Error ? e.message : "Eksekusi gagal.",
+          });
+          isError = true;
+        }
+      }
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content,
+        ...(isError ? { is_error: true } : {}),
+      });
+    }
+    convo.push({ role: "user", content: toolResults });
+  }
+
+  return "Maaf, saya butuh terlalu banyak langkah untuk menjawab pertanyaan ini. Coba pertanyaan yang lebih spesifik atau buka app langsung.";
+}

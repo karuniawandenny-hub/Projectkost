@@ -18,6 +18,19 @@ export function normalizePhone(raw: string): string | null {
   return s;
 }
 
+/**
+ * Konversi nomor ke format Meta WhatsApp Cloud API: "628xxx" — tanpa
+ * "+" di depan. Meta webhook `from` selalu format ini.
+ *
+ * Return null kalau nomor tidak valid / kosong.
+ */
+export function toWhatsAppFormat(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const normalized = normalizePhone(raw);
+  if (!normalized) return null;
+  return normalized.replace(/^\+/, "");
+}
+
 export function maskPhone(phone: string): string {
   if (!phone) return "";
   const tail = phone.slice(-3);

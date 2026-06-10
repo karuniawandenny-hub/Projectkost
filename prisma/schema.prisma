@@ -37,6 +37,7 @@ model User {
   announcements     Announcement[] @relation("AnnouncementAuthor")
   expensesCreated   Expense[]      @relation("ExpenseCreator")
   auditEntries      AuditLog[]
+  waChatMessages    WaChatMessage[]
 }
 
 model PasswordResetToken {
@@ -389,4 +390,28 @@ model Announcement {
 
   @@index([authorId])
   @@index([kosId])
+}
+
+// =============================================================
+// AI CHAT VIA WHATSAPP
+// =============================================================
+
+/// Riwayat percakapan AI chatbot via WhatsApp. Disimpan per user
+/// supaya konteks tetap nyambung antar pesan WA. Saat membangun
+/// permintaan ke Claude, ambil ~20 pesan terakhir.
+///
+/// Tidak menyimpan tool_use / tool_result blocks — hanya teks final
+/// yang dikirim ke / dari user. Tool calls direplay di backend tiap
+/// turn berdasarkan kebutuhan, jadi history yang lean cukup.
+model WaChatMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // "user" | "assistant"
+  content   String
+  /// Anti-duplikasi webhook Meta. Null untuk pesan assistant.
+  metaMessageId String? @unique
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

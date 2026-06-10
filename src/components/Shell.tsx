@@ -118,7 +118,7 @@ export default async function Shell({ user, children }: Props) {
         {children}
       </section>
 
-      <ChatBubble role={isOwner ? "OWNER" : "TENANT"} />
+      {isOwner && <ChatBubble role="OWNER" />}
     </main>
   );
 }
