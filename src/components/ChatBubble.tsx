@@ -188,7 +188,7 @@ export function ChatBubble({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 sm:inset-x-auto sm:bottom-6 sm:right-6">
-      <div className="flex h-[min(80vh,560px)] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:h-[560px] sm:w-[380px] sm:rounded-2xl">
+      <div className="flex h-[min(80dvh,560px)] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:h-[560px] sm:w-[380px] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-brand-600 px-4 py-3 text-white rounded-t-2xl sm:rounded-t-2xl">
           <div className="flex items-center gap-2">
             <span aria-hidden className="text-lg">
@@ -215,7 +215,7 @@ export function ChatBubble({
 
         <div
           ref={scrollRef}
-          className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-3 py-3"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-slate-50 px-3 py-3"
         >
           {messages.length === 0 && (
             <div className="space-y-3">
@@ -299,7 +299,11 @@ export function ChatBubble({
               placeholder="Tulis pertanyaan…"
               disabled={sending}
               autoComplete="off"
-              className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
+              // text-[16px] WAJIB: font < 16px memicu auto-zoom di Safari/
+              // Chrome iOS saat input fokus — itu yang bikin panel "membesar".
+              // h-10 fixed + truncate supaya tinggi & lebar tidak berubah
+              // berapa pun panjang teks yang diketik.
+              className="h-10 min-w-0 flex-1 truncate rounded-md border border-slate-300 px-3 text-[16px] focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
             />
             <button
               type="submit"
