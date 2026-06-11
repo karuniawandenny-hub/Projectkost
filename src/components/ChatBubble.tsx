@@ -289,27 +289,22 @@ export function ChatBubble({
             e.preventDefault();
             void send(input);
           }}
-          className="border-t border-slate-200 bg-white px-3 py-2"
+          className="shrink-0 border-t border-slate-200 bg-white px-3 py-2"
         >
-          <div className="flex items-end gap-2">
-            <textarea
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send(input);
-                }
-              }}
               placeholder="Tulis pertanyaan…"
-              rows={1}
               disabled={sending}
-              className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
+              autoComplete="off"
+              className="h-10 min-w-0 flex-1 rounded-md border border-slate-300 px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
             />
             <button
               type="submit"
               disabled={sending || !input.trim()}
-              className="rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40"
+              className="h-10 shrink-0 rounded-md bg-brand-600 px-3 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40"
             >
               {sending ? "…" : "Kirim"}
             </button>
