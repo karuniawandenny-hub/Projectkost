@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { sendFreeText } from "@/lib/wa-cloud";
+import { fonnteSend } from "@/lib/reminders";
 import { toWhatsAppFormat } from "@/lib/phone";
 import {
   isChatConfigured,
@@ -15,17 +16,35 @@ export const maxDuration = 60;
 const HISTORY_TURNS = 20;
 
 /**
- * GET /api/wa/inbound — verifikasi webhook Meta.
+ * Dual-provider WhatsApp inbound webhook. Pilih provider lewat env:
  *
- * Saat pertama kali daftarkan webhook di Meta Business Manager, Meta
- * akan kirim GET dengan query:
- *   hub.mode=subscribe
- *   hub.verify_token=<token-yang-kita-set>
- *   hub.challenge=<random-string>
+ *   WA_INBOUND_PROVIDER=fonnte   ← default (Meta sedang restricted, atau
+ *                                  Anda memang pakai Fonnte)
+ *   WA_INBOUND_PROVIDER=meta     ← setelah Meta verified & unblocked
  *
- * Kita balas `hub.challenge` apa adanya kalau verify_token cocok.
- * Set env META_WA_WEBHOOK_VERIFY_TOKEN ke string rahasia yang sama.
+ * Ganti provider = ubah 1 env var saja. Logika inti (match user, jalankan
+ * AI, simpan riwayat, balas) dipakai bersama. Yang berbeda hanya:
+ *  - cara parse payload masuk
+ *  - cara verifikasi keaslian webhook
+ *  - cara kirim balasan
+ *
+ * Setup webhook URL:
+ *   Fonnte: https://<domain>/api/wa/inbound?secret=<FONNTE_WEBHOOK_SECRET>
+ *   Meta:   https://<domain>/api/wa/inbound (verify token via GET)
  */
+type Provider = "fonnte" | "meta";
+
+function currentProvider(): Provider {
+  const v = (process.env.WA_INBOUND_PROVIDER ?? "fonnte").toLowerCase();
+  return v === "meta" ? "meta" : "fonnte";
+}
+
+// =============================================================
+// GET — verifikasi webhook Meta (hub.challenge)
+// =============================================================
+// Hanya Meta yang panggil GET; Fonnte tidak punya verification flow
+// seperti ini. Tetap aktifkan supaya kalau provider dipindah ke meta,
+// tidak perlu redeploy.
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const mode = url.searchParams.get("hub.mode");
@@ -39,6 +58,26 @@ export async function GET(req: Request) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
+// =============================================================
+// POST — dispatch ke provider yang aktif
+// =============================================================
+export async function POST(req: Request) {
+  try {
+    if (currentProvider() === "meta") {
+      return await handleMetaPost(req);
+    }
+    return await handleFonntePost(req);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[wa-inbound] top-level error:", e);
+    // Tetap 200 supaya provider tidak retry — error sudah di-log.
+    return NextResponse.json({ ok: true });
+  }
+}
+
+// =============================================================
+// META PROVIDER
+// =============================================================
 type MetaMessage = {
   from: string;
   id: string;
@@ -48,32 +87,11 @@ type MetaMessage = {
 
 type MetaWebhookPayload = {
   entry?: Array<{
-    changes?: Array<{
-      value?: {
-        messages?: MetaMessage[];
-      };
-    }>;
+    changes?: Array<{ value?: { messages?: MetaMessage[] } }>;
   }>;
 };
 
-/**
- * POST /api/wa/inbound — terima pesan WA dari Meta.
- *
- * Alur:
- *  1. Parse semua message dari payload.
- *  2. Untuk tiap pesan tipe "text":
- *     a. Cocokkan `from` (nomor pengirim) ke User.phone (semua format).
- *     b. Cek role — Phase 2 ini hanya untuk TENANT. Owner & admin
- *        diarahkan balik ke app web.
- *     c. Cek duplikat (metaMessageId) — Meta sering retry.
- *     d. Load 20 turn terakhir dari WaChatMessage, append pesan user.
- *     e. Panggil runChatTurn() → dapat reply text.
- *     f. Kirim balik via sendFreeText().
- *     g. Simpan kedua pesan (user + assistant) ke DB.
- *  3. Selalu balas 200 ke Meta supaya tidak retry. Error apapun di-log
- *     + kirim pesan error ramah ke user (kalau memungkinkan).
- */
-export async function POST(req: Request) {
+async function handleMetaPost(req: Request): Promise<NextResponse> {
   let payload: MetaWebhookPayload;
   try {
     payload = (await req.json()) as MetaWebhookPayload;
@@ -84,59 +102,183 @@ export async function POST(req: Request) {
   const messages: MetaMessage[] = [];
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
-      for (const m of change.value?.messages ?? []) {
-        messages.push(m);
-      }
+      for (const m of change.value?.messages ?? []) messages.push(m);
     }
   }
 
-  // Proses sequentially supaya pesan dari user yang sama urut.
   for (const m of messages) {
     try {
-      await handleMessage(m);
+      if (m.type !== "text" || !m.text?.body) {
+        await metaSend(
+          m.from,
+          "Maaf, saat ini saya hanya bisa membaca pesan teks. Silakan ketik pertanyaan Anda."
+        );
+        continue;
+      }
+      await handleIncoming(m.from, m.text.body.trim(), {
+        send: metaSend,
+        messageId: m.id,
+      });
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error("[wa-inbound] error processing msg", m.id, e);
+      console.error("[wa-inbound][meta] error msg", m.id, e);
     }
   }
 
-  // Selalu 200, Meta sensitif terhadap non-2xx → kalau gagal mereka retry.
   return NextResponse.json({ ok: true });
 }
 
-async function handleMessage(m: MetaMessage) {
-  if (m.type !== "text" || !m.text?.body) {
-    // Phase 2 hanya support text. Image/voice/sticker → tolak sopan.
-    await trySend(
-      m.from,
+async function metaSend(phone: string, text: string): Promise<void> {
+  try {
+    await sendFreeText(phone, text, { previewUrl: false });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[wa-inbound][meta] send error:", e);
+  }
+}
+
+// =============================================================
+// FONNTE PROVIDER
+// =============================================================
+type FonnteBody = {
+  sender?: string;
+  message?: string;
+  member?: string;
+  device?: string;
+};
+
+async function handleFonntePost(req: Request): Promise<NextResponse> {
+  // Shared secret di query string.
+  const url = new URL(req.url);
+  const secret = url.searchParams.get("secret");
+  const expected = process.env.FONNTE_WEBHOOK_SECRET;
+  if (!expected || secret !== expected) {
+    // eslint-disable-next-line no-console
+    console.warn("[wa-inbound][fonnte] secret invalid");
+    return NextResponse.json({ ok: true });
+  }
+
+  const data = await parseFonnteBody(req);
+  if (!data) return NextResponse.json({ ok: true });
+
+  const sender = data.sender?.trim();
+  if (!sender) return NextResponse.json({ ok: true });
+
+  // Skip pesan dari grup (field member ada).
+  if (data.member) {
+    // eslint-disable-next-line no-console
+    console.log(`[wa-inbound][fonnte] skip group from ${sender}`);
+    return NextResponse.json({ ok: true });
+  }
+  // Skip echo dari device sendiri (Fonnte kadang forward outbound).
+  if (
+    data.device &&
+    data.device.replace(/\D/g, "") === sender.replace(/\D/g, "")
+  ) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const body = data.message?.trim();
+  if (!body) {
+    await fonnteSendSafe(
+      sender,
       "Maaf, saat ini saya hanya bisa membaca pesan teks. Silakan ketik pertanyaan Anda."
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  try {
+    await handleIncoming(sender, body, { send: fonnteSendSafe });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[wa-inbound][fonnte] error:", e);
+  }
+  return NextResponse.json({ ok: true });
+}
+
+async function parseFonnteBody(req: Request): Promise<FonnteBody | null> {
+  const contentType = req.headers.get("content-type") ?? "";
+  try {
+    if (contentType.includes("application/json")) {
+      const j = (await req.json()) as Record<string, unknown>;
+      return {
+        sender: str(j.sender),
+        message: str(j.message),
+        member: str(j.member),
+        device: str(j.device),
+      };
+    }
+    const form = await req.formData();
+    return {
+      sender: str(form.get("sender")),
+      message: str(form.get("message")),
+      member: str(form.get("member")),
+      device: str(form.get("device")),
+    };
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[wa-inbound][fonnte] parse error:", e);
+    return null;
+  }
+}
+
+function str(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  return typeof v === "string" ? v : String(v);
+}
+
+async function fonnteSendSafe(phone: string, text: string): Promise<void> {
+  const token = process.env.WA_GATEWAY_TOKEN;
+  if (!token) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[wa-inbound][fonnte] WA_GATEWAY_TOKEN belum diset — reply diabaikan"
     );
     return;
   }
+  try {
+    await fonnteSend(token, phone, text);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[wa-inbound][fonnte] send error:", e);
+  }
+}
 
-  const body = m.text.body.trim();
-  if (!body) return;
+// =============================================================
+// SHARED CORE — match user, jalankan AI, simpan riwayat, balas
+// =============================================================
+type ProviderCtx = {
+  /** Kirim teks balasan ke nomor user. */
+  send: (phone: string, text: string) => Promise<void>;
+  /** Anti-duplikat berbasis ID provider. Kosongkan kalau provider tidak
+   *  punya ID stabil (Fonnte) — dedup fallback ke content+time window. */
+  messageId?: string;
+};
 
-  // Anti-duplikat: Meta retry kalau response telat / 5xx.
-  const existing = await prisma.waChatMessage.findUnique({
-    where: { metaMessageId: m.id },
-  });
-  if (existing) return;
+async function handleIncoming(
+  senderPhone: string,
+  body: string,
+  ctx: ProviderCtx
+): Promise<void> {
+  // Dedup
+  if (ctx.messageId) {
+    const existing = await prisma.waChatMessage.findUnique({
+      where: { metaMessageId: ctx.messageId },
+    });
+    if (existing) return;
+  }
 
-  const fromNormalized = toWhatsAppFormat(m.from);
+  const fromNormalized = toWhatsAppFormat(senderPhone);
   if (!fromNormalized) {
-    await trySend(
-      m.from,
+    await ctx.send(
+      senderPhone,
       "Nomor Anda tidak dapat dikenali. Hubungi pemilik kos."
     );
     return;
   }
 
-  // Cari user dengan phone yang sama (semua varian: +62.., 08.., 62..).
-  // Karena User.phone disimpan dalam berbagai format historis, ambil
-  // semua user dengan phone non-null lalu cocokkan setelah normalisasi.
-  // Untuk skala app ini (puluhan-ratusan user) ini OK; kalau besar
-  // nanti tambah field phoneE164 yang sudah ternormalisasi.
+  // Cari user — User.phone disimpan dalam berbagai format historis,
+  // jadi ambil semua kandidat lalu cocokkan setelah normalisasi.
   const candidates = await prisma.user.findMany({
     where: { phone: { not: null }, status: { not: "SUSPENDED" } },
     select: { id: true, name: true, phone: true, role: true },
@@ -146,50 +288,56 @@ async function handleMessage(m: MetaMessage) {
   );
 
   if (!user) {
-    await trySend(
-      m.from,
+    await ctx.send(
+      senderPhone,
       "Nomor Anda belum terdaftar di Kos Baiti. Hubungi pemilik untuk mendaftar, atau pastikan nomor di profil app Anda cocok dengan nomor WhatsApp ini."
     );
     return;
   }
 
   if (user.role !== "TENANT") {
-    await trySend(
-      m.from,
-      "Halo " +
-        user.name +
-        "! Untuk pemilik & admin, asisten AI tersedia di app web (tombol ✨ di pojok kanan-bawah). Di sana Anda bisa lihat laporan keuangan, daftar penghuni, dan komplain dengan format tabel."
+    await ctx.send(
+      senderPhone,
+      `Halo ${user.name}! Untuk pemilik & admin, asisten AI tersedia di app web (tombol ✨ di pojok kanan-bawah). Di sana Anda bisa lihat laporan keuangan, daftar penghuni, dan komplain dengan format tabel.`
     );
     return;
   }
 
+  // Fallback dedup untuk provider tanpa messageId stabil (Fonnte):
+  // kalau pesan identik dari user yang sama muncul <30 detik, anggap retry.
+  if (!ctx.messageId) {
+    const recent = await prisma.waChatMessage.findFirst({
+      where: {
+        userId: user.id,
+        role: "user",
+        content: body,
+        createdAt: { gte: new Date(Date.now() - 30_000) },
+      },
+      select: { id: true },
+    });
+    if (recent) return;
+  }
+
   if (!isChatConfigured()) {
-    await trySend(
-      m.from,
+    await ctx.send(
+      senderPhone,
       "Maaf, asisten AI sedang tidak aktif. Hubungi admin atau buka app langsung."
     );
     return;
   }
 
-  const me: ChatUser = {
-    id: user.id,
-    name: user.name,
-    role: "TENANT",
-  };
+  const me: ChatUser = { id: user.id, name: user.name, role: "TENANT" };
 
-  // Load history 20 turn terakhir untuk konteks.
   const history = await prisma.waChatMessage.findMany({
     where: { userId: user.id },
     orderBy: { createdAt: "desc" },
     take: HISTORY_TURNS,
     select: { role: true, content: true },
   });
-  const messages: Anthropic.MessageParam[] = history
-    .reverse()
-    .map((h) => ({
-      role: h.role === "assistant" ? "assistant" : "user",
-      content: h.content,
-    }));
+  const messages: Anthropic.MessageParam[] = history.reverse().map((h) => ({
+    role: h.role === "assistant" ? "assistant" : "user",
+    content: h.content,
+  }));
   messages.push({ role: "user", content: body });
 
   let reply: string;
@@ -198,45 +346,27 @@ async function handleMessage(m: MetaMessage) {
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("[wa-inbound] AI error:", e);
-    await trySend(
-      m.from,
+    await ctx.send(
+      senderPhone,
       "Maaf, ada gangguan di asisten AI. Coba lagi dalam beberapa menit."
     );
     return;
   }
-
   if (!reply) reply = "Maaf, saya tidak punya jawaban untuk itu sekarang.";
 
-  // Kirim balik. Kalau gagal, tetap simpan ke DB supaya konteks tidak
-  // hilang (user mungkin tanya hal lain berikutnya).
-  await trySend(m.from, reply);
+  await ctx.send(senderPhone, reply);
 
-  // Simpan kedua pesan ke history. metaMessageId hanya untuk pesan user
-  // (anti-duplikat); assistant tidak punya.
   await prisma.$transaction([
     prisma.waChatMessage.create({
       data: {
         userId: user.id,
         role: "user",
         content: body,
-        metaMessageId: m.id,
+        metaMessageId: ctx.messageId ?? null,
       },
     }),
     prisma.waChatMessage.create({
-      data: {
-        userId: user.id,
-        role: "assistant",
-        content: reply,
-      },
+      data: { userId: user.id, role: "assistant", content: reply },
     }),
   ]);
-}
-
-async function trySend(phone: string, text: string) {
-  try {
-    await sendFreeText(phone, text, { previewUrl: false });
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("[wa-inbound] send error:", e);
-  }
 }
