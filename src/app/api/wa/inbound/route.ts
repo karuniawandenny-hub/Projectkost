@@ -62,6 +62,10 @@ export async function GET(req: Request) {
 // POST — dispatch ke provider yang aktif
 // =============================================================
 export async function POST(req: Request) {
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound] POST received provider=${currentProvider()} content-type=${req.headers.get("content-type") ?? "-"}`
+  );
   try {
     if (currentProvider() === "meta") {
       return await handleMetaPost(req);
@@ -152,22 +156,45 @@ async function handleFonntePost(req: Request): Promise<NextResponse> {
   const url = new URL(req.url);
   const secret = url.searchParams.get("secret");
   const expected = process.env.FONNTE_WEBHOOK_SECRET;
-  if (!expected || secret !== expected) {
+  if (!expected) {
     // eslint-disable-next-line no-console
-    console.warn("[wa-inbound][fonnte] secret invalid");
+    console.error(
+      "[wa-inbound][fonnte] FONNTE_WEBHOOK_SECRET belum diset di env — webhook ditolak"
+    );
     return NextResponse.json({ ok: true });
   }
+  if (secret !== expected) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[wa-inbound][fonnte] secret tidak cocok — pastikan URL webhook di Fonnte = "?secret=${expected.slice(0, 4)}..." (received: "${secret?.slice(0, 4) ?? "null"}...")`
+    );
+    return NextResponse.json({ ok: true });
+  }
+  // eslint-disable-next-line no-console
+  console.log("[wa-inbound][fonnte] secret OK");
 
   const data = await parseFonnteBody(req);
-  if (!data) return NextResponse.json({ ok: true });
+  if (!data) {
+    // eslint-disable-next-line no-console
+    console.warn("[wa-inbound][fonnte] body parse gagal");
+    return NextResponse.json({ ok: true });
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound][fonnte] parsed: sender=${data.sender ?? "-"} device=${data.device ?? "-"} member=${data.member ? "ya" : "tidak"} msg_len=${data.message?.length ?? 0}`
+  );
 
   const sender = data.sender?.trim();
-  if (!sender) return NextResponse.json({ ok: true });
+  if (!sender) {
+    // eslint-disable-next-line no-console
+    console.warn("[wa-inbound][fonnte] sender kosong");
+    return NextResponse.json({ ok: true });
+  }
 
   // Skip pesan dari grup (field member ada).
   if (data.member) {
     // eslint-disable-next-line no-console
-    console.log(`[wa-inbound][fonnte] skip group from ${sender}`);
+    console.log(`[wa-inbound][fonnte] skip pesan grup dari ${sender}`);
     return NextResponse.json({ ok: true });
   }
   // Skip echo dari device sendiri (Fonnte kadang forward outbound).
@@ -175,11 +202,17 @@ async function handleFonntePost(req: Request): Promise<NextResponse> {
     data.device &&
     data.device.replace(/\D/g, "") === sender.replace(/\D/g, "")
   ) {
+    // eslint-disable-next-line no-console
+    console.log("[wa-inbound][fonnte] skip echo dari device sendiri");
     return NextResponse.json({ ok: true });
   }
 
   const body = data.message?.trim();
   if (!body) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[wa-inbound][fonnte] pesan non-teks dari ${sender}, minta ketik teks`
+    );
     await fonnteSendSafe(
       sender,
       "Maaf, saat ini saya hanya bisa membaca pesan teks. Silakan ketik pertanyaan Anda."
@@ -260,16 +293,29 @@ async function handleIncoming(
   body: string,
   ctx: ProviderCtx
 ): Promise<void> {
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound] handleIncoming from=${senderPhone} body="${body.slice(0, 60)}${body.length > 60 ? "…" : ""}"`
+  );
+
   // Dedup
   if (ctx.messageId) {
     const existing = await prisma.waChatMessage.findUnique({
       where: { metaMessageId: ctx.messageId },
     });
-    if (existing) return;
+    if (existing) {
+      // eslint-disable-next-line no-console
+      console.log(`[wa-inbound] dedup hit messageId=${ctx.messageId}`);
+      return;
+    }
   }
 
   const fromNormalized = toWhatsAppFormat(senderPhone);
   if (!fromNormalized) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[wa-inbound] nomor pengirim tidak valid format: "${senderPhone}"`
+    );
     await ctx.send(
       senderPhone,
       "Nomor Anda tidak dapat dikenali. Hubungi pemilik kos."
@@ -288,14 +334,26 @@ async function handleIncoming(
   );
 
   if (!user) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[wa-inbound] tidak ada user dengan phone=${fromNormalized} (dicari di ${candidates.length} kandidat)`
+    );
     await ctx.send(
       senderPhone,
       "Nomor Anda belum terdaftar di Kos Baiti. Hubungi pemilik untuk mendaftar, atau pastikan nomor di profil app Anda cocok dengan nomor WhatsApp ini."
     );
     return;
   }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound] user match: id=${user.id} name="${user.name}" role=${user.role}`
+  );
 
   if (user.role !== "TENANT") {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[wa-inbound] role bukan TENANT (${user.role}), redirect ke app web`
+    );
     await ctx.send(
       senderPhone,
       `Halo ${user.name}! Untuk pemilik & admin, asisten AI tersedia di app web (tombol ✨ di pojok kanan-bawah). Di sana Anda bisa lihat laporan keuangan, daftar penghuni, dan komplain dengan format tabel.`
@@ -319,6 +377,10 @@ async function handleIncoming(
   }
 
   if (!isChatConfigured()) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[wa-inbound] ANTHROPIC_API_KEY belum diset — chatbot tidak bisa jalan"
+    );
     await ctx.send(
       senderPhone,
       "Maaf, asisten AI sedang tidak aktif. Hubungi admin atau buka app langsung."
@@ -340,6 +402,11 @@ async function handleIncoming(
   }));
   messages.push({ role: "user", content: body });
 
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound] memanggil Claude (history=${history.length}, total messages=${messages.length})`
+  );
+  const startedAt = Date.now();
   let reply: string;
   try {
     reply = await runChatTurn(me, messages);
@@ -352,9 +419,17 @@ async function handleIncoming(
     );
     return;
   }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[wa-inbound] Claude reply ${reply.length} chars dalam ${Date.now() - startedAt}ms`
+  );
   if (!reply) reply = "Maaf, saya tidak punya jawaban untuk itu sekarang.";
 
+  // eslint-disable-next-line no-console
+  console.log(`[wa-inbound] kirim balasan ke ${senderPhone}`);
   await ctx.send(senderPhone, reply);
+  // eslint-disable-next-line no-console
+  console.log(`[wa-inbound] selesai untuk ${senderPhone}`);
 
   await prisma.$transaction([
     prisma.waChatMessage.create({
