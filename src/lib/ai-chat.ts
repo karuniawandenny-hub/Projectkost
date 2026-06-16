@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { prisma } from "./prisma";
 import {
   EXPENSE_CATEGORY_LABEL,
@@ -7,23 +8,36 @@ import {
 import { logAudit } from "./audit";
 
 /**
- * AI chat backend untuk Kos Baiti. Pakai Claude API + tool use — tiap
- * tool adalah pembungkus tipis di atas query Prisma yang sudah ada.
+ * AI chat backend untuk Kos Baiti — multi-provider dengan auto-fallback.
  *
- * Filosofi:
+ * Provider primer dipilih lewat env AI_PROVIDER:
+ *   - "gemini" (default): Google Gemini 2.5 Flash via OpenAI-compatible
+ *     endpoint. GRATIS sampai 1500 req/hari + 1M context, kualitas
+ *     Bahasa Indonesia sangat baik. Butuh GEMINI_API_KEY (dari
+ *     https://aistudio.google.com/apikey).
+ *   - "anthropic": Claude (berbayar). Butuh ANTHROPIC_API_KEY.
+ *
+ * Auto-fallback: kalau primary gagal (rate limit, outage, network) dan
+ * ANTHROPIC_API_KEY tersedia, otomatis retry pakai Claude. User tidak
+ * tahu ada masalah.
+ *
+ * Filosofi tool:
  *  - Tool query SELALU di-scope ke caller (tenant atau owner). Tidak ada
  *    risiko data bocor antar user — auth-nya ikut session yang sama
  *    dengan endpoint lain.
  *  - Set tool dipisah per role. TENANT lihat data dirinya; OWNER lihat
  *    data kos miliknya. ADMIN ikut OWNER untuk sederhananya.
  *  - Tiap aksi yang mengubah data (createComplaint) di-audit.
- *
- * Untuk mengganti model: ubah konstanta MODEL_ID di bawah.
- *   - claude-opus-4-8 (default): paling pintar, ~Rp 50-100/chat
- *   - claude-sonnet-4-6: cepat & lebih murah, sweet spot
- *   - claude-haiku-4-5: paling murah, cukup untuk Q&A simple
  */
 export const MODEL_ID = "claude-opus-4-8" as const;
+export const GEMINI_MODEL = "gemini-2.5-flash" as const;
+
+export type AIProvider = "gemini" | "anthropic";
+
+export function primaryProvider(): AIProvider {
+  const v = (process.env.AI_PROVIDER ?? "gemini").toLowerCase();
+  return v === "anthropic" ? "anthropic" : "gemini";
+}
 
 export type ChatUser = {
   id: string;
@@ -733,22 +747,71 @@ export function systemPromptFor(role: ChatUser["role"]): string {
 // ANTHROPIC CLIENT
 // =============================================================
 
-let _client: Anthropic | null = null;
+let _anthropicClient: Anthropic | null = null;
 export function anthropic(): Anthropic {
-  if (!_client) {
+  if (!_anthropicClient) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error(
         "ANTHROPIC_API_KEY belum diset. Set di Railway -> Variables."
       );
     }
-    _client = new Anthropic({ apiKey });
+    _anthropicClient = new Anthropic({ apiKey });
   }
-  return _client;
+  return _anthropicClient;
 }
 
+let _geminiClient: OpenAI | null = null;
+/**
+ * Gemini lewat OpenAI-compatible endpoint Google AI Studio.
+ *
+ * Dokumentasi: https://ai.google.dev/gemini-api/docs/openai
+ * Endpoint: https://generativelanguage.googleapis.com/v1beta/openai/
+ * Auth: Bearer <GEMINI_API_KEY>
+ *
+ * Kenapa lewat OpenAI SDK, bukan @google/genai? Karena shape API,
+ * tool definition, dan streaming format mirip OpenAI — bisa di-share
+ * kode dengan provider lain (Groq, OpenRouter, dll) kalau nanti perlu.
+ */
+export function gemini(): OpenAI {
+  if (!_geminiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "GEMINI_API_KEY belum diset. Daftar di https://aistudio.google.com/apikey lalu set di Railway -> Variables."
+      );
+    }
+    _geminiClient = new OpenAI({
+      apiKey,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    });
+  }
+  return _geminiClient;
+}
+
+/**
+ * App siap chat kalau setidaknya satu provider terkonfigurasi.
+ */
 export function isChatConfigured(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  return !!(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY);
+}
+
+export function providerStatus(): {
+  primary: AIProvider;
+  gemini: boolean;
+  anthropic: boolean;
+  fallbackAvailable: boolean;
+} {
+  const primary = primaryProvider();
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  return {
+    primary,
+    gemini: hasGemini,
+    anthropic: hasAnthropic,
+    fallbackAvailable:
+      primary === "gemini" ? hasAnthropic : hasGemini,
+  };
 }
 
 /**
@@ -776,7 +839,40 @@ const MAX_ITERATIONS = 6;
  * Dipakai oleh /api/wa/inbound — di sana tidak ada streaming, kita
  * butuh hasil sekali jadi untuk dikirim balik via WhatsApp Cloud API.
  */
+/**
+ * Public entry untuk WhatsApp inbound handler (non-streaming).
+ *
+ * Strategi: coba provider primer dulu. Kalau error (rate limit, outage,
+ * key tidak valid) dan ada provider sekunder yang tersedia, otomatis
+ * fallback. User tidak tahu ada masalah.
+ */
 export async function runChatTurn(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[]
+): Promise<string> {
+  const primary = primaryProvider();
+  try {
+    if (primary === "anthropic") {
+      return await runAnthropicTurn(me, messages);
+    }
+    return await runGeminiTurn(me, messages);
+  } catch (e) {
+    const fallbackKey =
+      primary === "gemini"
+        ? process.env.ANTHROPIC_API_KEY
+        : process.env.GEMINI_API_KEY;
+    if (!fallbackKey) throw e;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ai-chat] ${primary} gagal — fallback ke ${primary === "gemini" ? "anthropic" : "gemini"}:`,
+      e instanceof Error ? e.message : e
+    );
+    if (primary === "gemini") return await runAnthropicTurn(me, messages);
+    return await runGeminiTurn(me, messages);
+  }
+}
+
+async function runAnthropicTurn(
   me: ChatUser,
   messages: Anthropic.MessageParam[]
 ): Promise<string> {
@@ -785,7 +881,6 @@ export async function runChatTurn(
   const apiTools = toolsForApi(tools);
   const client = anthropic();
 
-  // Salinan lokal supaya tidak mutasi array caller
   const convo: Anthropic.MessageParam[] = [...messages];
 
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
@@ -800,7 +895,6 @@ export async function runChatTurn(
     convo.push({ role: "assistant", content: response.content });
 
     if (response.stop_reason !== "tool_use") {
-      // Selesai — gabung semua text block jadi satu string.
       return response.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
@@ -845,4 +939,379 @@ export async function runChatTurn(
   }
 
   return "Maaf, saya butuh terlalu banyak langkah untuk menjawab pertanyaan ini. Coba pertanyaan yang lebih spesifik atau buka app langsung.";
+}
+
+// =============================================================
+// GEMINI IMPLEMENTATION (via OpenAI-compatible endpoint)
+// =============================================================
+
+/**
+ * Konversi tool ChatTool ke shape OpenAI function calling.
+ * Gemini & semua provider OpenAI-compatible pakai shape ini.
+ */
+function toolsForOpenAI(tools: ChatTool[]): OpenAI.ChatCompletionTool[] {
+  return tools.map((t) => ({
+    type: "function",
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema as Record<string, unknown>,
+    },
+  }));
+}
+
+/**
+ * Convert Anthropic.MessageParam[] ke OpenAI shape.
+ *
+ * Tidak semua block type Anthropic ada di OpenAI. Strategi:
+ *  - String content → masuk apa adanya
+ *  - Array content yang text-only → gabung jadi string
+ *  - Tool result blocks → masuk sebagai message role "tool"
+ *  - Tool use blocks (assistant) → masuk sebagai tool_calls
+ *
+ * Untuk webhook WA, history yang kita simpan hanya text murni
+ * (lihat WaChatMessage di prisma), jadi conversion ini ringan.
+ */
+function anthropicMessagesToOpenAI(
+  messages: Anthropic.MessageParam[]
+): OpenAI.ChatCompletionMessageParam[] {
+  const out: OpenAI.ChatCompletionMessageParam[] = [];
+  for (const m of messages) {
+    if (typeof m.content === "string") {
+      out.push({ role: m.role, content: m.content });
+      continue;
+    }
+    // Array content — bisa berisi text/tool_use/tool_result blocks.
+    // Untuk caller WA inbound, hanya string yang dipakai, jadi case ini
+    // praktis tidak terpicu. Tapi kita tangani defensif.
+    if (m.role === "assistant") {
+      const textParts = m.content
+        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+      out.push({ role: "assistant", content: textParts || null });
+    } else {
+      // user — extract text & buang tool_result (Gemini conversation
+      // sebelumnya tidak punya tool_call_id yang valid)
+      const textParts = m.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as Anthropic.TextBlock).text)
+        .join("\n");
+      if (textParts) out.push({ role: "user", content: textParts });
+    }
+  }
+  return out;
+}
+
+async function runGeminiTurn(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[]
+): Promise<string> {
+  const tools = buildTools(me);
+  const toolsByName = new Map<string, ChatTool>(tools.map((t) => [t.name, t]));
+  const openaiTools = toolsForOpenAI(tools);
+  const client = gemini();
+
+  const convo: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPromptFor(me.role) },
+    ...anthropicMessagesToOpenAI(messages),
+  ];
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const response = await client.chat.completions.create({
+      model: GEMINI_MODEL,
+      messages: convo,
+      tools: openaiTools,
+      max_tokens: 4096,
+    });
+
+    const choice = response.choices[0];
+    if (!choice) {
+      return "Maaf, tidak ada jawaban dari AI.";
+    }
+    const msg = choice.message;
+
+    // Push assistant response (text dan/atau tool_calls)
+    convo.push({
+      role: "assistant",
+      content: msg.content ?? null,
+      ...(msg.tool_calls?.length ? { tool_calls: msg.tool_calls } : {}),
+    });
+
+    if (
+      choice.finish_reason !== "tool_calls" ||
+      !msg.tool_calls?.length
+    ) {
+      return (msg.content ?? "").trim() ||
+        "Maaf, saya tidak punya jawaban untuk itu sekarang.";
+    }
+
+    // Eksekusi tool calls
+    for (const tc of msg.tool_calls) {
+      if (tc.type !== "function") continue;
+      const tool = toolsByName.get(tc.function.name);
+      let content: string;
+      if (!tool) {
+        content = JSON.stringify({
+          ok: false,
+          message: `Tool ${tc.function.name} tidak dikenal.`,
+        });
+      } else {
+        try {
+          const input = tc.function.arguments
+            ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+            : {};
+          content = await tool.execute(input);
+        } catch (e) {
+          content = JSON.stringify({
+            ok: false,
+            message: e instanceof Error ? e.message : "Eksekusi gagal.",
+          });
+        }
+      }
+      convo.push({
+        role: "tool",
+        tool_call_id: tc.id,
+        content,
+      });
+    }
+  }
+
+  return "Maaf, saya butuh terlalu banyak langkah untuk menjawab pertanyaan ini. Coba pertanyaan yang lebih spesifik atau buka app langsung.";
+}
+
+// =============================================================
+// STREAMING — dipakai /api/chat (UI ChatBubble in-app)
+// =============================================================
+
+export type StreamEvent =
+  | { type: "text"; delta: string }
+  | { type: "tool"; name: string };
+
+/**
+ * Streaming agentic loop dengan auto-fallback.
+ *
+ * Callback `onEvent` dipanggil tiap kali ada text delta atau tool call
+ * masuk. Provider primer dicoba dulu; kalau gagal SEBELUM ada event
+ * terkirim, fallback ke Anthropic. (Kalau primary sudah mulai stream
+ * lalu error di tengah, kita tidak fallback supaya UI tidak duplicate.)
+ */
+export async function runChatTurnStreaming(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[],
+  onEvent: (e: StreamEvent) => void
+): Promise<void> {
+  const primary = primaryProvider();
+  let sentAnyEvent = false;
+  const wrapped = (e: StreamEvent) => {
+    sentAnyEvent = true;
+    onEvent(e);
+  };
+
+  try {
+    if (primary === "anthropic") {
+      await streamAnthropic(me, messages, wrapped);
+    } else {
+      await streamGemini(me, messages, wrapped);
+    }
+  } catch (e) {
+    if (sentAnyEvent) throw e;
+    const fallbackKey =
+      primary === "gemini"
+        ? process.env.ANTHROPIC_API_KEY
+        : process.env.GEMINI_API_KEY;
+    if (!fallbackKey) throw e;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ai-chat][stream] ${primary} gagal sebelum event — fallback ke ${primary === "gemini" ? "anthropic" : "gemini"}:`,
+      e instanceof Error ? e.message : e
+    );
+    if (primary === "gemini") {
+      await streamAnthropic(me, messages, wrapped);
+    } else {
+      await streamGemini(me, messages, wrapped);
+    }
+  }
+}
+
+async function streamAnthropic(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[],
+  onEvent: (e: StreamEvent) => void
+): Promise<void> {
+  const tools = buildTools(me);
+  const toolsByName = new Map<string, ChatTool>(tools.map((t) => [t.name, t]));
+  const apiTools = toolsForApi(tools);
+  const client = anthropic();
+  const convo: Anthropic.MessageParam[] = [...messages];
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const stream = client.messages.stream({
+      model: MODEL_ID,
+      max_tokens: 4096,
+      system: systemPromptFor(me.role),
+      tools: apiTools,
+      messages: convo,
+    });
+
+    for await (const event of stream) {
+      if (event.type === "content_block_start") {
+        if (event.content_block.type === "tool_use") {
+          onEvent({ type: "tool", name: event.content_block.name });
+        }
+      } else if (event.type === "content_block_delta") {
+        if (event.delta.type === "text_delta") {
+          onEvent({ type: "text", delta: event.delta.text });
+        }
+      }
+    }
+
+    const finalMessage = await stream.finalMessage();
+    convo.push({ role: "assistant", content: finalMessage.content });
+    if (finalMessage.stop_reason !== "tool_use") return;
+
+    const toolUseBlocks = finalMessage.content.filter(
+      (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+    );
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      const tool = toolsByName.get(block.name);
+      let content: string;
+      let isError = false;
+      if (!tool) {
+        content = JSON.stringify({
+          ok: false,
+          message: `Tool ${block.name} tidak dikenal.`,
+        });
+        isError = true;
+      } else {
+        try {
+          const input = (block.input as Record<string, unknown>) ?? {};
+          content = await tool.execute(input);
+        } catch (e) {
+          content = JSON.stringify({
+            ok: false,
+            message: e instanceof Error ? e.message : "Eksekusi gagal.",
+          });
+          isError = true;
+        }
+      }
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: block.id,
+        content,
+        ...(isError ? { is_error: true } : {}),
+      });
+    }
+    convo.push({ role: "user", content: toolResults });
+  }
+}
+
+async function streamGemini(
+  me: ChatUser,
+  messages: Anthropic.MessageParam[],
+  onEvent: (e: StreamEvent) => void
+): Promise<void> {
+  const tools = buildTools(me);
+  const toolsByName = new Map<string, ChatTool>(tools.map((t) => [t.name, t]));
+  const openaiTools = toolsForOpenAI(tools);
+  const client = gemini();
+
+  const convo: OpenAI.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPromptFor(me.role) },
+    ...anthropicMessagesToOpenAI(messages),
+  ];
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const stream = await client.chat.completions.create({
+      model: GEMINI_MODEL,
+      messages: convo,
+      tools: openaiTools,
+      max_tokens: 4096,
+      stream: true,
+    });
+
+    // Accumulator untuk tool_calls — OpenAI stream kirim per delta
+    // (id+name dulu, lalu arguments potong-potong).
+    type AccTool = {
+      id: string;
+      name: string;
+      arguments: string;
+      announced: boolean;
+    };
+    const toolCalls = new Map<number, AccTool>();
+    let textBuf = "";
+    let finishReason: string | null = null;
+
+    for await (const chunk of stream) {
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+      if (choice.finish_reason) finishReason = choice.finish_reason;
+      const delta = choice.delta;
+      if (delta?.content) {
+        textBuf += delta.content;
+        onEvent({ type: "text", delta: delta.content });
+      }
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index;
+          let acc = toolCalls.get(idx);
+          if (!acc) {
+            acc = { id: "", name: "", arguments: "", announced: false };
+            toolCalls.set(idx, acc);
+          }
+          if (tc.id) acc.id = tc.id;
+          if (tc.function?.name) acc.name += tc.function.name;
+          if (tc.function?.arguments) acc.arguments += tc.function.arguments;
+          if (!acc.announced && acc.name) {
+            acc.announced = true;
+            onEvent({ type: "tool", name: acc.name });
+          }
+        }
+      }
+    }
+
+    // Selesai stream — assemble assistant message
+    const finalToolCalls = [...toolCalls.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, t]) => ({
+        id: t.id,
+        type: "function" as const,
+        function: { name: t.name, arguments: t.arguments },
+      }));
+
+    convo.push({
+      role: "assistant",
+      content: textBuf || null,
+      ...(finalToolCalls.length ? { tool_calls: finalToolCalls } : {}),
+    });
+
+    if (finishReason !== "tool_calls" || finalToolCalls.length === 0) {
+      return;
+    }
+
+    for (const tc of finalToolCalls) {
+      const tool = toolsByName.get(tc.function.name);
+      let content: string;
+      if (!tool) {
+        content = JSON.stringify({
+          ok: false,
+          message: `Tool ${tc.function.name} tidak dikenal.`,
+        });
+      } else {
+        try {
+          const input = tc.function.arguments
+            ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
+            : {};
+          content = await tool.execute(input);
+        } catch (e) {
+          content = JSON.stringify({
+            ok: false,
+            message: e instanceof Error ? e.message : "Eksekusi gagal.",
+          });
+        }
+      }
+      convo.push({ role: "tool", tool_call_id: tc.id, content });
+    }
+  }
 }

@@ -2,13 +2,8 @@ import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { getCurrentUser } from "@/lib/session";
 import {
-  anthropic,
-  buildTools,
   isChatConfigured,
-  MODEL_ID,
-  systemPromptFor,
-  toolsForApi,
-  type ChatTool,
+  runChatTurnStreaming,
   type ChatUser,
 } from "@/lib/ai-chat";
 
@@ -18,8 +13,18 @@ export const maxDuration = 60;
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ChatRequestBody = { messages?: ChatMessage[] };
 
-const MAX_ITERATIONS = 6;
-
+/**
+ * POST /api/chat — Server-Sent Events endpoint untuk AI chat in-app.
+ *
+ * Provider (Gemini/Claude) dipilih lewat env AI_PROVIDER, dengan
+ * auto-fallback kalau provider primer gagal sebelum stream mulai.
+ *
+ * Response SSE event:
+ *   { type: "text", delta: "..." }    potongan teks dari AI
+ *   { type: "tool", name: "..." }     AI sedang panggil tool
+ *   { type: "done" }                  selesai
+ *   { type: "error", message: "..." } error
+ */
 export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
@@ -31,7 +36,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         reason:
-          "ANTHROPIC_API_KEY belum diset di Railway. Chat belum aktif.",
+          "Tidak ada provider AI terkonfigurasi. Set GEMINI_API_KEY (gratis) atau ANTHROPIC_API_KEY di Railway.",
       },
       { status: 503 }
     );
@@ -47,6 +52,7 @@ export async function POST(req: Request) {
   if (incoming.length === 0) {
     return new NextResponse("Empty messages", { status: 400 });
   }
+  // Trim ke 20 turn terakhir supaya context tidak membengkak.
   const trimmed = incoming.slice(-20);
 
   const me: ChatUser = {
@@ -59,12 +65,6 @@ export async function POST(req: Request) {
           ? "OWNER"
           : "TENANT",
   };
-
-  const tools = buildTools(me);
-  const toolsByName = new Map<string, ChatTool>(
-    tools.map((t) => [t.name, t])
-  );
-  const apiTools = toolsForApi(tools);
 
   const messages: Anthropic.MessageParam[] = trimmed.map((m) => ({
     role: m.role,
@@ -79,76 +79,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-          const stream = anthropic().messages.stream({
-            model: MODEL_ID,
-            max_tokens: 4096,
-            system: systemPromptFor(me.role),
-            tools: apiTools,
-            messages,
-          });
-
-          for await (const event of stream) {
-            if (event.type === "content_block_start") {
-              if (event.content_block.type === "tool_use") {
-                send({ type: "tool", name: event.content_block.name });
-              }
-            } else if (event.type === "content_block_delta") {
-              if (event.delta.type === "text_delta") {
-                send({ type: "text", delta: event.delta.text });
-              }
-            }
-          }
-
-          const finalMessage = await stream.finalMessage();
-          // Tambahkan response assistant ke history utk turn berikutnya
-          messages.push({
-            role: "assistant",
-            content: finalMessage.content,
-          });
-
-          if (finalMessage.stop_reason !== "tool_use") {
-            // Selesai (end_turn / max_tokens / refusal)
-            break;
-          }
-
-          // Eksekusi semua tool_use, kumpulkan hasil.
-          const toolUseBlocks = finalMessage.content.filter(
-            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-          );
-          const toolResults: Anthropic.ToolResultBlockParam[] = [];
-          for (const block of toolUseBlocks) {
-            const tool = toolsByName.get(block.name);
-            let content: string;
-            let isError = false;
-            if (!tool) {
-              content = JSON.stringify({
-                ok: false,
-                message: `Tool ${block.name} tidak dikenal.`,
-              });
-              isError = true;
-            } else {
-              try {
-                const input = (block.input as Record<string, unknown>) ?? {};
-                content = await tool.execute(input);
-              } catch (e) {
-                content = JSON.stringify({
-                  ok: false,
-                  message: e instanceof Error ? e.message : "Eksekusi gagal.",
-                });
-                isError = true;
-              }
-            }
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content,
-              ...(isError ? { is_error: true } : {}),
-            });
-          }
-          messages.push({ role: "user", content: toolResults });
-        }
-
+        await runChatTurnStreaming(me, messages, (e) => send(e));
         send({ type: "done" });
       } catch (e) {
         // eslint-disable-next-line no-console

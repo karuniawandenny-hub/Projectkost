@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { toWhatsAppFormat } from "@/lib/phone";
+import { providerStatus } from "@/lib/ai-chat";
 
 export const dynamic = "force-dynamic";
 
@@ -61,14 +62,31 @@ export async function GET() {
     META_WA_WEBHOOK_VERIFY_TOKEN: !!process.env.META_WA_WEBHOOK_VERIFY_TOKEN,
   };
 
+  const aiProvider = providerStatus();
   const ai = {
-    ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+    primary: aiProvider.primary,
+    GEMINI_API_KEY: aiProvider.gemini,
+    ANTHROPIC_API_KEY: aiProvider.anthropic,
+    fallbackAvailable: aiProvider.fallbackAvailable,
   };
 
   const issues: string[] = [];
-  if (!ai.ANTHROPIC_API_KEY) {
+  if (!aiProvider.gemini && !aiProvider.anthropic) {
     issues.push(
-      "ANTHROPIC_API_KEY belum diset — bot AI tidak akan jawab apapun."
+      "Tidak ada API key AI yang diset (GEMINI_API_KEY atau ANTHROPIC_API_KEY). Bot tidak akan jawab apapun."
+    );
+  } else if (aiProvider.primary === "gemini" && !aiProvider.gemini) {
+    issues.push(
+      "AI_PROVIDER=gemini tapi GEMINI_API_KEY belum diset. Daftar gratis di https://aistudio.google.com/apikey."
+    );
+  } else if (aiProvider.primary === "anthropic" && !aiProvider.anthropic) {
+    issues.push(
+      "AI_PROVIDER=anthropic tapi ANTHROPIC_API_KEY belum diset."
+    );
+  }
+  if (!aiProvider.fallbackAvailable) {
+    issues.push(
+      `Tidak ada fallback provider. Kalau ${aiProvider.primary} down/rate-limited, bot diam. Disarankan set juga key provider yang lain.`
     );
   }
   if (provider === "fonnte") {
