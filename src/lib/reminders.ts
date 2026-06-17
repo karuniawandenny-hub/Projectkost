@@ -7,7 +7,9 @@
  *    cron (Vercel Cron, EasyCron, atau curl di server linux harian).
  *  - Endpoint akan kirim:
  *      H-3 sebelum jatuh tempo (channel email & WA)
- *      OVERDUE tiap kali dipanggil saat sudah lewat & belum lunas
+ *      OVERDUE tiap kali dipanggil saat sudah lewat DAN status masih
+ *        DUE (penghuni belum upload bukti bayar). Begitu ada aksi
+ *        (penghuni upload, pemilik verifikasi/tolak), OVERDUE berhenti.
  *
  * Anti-duplikat: ReminderLog unique by (paymentId, type, channel).
  *
@@ -258,8 +260,18 @@ export async function processReminders(): Promise<ProcessResult> {
     const dayDiff = daysBetween(today, p.dueDate); // positif = ke depan, negatif = lewat
 
     // Tentukan reminder type yang relevan hari ini.
+    //
+    // OVERDUE HANYA dikirim kalau status masih DUE — yaitu penghuni
+    // belum upload bukti bayar sama sekali. Begitu ada aksi (penghuni
+    // upload → PENDING, pemilik verifikasi → VERIFIED, pemilik tolak
+    // → REJECTED), pembayaran sudah "terklarifikasi" dan tidak perlu
+    // di-nag lagi:
+    //   - PENDING: bola di pemilik. Tidak adil nagging penghuni.
+    //   - VERIFIED: sudah lunas.
+    //   - REJECTED: penghuni sudah dapat notif penolakan saat reject.
+    //     Tindak lanjut manual oleh pemilik kalau mau ngejar.
     let type: ReminderType | null = null;
-    if (dayDiff < 0 && p.status !== "VERIFIED") {
+    if (dayDiff < 0 && p.status === "DUE") {
       type = "OVERDUE";
     } else {
       const match = THRESHOLDS.find((t) => t.daysBefore === dayDiff);
