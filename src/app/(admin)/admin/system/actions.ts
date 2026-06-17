@@ -481,7 +481,7 @@ export async function testEmailAction(to: string): Promise<TestActionState> {
 }
 
 /**
- * Preview reminder per tipe (H7/H3/H1/OVERDUE) ke nomor HP target.
+ * Preview reminder per tipe (H3/OVERDUE) ke nomor HP target.
  *
  * Pakai data dummy (Test User / Kos Baiti / Kamar A1 / Rp 1.000.000 /
  * dueDate dihitung dari hari ini sesuai tipe). Tidak buat ReminderLog,
@@ -500,9 +500,7 @@ export async function previewReminderAction(
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const offsetDays: Record<ReminderType, number> = {
-    H7: 7,
     H3: 3,
-    H1: 1,
     OVERDUE: -1,
   };
   const dueDate = new Date(

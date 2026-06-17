@@ -12,7 +12,7 @@ import {
   type TestActionState,
 } from "./actions";
 
-type ReminderType = "H7" | "H3" | "H1" | "OVERDUE";
+type ReminderType = "H3" | "OVERDUE";
 
 function ResultBox({ result }: { result: TestActionState | null }) {
   if (!result) return null;
@@ -46,7 +46,7 @@ export function TestActions() {
   >(null);
   const [validateTo, setValidateTo] = useState("");
   const [previewTo, setPreviewTo] = useState("");
-  const [previewType, setPreviewType] = useState<ReminderType>("H7");
+  const [previewType, setPreviewType] = useState<ReminderType>("H3");
   const [emailTo, setEmailTo] = useState("");
   const [waTo, setWaTo] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
@@ -185,7 +185,7 @@ export function TestActions() {
         🧪 Preview reminder per tipe
       </div>
       <p className="mt-1 text-xs text-slate-600">
-        Kirim <strong>contoh pesan reminder</strong> (H7/H3/H1/OVERDUE) ke nomor
+        Kirim <strong>contoh pesan reminder</strong> (H3/OVERDUE) ke nomor
         Anda dengan data dummy (Penghuni Test / Kos Baiti / Kamar A1 / Rp 1jt).
         Format pesan persis seperti reminder asli — untuk verifikasi tampilan
         sebelum cron jalan. Tidak buat ReminderLog, tidak mengganggu data.
@@ -204,9 +204,7 @@ export function TestActions() {
           onChange={(e) => setPreviewType(e.target.value as ReminderType)}
           className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
         >
-          <option value="H7">H7 (7 hari lagi)</option>
           <option value="H3">H3 (3 hari lagi)</option>
-          <option value="H1">H1 (besok)</option>
           <option value="OVERDUE">OVERDUE (terlambat)</option>
         </select>
         <button

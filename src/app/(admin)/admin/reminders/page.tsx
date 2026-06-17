@@ -131,9 +131,7 @@ export default async function AdminRemindersPage({
           <div className="text-sm font-medium text-slate-700">
             Breakdown per tipe:{" "}
             <span className="inline-flex gap-2 ml-1">
-              <span>H7: <strong>{typeStats.H7 ?? 0}</strong></span>
-              <span>· H3: <strong>{typeStats.H3 ?? 0}</strong></span>
-              <span>· H1: <strong>{typeStats.H1 ?? 0}</strong></span>
+              <span>H3: <strong>{typeStats.H3 ?? 0}</strong></span>
               <span>· OVERDUE: <strong>{typeStats.OVERDUE ?? 0}</strong></span>
             </span>
           </div>
@@ -146,9 +144,7 @@ export default async function AdminRemindersPage({
             className="rounded-md border border-slate-300 px-2 py-1 text-sm"
           >
             <option value="">Semua tipe</option>
-            <option value="H7">H7 (7 hari sebelum)</option>
             <option value="H3">H3 (3 hari sebelum)</option>
-            <option value="H1">H1 (besok)</option>
             <option value="OVERDUE">OVERDUE (terlambat)</option>
           </select>
           <select

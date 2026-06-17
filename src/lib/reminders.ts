@@ -6,20 +6,22 @@
  *  - Jadwalkan POST/GET ke /api/cron/reminders?token=$CRON_SECRET dari
  *    cron (Vercel Cron, EasyCron, atau curl di server linux harian).
  *  - Endpoint akan kirim:
- *      H-7 / H-3 / H-1 sebelum jatuh tempo (channel email & WA)
+ *      H-3 sebelum jatuh tempo (channel email & WA)
  *      OVERDUE tiap kali dipanggil saat sudah lewat & belum lunas
  *
  * Anti-duplikat: ReminderLog unique by (paymentId, type, channel).
+ *
+ * Catatan: dulu app juga kirim H-7 dan H-1, tapi disederhanakan ke
+ * H-3 + OVERDUE saja supaya tidak terlalu sering ganggu penghuni.
+ * Log lama dengan type "H7" / "H1" tetap ada di DB untuk audit.
  */
 
 import { prisma } from "./prisma";
 import { formatDateID } from "./billing";
 
-export type ReminderType = "H7" | "H3" | "H1" | "OVERDUE";
+export type ReminderType = "H3" | "OVERDUE";
 const THRESHOLDS: { type: ReminderType; daysBefore: number }[] = [
-  { type: "H7", daysBefore: 7 },
   { type: "H3", daysBefore: 3 },
-  { type: "H1", daysBefore: 1 },
 ];
 
 function startOfDay(d: Date) {
@@ -180,9 +182,7 @@ export function buildReminderMessage(input: ReminderMessageInput): {
   const subject =
     input.type === "OVERDUE"
       ? `Tagihan ${periodLabel} terlambat`
-      : `Pengingat tagihan kos — ${
-          input.type === "H7" ? "7 hari lagi" : input.type === "H3" ? "3 hari lagi" : "besok"
-        }`;
+      : `Pengingat tagihan kos — 3 hari lagi`;
   const overdueLine =
     input.type === "OVERDUE"
       ? `Tagihan sudah lewat ${input.daysOverdue ?? 1} hari. ${closing}`
@@ -355,24 +355,9 @@ export async function processReminders(): Promise<ProcessResult> {
         // Mode fonnte / dev tetap pakai text body original via fallback.
         const { sendWAWithTemplate } = await import("./wa-templates");
         const tplMap = {
-          H7: {
-            name: "payment_reminder_h7" as const,
-            params: [
-              tenant.name,
-              periodLabel,
-              p.tenancy.room.kos.name,
-              p.tenancy.room.name,
-              amountFmt,
-              dueStr,
-            ],
-          },
           H3: {
             name: "payment_reminder_h3" as const,
             params: [tenant.name, periodLabel, amountFmt, dueStr],
-          },
-          H1: {
-            name: "payment_reminder_h1" as const,
-            params: [tenant.name, periodLabel, amountFmt],
           },
           OVERDUE: {
             name: "payment_overdue" as const,

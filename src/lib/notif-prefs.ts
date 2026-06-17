@@ -5,7 +5,7 @@ import { prisma } from "./prisma";
  * reminders.ts → kategori ditangani oleh categorize().
  */
 export const NotifCategory = {
-  PAYMENT: "PAYMENT", // tagihan, reminder H7/H3/H1, verifikasi, ditolak
+  PAYMENT: "PAYMENT", // tagihan, reminder H3 & overdue, verifikasi, ditolak
   ANNOUNCEMENT: "ANNOUNCEMENT", // broadcast pemilik
   OPERATIONAL: "OPERATIONAL", // komplain, perawatan, pindah kamar
   ACCOUNT: "ACCOUNT", // perubahan status akun, assignment

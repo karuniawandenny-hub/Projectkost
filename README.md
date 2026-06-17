@@ -66,7 +66,7 @@ default ini sebelum deploy ke produksi.**
 
 ### 1. Reminder otomatis (Email + WhatsApp)
 
-Reminder pembayaran (H-7, H-3, H-1, OVERDUE) dikirim via `/api/cron/reminders` ke 3 channel.
+Reminder pembayaran (H-3 dan OVERDUE) dikirim via `/api/cron/reminders` ke 3 channel.
 
 **A. Email via Resend** (recommended, gratis 3000/bulan)
 1. Daftar di [resend.com](https://resend.com)
