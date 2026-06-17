@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
-import { verifyPayment } from "./actions";
+import { verifyPayment, verifyPaymentManual } from "./actions";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -190,9 +190,14 @@ export default async function PaymentsPage({
           <h2 className="text-sm font-semibold text-slate-500 mb-2">
             Tagihan terbuka — belum diupload ({due.length})
           </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Penghuni belum upload bukti. Kalau Anda menerima pembayaran di
+            luar app (cash / transfer manual), bisa tandai lunas via tombol
+            di setiap baris.
+          </p>
           <div className="space-y-3">
             {due.map((p) => (
-              <PaymentRow key={p.id} p={p} />
+              <PaymentRow key={p.id} p={p} manualVerifyMode />
             ))}
           </div>
         </section>
@@ -225,7 +230,15 @@ type PaymentWith = Awaited<
   }>>
 >[number];
 
-function PaymentRow({ p, verifyMode }: { p: PaymentWith; verifyMode?: boolean }) {
+function PaymentRow({
+  p,
+  verifyMode,
+  manualVerifyMode,
+}: {
+  p: PaymentWith;
+  verifyMode?: boolean;
+  manualVerifyMode?: boolean;
+}) {
   return (
     <div className="card">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -282,6 +295,35 @@ function PaymentRow({ p, verifyMode }: { p: PaymentWith; verifyMode?: boolean })
           >
             Tolak
           </button>
+        </form>
+      )}
+      {manualVerifyMode && (
+        <form
+          action={verifyPaymentManual}
+          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
+        >
+          <input type="hidden" name="paymentId" value={p.id} />
+          <div className="text-xs text-amber-800 mb-2">
+            ⚠️ Tandai lunas tanpa bukti upload — hanya gunakan kalau Anda
+            yakin pembayaran sudah diterima di luar app (cash / transfer).
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-[200px]">
+              <label className="label">
+                Catatan verifikasi <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="note"
+                required
+                maxLength={500}
+                className="input"
+                placeholder="Mis. cash 26 Mei 2026, transfer BCA langsung"
+              />
+            </div>
+            <button type="submit" className="btn-success">
+              Tandai Lunas Manual
+            </button>
+          </div>
         </form>
       )}
       {!verifyMode && p.reviewNote && (

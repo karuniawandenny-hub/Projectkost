@@ -190,3 +190,84 @@ export async function verifyPayment(formData: FormData) {
 
   revalidatePath("/payments");
 }
+
+/**
+ * Pemilik tandai lunas TANPA bukti upload — untuk kasus pembayaran
+ * di luar app (cash, transfer manual, dst). Catatan WAJIB diisi untuk
+ * audit trail. Status payment harus DUE saat ini (belum ada interaksi
+ * lain). Reviewer note disimpan dengan prefix "[MANUAL]" supaya bisa
+ * dibedakan dengan verifikasi normal di laporan / audit log.
+ */
+export async function verifyPaymentManual(formData: FormData) {
+  const user = await requireUser();
+  if (user.role !== "OWNER") throw new Error("FORBIDDEN");
+
+  const paymentId = String(formData.get("paymentId") ?? "");
+  const note = String(formData.get("note") ?? "").trim();
+  if (!note) {
+    throw new Error(
+      "Catatan wajib diisi untuk verifikasi manual (mis. cash, transfer langsung)."
+    );
+  }
+  if (note.length > 500) {
+    throw new Error("Catatan terlalu panjang (maks 500 karakter).");
+  }
+
+  const payment = await prisma.payment.findFirst({
+    where: {
+      id: paymentId,
+      status: "DUE",
+      tenancy: { room: { kos: { ownerId: user.id } } },
+    },
+    include: { tenancy: { include: { tenant: true, room: true } } },
+  });
+  if (!payment) {
+    // Pesan eksplisit supaya kalau status sudah berubah (race condition
+    // dengan upload bukti penghuni), pemilik tahu kenapa gagal.
+    throw new Error(
+      "Tagihan tidak ditemukan atau statusnya sudah berubah (mungkin penghuni baru saja upload bukti)."
+    );
+  }
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status: "VERIFIED",
+      reviewedAt: new Date(),
+      reviewNote: `[MANUAL] ${note}`,
+    },
+  });
+
+  await logAudit({
+    actorId: user.id,
+    actorName: user.name,
+    action: "PAYMENT.VERIFY",
+    entityType: "Payment",
+    entityId: payment.id,
+    metadata: {
+      tenantName: payment.tenancy.tenant.name,
+      roomName: payment.tenancy.room.name,
+      period: `${payment.periodMonth}/${payment.periodYear}`,
+      amount: payment.amount,
+      manualVerify: true,
+      note,
+    },
+  });
+
+  await notify({
+    userId: payment.tenancy.tenantId,
+    type: "PAYMENT_VERIFIED",
+    title: "Pembayaran Anda lunas",
+    message: `Pembayaran kamar ${payment.tenancy.room.name} ditandai lunas oleh pemilik (catatan: ${note}).`,
+    link: "/payments",
+  });
+
+  try {
+    await sendPaymentVerifiedConfirmation(payment.id);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[payment-confirmation] gagal kirim WA/Email:", e);
+  }
+
+  revalidatePath("/payments");
+}
