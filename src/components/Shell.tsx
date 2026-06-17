@@ -7,6 +7,7 @@ import { UserMenu } from "./UserMenu";
 import { MobileNavMenu } from "./MobileNavMenu";
 import { DesktopNavLinks } from "./NavLinks";
 import { ChatBubble } from "./ChatBubble";
+import { IdleLogoutGuard } from "./IdleLogoutGuard";
 
 type Props = {
   user: User;
@@ -119,6 +120,7 @@ export default async function Shell({ user, children }: Props) {
       </section>
 
       {isOwner && <ChatBubble role="OWNER" />}
+      <IdleLogoutGuard role={isOwner ? "OWNER" : "TENANT"} />
     </main>
   );
 }

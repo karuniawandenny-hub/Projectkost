@@ -6,6 +6,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { MobileNavMenu } from "@/components/MobileNavMenu";
 import { DesktopNavLinks } from "@/components/NavLinks";
 import { ChatBubble } from "@/components/ChatBubble";
+import { IdleLogoutGuard } from "@/components/IdleLogoutGuard";
 
 export default async function AdminLayout({
   children,
@@ -93,6 +94,7 @@ export default async function AdminLayout({
       </section>
 
       <ChatBubble role="ADMIN" />
+      <IdleLogoutGuard role="ADMIN" />
     </main>
   );
 }

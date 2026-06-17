@@ -4,9 +4,10 @@ import { LoginForm } from "./LoginForm";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { reset?: string };
+  searchParams: { reset?: string; reason?: string };
 }) {
   const resetSuccess = searchParams.reset === "success";
+  const idleLogout = searchParams.reason === "idle";
 
   return (
     <div className="card">
@@ -18,6 +19,13 @@ export default function LoginPage({
       {resetSuccess && (
         <div className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Password Anda berhasil diperbarui. Silakan masuk dengan password baru.
+        </div>
+      )}
+
+      {idleLogout && (
+        <div className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Anda otomatis logout karena tidak ada aktivitas. Silakan masuk
+          kembali untuk melanjutkan.
         </div>
       )}
 
