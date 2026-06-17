@@ -186,7 +186,7 @@ export async function replyComplaint(
         ``,
         `Bila masih ada kendala atau perbaikan belum tuntas, silakan buka kembali komplain melalui aplikasi.`,
         ``,
-        `— Kos Baiti`
+        `-Asisten AI KosBaiti-`
       );
       try {
         await sendWAWithTemplate({

@@ -65,7 +65,7 @@ Terima kasih, pembayaran Anda sudah kami verifikasi:
 
 Tagihan untuk periode ini sudah lunas. Sampai jumpa di periode berikutnya!
 
-— Kos Baiti`;
+-Asisten AI KosBaiti-`;
   return { subject, body };
 }
 

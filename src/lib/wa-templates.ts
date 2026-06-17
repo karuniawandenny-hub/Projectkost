@@ -18,7 +18,7 @@
  *    pesan, mirip preview card.
  *  - BODY: text dengan placeholder {{1}}, {{2}}, dst. Sistem
  *    substitusi dengan data tenant saat kirim.
- *  - FOOTER: opsional, brand line "— Kos Baiti".
+ *  - FOOTER: opsional, brand line "-Asisten AI KosBaiti-".
  *  - BUTTONS: URL button "Buka Aplikasi" → https://www.kosbaiti.com
  *
  * Cara pakai dari kode: lihat `sendKosBaitiTemplate()` di bawah.
@@ -86,7 +86,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Selamat datang di Kos Baiti. Mohon simpan nomor ini agar update tagihan & komunikasi pemilik tidak terlewat.",
       sampleParams: ["Budi", "A1", "Kos Baiti Pusat", "01 Juni 2026", "Rp 800.000"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Buka Aplikasi", url: SITE_URL }],
   },
 
@@ -107,7 +107,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Mohon disiapkan pembayarannya sebelum jatuh tempo.",
       sampleParams: ["Budi", "Mei 2026", "Kos Baiti Pusat", "A1", "Rp 800.000", "01 Juni 2026"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Lihat Tagihan", url: `${SITE_URL}/payments` }],
   },
 
@@ -126,7 +126,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Mohon selesaikan pembayaran sebelum jatuh tempo, ya.",
       sampleParams: ["Budi", "Mei 2026", "Rp 800.000", "01 Juni 2026"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Bayar Sekarang", url: `${SITE_URL}/payments` }],
   },
 
@@ -144,7 +144,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Silakan upload bukti transfer di aplikasi setelah membayar.",
       sampleParams: ["Budi", "Mei 2026", "Rp 800.000"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Upload Bukti", url: `${SITE_URL}/payments` }],
   },
 
@@ -162,7 +162,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Mohon segera upload bukti pembayaran agar tidak menambah keterlambatan. Bila ada kendala, silakan hubungi pemilik kos.",
       sampleParams: ["Budi", "April 2026", "5", "Rp 800.000"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Bayar Sekarang", url: `${SITE_URL}/payments` }],
   },
 
@@ -182,7 +182,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Tagihan periode ini sudah lunas. Sampai jumpa di periode berikutnya!",
       sampleParams: ["Budi", "Mei 2026", "Rp 800.000", "03 Juni 2026 10:30"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Lihat Kuitansi", url: `${SITE_URL}/payments` }],
   },
 
@@ -201,7 +201,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Bila masih ada kendala, silakan buka kembali komplain melalui aplikasi.",
       sampleParams: ["Budi", "AC kamar bocor", "Sudah diperbaiki, freon ditambah"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Lihat Komplain", url: `${SITE_URL}/complaints` }],
   },
 
@@ -221,7 +221,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Buka aplikasi untuk tandai sudah dikerjakan atau atur ulang jadwal.",
       sampleParams: ["Bapak Denny", "besok", "Service AC", "Kos Baiti Pusat - Kamar A1", "06 Juni 2026"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Buka Perawatan", url: `${SITE_URL}/maintenance` }],
   },
 
@@ -241,7 +241,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
         "Akses ke kamar mungkin terbatas selama perawatan berlangsung. Mohon kerja samanya.",
       sampleParams: ["Budi", "Cat ulang dinding", "Kos Baiti Pusat - Kamar A1", "10 Juni 2026"],
     },
-    footer: "— Kos Baiti",
+    footer: "-Asisten AI KosBaiti-",
     buttons: [{ type: "URL", text: "Buka Aplikasi", url: SITE_URL }],
   },
 };

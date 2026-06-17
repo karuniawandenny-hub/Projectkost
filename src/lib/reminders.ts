@@ -199,7 +199,7 @@ ${intro}
 
 ${overdueLine}
 
-— Kos Baiti`;
+-Asisten AI KosBaiti-`;
   return { subject, body };
 }
 
@@ -452,7 +452,7 @@ export async function processReminders(): Promise<ProcessResult> {
       `  ${m.title}\n` +
       `  ${m.kos.name} • ${scope}\n\n` +
       `Buka aplikasi untuk tandai sudah dikerjakan atau atur ulang jadwal.\n\n` +
-      `— Kos Baiti`;
+      `-Asisten AI KosBaiti-`;
 
     // In-app
     try {

@@ -69,7 +69,7 @@ async function notifyAffectedTenant(
       `Kamar: ${scope}\n` +
       `Tanggal rencana: ${formatDateID(m.scheduledDate)}\n\n` +
       `Akses ke kamar mungkin terbatas selama perawatan berlangsung. ` +
-      `Mohon kerja samanya.\n\n— Kos Baiti`;
+      `Mohon kerja samanya.\n\n-Asisten AI KosBaiti-`;
   } else if (event === "IN_PROGRESS") {
     title = "Perawatan kamar Anda sedang berlangsung";
     inAppMsg = `Perawatan "${m.title}" sedang dikerjakan. Akses kamar mungkin terbatas.`;
@@ -79,7 +79,7 @@ async function notifyAffectedTenant(
       `Judul: ${m.title}\n` +
       `Kamar: ${scope}\n\n` +
       `Mohon maaf bila mengganggu kenyamanan. ` +
-      `Akses ke kamar mungkin terbatas selama perawatan berlangsung.\n\n— Kos Baiti`;
+      `Akses ke kamar mungkin terbatas selama perawatan berlangsung.\n\n-Asisten AI KosBaiti-`;
   } else {
     title = "Perawatan kamar Anda selesai";
     inAppMsg = `Perawatan "${m.title}" sudah selesai. Terima kasih atas pengertiannya.`;
@@ -89,7 +89,7 @@ async function notifyAffectedTenant(
       `Judul: ${m.title}\n` +
       `Kamar: ${scope}\n` +
       `Tanggal selesai: ${formatDateID(m.completedDate ?? new Date())}\n\n` +
-      `Terima kasih atas pengertiannya selama perawatan berlangsung.\n\n— Kos Baiti`;
+      `Terima kasih atas pengertiannya selama perawatan berlangsung.\n\n-Asisten AI KosBaiti-`;
   }
 
   // 1. in-app (selalu)
