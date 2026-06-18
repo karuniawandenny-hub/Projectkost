@@ -119,7 +119,7 @@ export default async function Shell({ user, children }: Props) {
         {children}
       </section>
 
-      {isOwner && <ChatBubble role="OWNER" />}
+      <ChatBubble role={isOwner ? "OWNER" : "TENANT"} />
       <IdleLogoutGuard role={isOwner ? "OWNER" : "TENANT"} />
     </main>
   );
