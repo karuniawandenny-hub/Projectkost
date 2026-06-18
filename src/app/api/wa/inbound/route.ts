@@ -349,17 +349,10 @@ async function handleIncoming(
     `[wa-inbound] user match: id=${user.id} name="${user.name}" role=${user.role}`
   );
 
-  if (user.role !== "TENANT") {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[wa-inbound] role bukan TENANT (${user.role}), redirect ke app web`
-    );
-    await ctx.send(
-      senderPhone,
-      `Halo ${user.name}! Untuk pemilik & admin, asisten AI tersedia di app web (tombol ✨ di pojok kanan-bawah). Di sana Anda bisa lihat laporan keuangan, daftar penghuni, dan komplain dengan format tabel.`
-    );
-    return;
-  }
+  // Semua role boleh chat via WA. Tool set di-dispatch berdasarkan
+  // role di buildTools() — TENANT dapat tools penghuni (tagihan, komplain),
+  // OWNER & ADMIN dapat tools pemilik (laporan keuangan, list penghuni,
+  // komplain belum selesai, dsb).
 
   // Fallback dedup untuk provider tanpa messageId stabil (Fonnte):
   // kalau pesan identik dari user yang sama muncul <30 detik, anggap retry.
@@ -388,7 +381,16 @@ async function handleIncoming(
     return;
   }
 
-  const me: ChatUser = { id: user.id, name: user.name, role: "TENANT" };
+  const me: ChatUser = {
+    id: user.id,
+    name: user.name,
+    role:
+      user.role === "ADMIN"
+        ? "ADMIN"
+        : user.role === "OWNER"
+          ? "OWNER"
+          : "TENANT",
+  };
 
   const history = await prisma.waChatMessage.findMany({
     where: { userId: user.id },
