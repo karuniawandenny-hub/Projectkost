@@ -176,12 +176,17 @@ export function IdleLogoutGuard({ role }: { role: Role }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idleMs, warningAt, doLogout, recordActivity]);
 
-  // Indikator kecil di pojok kiri-bawah saat test mode aktif — supaya
-  // user tahu app sedang pakai timeout pendek (bukan default produksi).
+  // Indikator visual saat test mode aktif. Sengaja menonjol (top-center,
+  // text besar, kontras tinggi) supaya tidak lupa test mode masih hidup
+  // di produksi. Pakai role=status biar accessibility tools ikut announce.
   const testBanner =
     TEST_SECONDS > 0 ? (
-      <div className="fixed bottom-2 left-2 z-[55] rounded-md bg-amber-500 px-2 py-1 text-[10px] font-mono text-white shadow-lg">
-        IDLE TEST {TEST_SECONDS}s
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed left-1/2 top-2 z-[55] -translate-x-1/2 rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white shadow-lg ring-2 ring-amber-300"
+      >
+        ⚠️ IDLE TEST MODE — logout dalam {TEST_SECONDS} detik
       </div>
     ) : null;
 

@@ -49,6 +49,12 @@ COPY . .
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
 
+# Override durasi idle auto-logout untuk testing (detik). Set di Railway
+# Variables ke nilai pendek (mis. 30) untuk verifikasi tanpa nunggu 15-30
+# menit. Hapus / kosongkan untuk default produksi (TENANT 30m, OWNER 15m).
+ARG NEXT_PUBLIC_IDLE_LOGOUT_SECONDS
+ENV NEXT_PUBLIC_IDLE_LOGOUT_SECONDS=${NEXT_PUBLIC_IDLE_LOGOUT_SECONDS}
+
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Peringatan (bukan fatal): kalau VAPID public key tidak ikut ter-build,
