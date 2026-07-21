@@ -43,18 +43,24 @@ export default async function MaintenanceDetailPage({
   // Permission:
   //  - ADMIN: bebas.
   //  - OWNER: hanya kos miliknya.
-  //  - TENANT: hanya kalau ini perawatan untuk kamar yang sedang
-  //    dia sewa aktif (tenancy.status=ACTIVE). Read-only — semua
-  //    tombol aksi di-hide di bawah.
+  //  - TENANT: dua kasus valid —
+  //      1. Room-level maintenance (m.room != null): akses kalau
+  //         penghuni sedang sewa aktif kamar itu.
+  //      2. Kos-level maintenance (m.room == null, mis. "Perawatan
+  //         AC fasilitas kos"): akses kalau penghuni sedang sewa
+  //         aktif kamar mana pun di kos itu.
+  //    Read-only — semua tombol aksi di-hide di bawah.
   const isOwnerOfKos = user.role === "OWNER" && m.kos.ownerId === user.id;
   const isAdmin = user.role === "ADMIN";
   let isAffectedTenant = false;
-  if (user.role === "TENANT" && m.room) {
+  if (user.role === "TENANT") {
     const tenancy = await prisma.tenancy.findFirst({
       where: {
         tenantId: user.id,
-        roomId: m.room.id,
         status: "ACTIVE",
+        ...(m.room
+          ? { roomId: m.room.id }
+          : { room: { kosId: m.kos.id } }),
       },
       select: { id: true },
     });
