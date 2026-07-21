@@ -44,34 +44,23 @@ export default async function MaintenancePage({
   // Scope:
   //  - ADMIN: bebas.
   //  - OWNER: hanya kos miliknya.
-  //  - TENANT: hanya perawatan untuk kamar yang sedang dia sewa aktif.
-  //    Untuk fasilitas kos (roomId=null) ikut ditampilkan kalau kos yang
-  //    sama, karena itu memengaruhi penghuni juga (mis. perbaikan pagar,
-  //    pompa air). Kalau tenant tidak sedang punya tenancy aktif, daftar
-  //    kosong.
+  //  - TENANT: HANYA perawatan untuk kamar yang sedang dia sewa aktif.
+  //    Perawatan level kos (roomId=null, mis. pompa air, AC lorong)
+  //    TIDAK ditampilkan di sini — sudah dipindah ke halaman Pengumuman
+  //    supaya menu Perawatan tenant fokus & personal.
   const where: Record<string, unknown> = {};
   if (user.role === "OWNER") {
     where.kos = { ownerId: user.id };
   } else if (isTenant) {
     const activeTenancies = await prisma.tenancy.findMany({
       where: { tenantId: user.id, status: "ACTIVE" },
-      select: { roomId: true, room: { select: { kosId: true } } },
+      select: { roomId: true },
     });
     const roomIds = activeTenancies.map((t) => t.roomId);
-    const kosIds = Array.from(
-      new Set(activeTenancies.map((t) => t.room.kosId))
-    );
     if (roomIds.length === 0) {
       where.id = "__no-match__"; // pasti kosong
     } else {
-      // OR: perawatan langsung di kamar tenant, ATAU fasilitas kos
-      // (roomId null) di kos yang sama. Pemilik biasanya tidak set
-      // notifyTenant=true untuk fasilitas, tapi info-nya tetap relevan
-      // ditampilkan agar tenant aware.
-      where.OR = [
-        { roomId: { in: roomIds } },
-        { roomId: null, kosId: { in: kosIds } },
-      ];
+      where.roomId = { in: roomIds };
     }
   }
   if (typeFilter) where.type = typeFilter;
@@ -112,7 +101,7 @@ export default async function MaintenancePage({
           </h1>
           <p className="text-sm text-slate-600">
             {isTenant
-              ? "Jadwal & riwayat perawatan kamar Anda dan fasilitas kos. Pemilik akan memberi tahu sebelum perawatan dilakukan."
+              ? "Jadwal & riwayat perawatan untuk kamar Anda. Perawatan fasilitas kos bersama (pompa air, AC lorong, dll) ada di menu Pengumuman."
               : "Catat jadwal perawatan preventif, perbaikan korektif manual, dan riwayat dari komplain penghuni."}
           </p>
         </div>
