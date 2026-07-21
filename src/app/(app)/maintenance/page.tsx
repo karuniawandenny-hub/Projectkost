@@ -179,8 +179,8 @@ export default async function MaintenancePage({
         <>
           <Section title="Terjadwal" items={scheduled} />
           <Section title="Dalam proses" items={inProgress} />
-          <Section title="Selesai" items={completed} />
-          <Section title="Dibatalkan" items={cancelled} />
+          <Section title="Selesai" items={completed} defaultCollapsed />
+          <Section title="Dibatalkan" items={cancelled} defaultCollapsed />
         </>
       )}
     </div>
@@ -202,18 +202,37 @@ type ItemRow = {
   room: { id: string; name: string } | null;
 };
 
-function Section({ title, items }: { title: string; items: ItemRow[] }) {
+function Section({
+  title,
+  items,
+  defaultCollapsed,
+}: {
+  title: string;
+  items: ItemRow[];
+  defaultCollapsed?: boolean;
+}) {
   if (items.length === 0) return null;
+  // Pakai native <details> untuk collapse — nol JS, nol client boundary,
+  // aksesibel by default. `open` attribute mengontrol default state:
+  //   Terjadwal / Dalam proses → open (aktif, prioritas)
+  //   Selesai / Dibatalkan → collapsed (arsip, tidak overwhelm)
   return (
     <section className="space-y-3">
-      <h2 className="text-sm font-semibold text-slate-500">
-        {title} ({items.length})
-      </h2>
-      <div className="space-y-2">
-        {items.map((m) => (
-          <MaintenanceCard key={m.id} m={m} />
-        ))}
-      </div>
+      <details className="group" open={!defaultCollapsed}>
+        <summary className="flex cursor-pointer items-center gap-2 select-none list-none [&::-webkit-details-marker]:hidden">
+          <span className="text-xs text-slate-400 transition-transform group-open:rotate-90">
+            ▶
+          </span>
+          <h2 className="text-sm font-semibold text-slate-500">
+            {title} ({items.length})
+          </h2>
+        </summary>
+        <div className="mt-3 space-y-2">
+          {items.map((m) => (
+            <MaintenanceCard key={m.id} m={m} />
+          ))}
+        </div>
+      </details>
     </section>
   );
 }
