@@ -58,14 +58,20 @@ export default async function ProfilePage() {
         <PushToggle />
       </div>
 
-      <div className="card">
-        <h2 className="text-lg font-semibold">Preferensi notifikasi</h2>
-        <p className="mt-1 mb-3 text-sm text-slate-600">
-          Pilih jenis notifikasi apa yang dikirim lewat HP, email, atau
-          WhatsApp. Atur jam tenang agar tidak terganggu malam hari.
-        </p>
-        <NotifPrefsForm initialPrefs={notifPrefs} />
-      </div>
+      {user.role !== "ADMIN" && (
+        <div className="card">
+          <h2 className="text-lg font-semibold">Preferensi notifikasi</h2>
+          <p className="mt-1 mb-3 text-sm text-slate-600">
+            {user.role === "OWNER"
+              ? "Pilih jenis notifikasi aktivitas penghuni yang mau Anda terima lewat HP, email, atau WhatsApp. Atur jam tenang agar tidak terganggu malam hari."
+              : "Pilih jenis notifikasi apa yang dikirim lewat HP, email, atau WhatsApp. Atur jam tenang agar tidak terganggu malam hari."}
+          </p>
+          <NotifPrefsForm
+            initialPrefs={notifPrefs}
+            perspective={user.role === "OWNER" ? "OWNER" : "TENANT"}
+          />
+        </div>
+      )}
 
       <form action="/logout" method="POST">
         <button className="btn-danger">Keluar</button>

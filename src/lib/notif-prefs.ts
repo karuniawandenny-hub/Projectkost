@@ -13,6 +13,19 @@ export const NotifCategory = {
 export type NotifCategory =
   (typeof NotifCategory)[keyof typeof NotifCategory];
 
+/**
+ * Perspective menentukan sudut pandang label & hint kategori notifikasi.
+ * Struktur data (NotifPrefs JSON) sama untuk semua role — hanya UI teks
+ * yang adaptif.
+ *   - "TENANT": penghuni (menerima info dari pemilik).
+ *   - "OWNER":  pemilik/admin (menerima aktivitas dari penghuni).
+ */
+export type NotifPerspective = "TENANT" | "OWNER";
+
+/**
+ * Label & hint kategori — tenant-centric (default lama, dipertahankan
+ * demi backward-compat kalau ada caller lain yang import langsung).
+ */
 export const NOTIF_CATEGORY_LABEL: Record<NotifCategory, string> = {
   PAYMENT: "Pembayaran & reminder",
   ANNOUNCEMENT: "Pengumuman pemilik",
@@ -21,13 +34,53 @@ export const NOTIF_CATEGORY_LABEL: Record<NotifCategory, string> = {
 };
 
 export const NOTIF_CATEGORY_HINT: Record<NotifCategory, string> = {
-  PAYMENT:
-    "Tagihan jatuh tempo H-7/H-3/H-1, konfirmasi pembayaran lunas, ditolak.",
+  PAYMENT: "Tagihan jatuh tempo H-3, konfirmasi pembayaran lunas, ditolak.",
   ANNOUNCEMENT: "Pemberitahuan dari pemilik (mati air, kerja bakti, dsb).",
   OPERATIONAL:
     "Status komplain, jadwal perawatan kamar, hasil pengajuan pindah.",
   ACCOUNT: "Akun disetujui, ditolak, dan perubahan penempatan kamar.",
 };
+
+/**
+ * Owner-centric labels & hints. Kategori sama (data JSON kompatibel),
+ * tapi frasa disesuaikan supaya masuk akal untuk pemilik yang menerima
+ * event DARI penghuni, bukan sebaliknya.
+ */
+const NOTIF_CATEGORY_LABEL_OWNER: Record<NotifCategory, string> = {
+  PAYMENT: "Pembayaran masuk dari penghuni",
+  ANNOUNCEMENT: "Konfirmasi pengumuman terkirim",
+  OPERATIONAL: "Aktivitas penghuni",
+  ACCOUNT: "Pengajuan penghuni baru",
+};
+
+const NOTIF_CATEGORY_HINT_OWNER: Record<NotifCategory, string> = {
+  PAYMENT:
+    "Penghuni upload bukti bayar (menunggu verifikasi Anda), atau pembayaran gateway masuk.",
+  ANNOUNCEMENT:
+    "Ringkasan setelah pengumuman Anda dikirim (jumlah penerima, status delivery).",
+  OPERATIONAL:
+    "Komplain baru dari penghuni, permintaan pindah kamar, dan update perawatan.",
+  ACCOUNT:
+    "Ada calon penghuni yang mendaftar & menunggu persetujuan Anda.",
+};
+
+export function categoryLabelFor(
+  cat: NotifCategory,
+  perspective: NotifPerspective
+): string {
+  return perspective === "OWNER"
+    ? NOTIF_CATEGORY_LABEL_OWNER[cat]
+    : NOTIF_CATEGORY_LABEL[cat];
+}
+
+export function categoryHintFor(
+  cat: NotifCategory,
+  perspective: NotifPerspective
+): string {
+  return perspective === "OWNER"
+    ? NOTIF_CATEGORY_HINT_OWNER[cat]
+    : NOTIF_CATEGORY_HINT[cat];
+}
 
 export type Channel = "push" | "email" | "wa";
 

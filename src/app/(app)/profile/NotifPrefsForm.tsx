@@ -3,9 +3,10 @@
 import { useFormState, useFormStatus } from "react-dom";
 import {
   NotifCategory,
-  NOTIF_CATEGORY_LABEL,
-  NOTIF_CATEGORY_HINT,
+  categoryLabelFor,
+  categoryHintFor,
   type NotifCategory as NotifCategoryT,
+  type NotifPerspective,
   type NotifPrefs,
 } from "@/lib/notif-prefs";
 import {
@@ -27,7 +28,13 @@ function SubmitButton() {
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
 
-export function NotifPrefsForm({ initialPrefs }: { initialPrefs: NotifPrefs }) {
+export function NotifPrefsForm({
+  initialPrefs,
+  perspective,
+}: {
+  initialPrefs: NotifPrefs;
+  perspective: NotifPerspective;
+}) {
   const [state, formAction] = useFormState(updateNotifPrefs, initial);
 
   return (
@@ -44,29 +51,29 @@ export function NotifPrefsForm({ initialPrefs }: { initialPrefs: NotifPrefs }) {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {CATEGORIES.map((cat) => (
-              <tr key={cat}>
-                <td className="px-3 py-2">
-                  <div className="font-medium">
-                    {NOTIF_CATEGORY_LABEL[cat]}
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    {NOTIF_CATEGORY_HINT[cat]}
-                  </div>
-                </td>
-                {(["push", "email", "wa"] as const).map((ch) => (
-                  <td key={ch} className="px-3 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      name={`${ch}.${cat}`}
-                      defaultChecked={initialPrefs[ch][cat]}
-                      className="h-5 w-5 rounded border-slate-300"
-                      aria-label={`${NOTIF_CATEGORY_LABEL[cat]} - ${ch}`}
-                    />
+            {CATEGORIES.map((cat) => {
+              const label = categoryLabelFor(cat, perspective);
+              const hint = categoryHintFor(cat, perspective);
+              return (
+                <tr key={cat}>
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{label}</div>
+                    <div className="text-xs text-slate-500">{hint}</div>
                   </td>
-                ))}
-              </tr>
-            ))}
+                  {(["push", "email", "wa"] as const).map((ch) => (
+                    <td key={ch} className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        name={`${ch}.${cat}`}
+                        defaultChecked={initialPrefs[ch][cat]}
+                        className="h-5 w-5 rounded border-slate-300"
+                        aria-label={`${label} - ${ch}`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
