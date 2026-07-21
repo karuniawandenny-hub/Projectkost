@@ -5,22 +5,42 @@ import { useEffect, useState } from "react";
 
 const ROTATE_MS = 3000;
 
-export type InfoItem = {
-  id: string;
-  title: string;
-  body: string;
-  createdAtISO: string;
-};
+export type InfoItem =
+  | {
+      kind: "announcement";
+      id: string;
+      title: string;
+      body: string;
+      createdAtISO: string;
+    }
+  | {
+      kind: "maintenance";
+      id: string;
+      title: string;
+      body: string;
+      /** Ditampilkan sebagai "Jadwal: 15 Jun 2026" */
+      scheduledDateISO: string;
+      /** SCHEDULED | IN_PROGRESS */
+      status: string;
+      /** PREVENTIVE | CORRECTIVE */
+      type: string;
+    };
 
 /**
- * Carousel "Informasi Kos" untuk dashboard penghuni. Menampilkan 5
- * pengumuman terbaru; slide otomatis berputar tiap 3 detik.
+ * Carousel "Informasi Kos" untuk dashboard penghuni. Menggabungkan:
+ *  - 5 pengumuman terbaru dari pemilik kos
+ *  - Perawatan level kos yang SCHEDULED / IN_PROGRESS
+ * Diurut oleh caller (sudah merged & sorted saat props diterima).
+ *
+ * Animasi: CSS slide-in ringan (opacity + translateX), GPU-accelerated,
+ * respect prefers-reduced-motion. Tidak pakai library eksternal supaya
+ * bundle tetap kecil.
  *
  * Interaksi:
- *  - Hover / focus di area card → auto-rotate pause (biar user sempat
- *    baca teks panjang).
- *  - Klik dot indicator untuk lompat ke slide tertentu.
- *  - Ada tombol "Lihat semua" ke /announcements untuk detail lengkap.
+ *  - Hover / focus card → auto-rotate pause (biar user sempat baca).
+ *  - Klik dot indicator → lompat ke slide + pause sementara.
+ *  - Klik card → arahkan ke halaman yang relevan (pengumuman atau
+ *    detail perawatan).
  */
 export function InfoKosCarousel({ items }: { items: InfoItem[] }) {
   const [idx, setIdx] = useState(0);
@@ -34,10 +54,10 @@ export function InfoKosCarousel({ items }: { items: InfoItem[] }) {
     return () => clearInterval(t);
   }, [items.length, paused]);
 
-  // Kalau slice items berubah (misal ada pengumuman baru), reset ke 0.
+  // Reset ke 0 kalau daftar item berubah (mis. ada data baru dari server)
   useEffect(() => {
     setIdx(0);
-  }, [items.map((i) => i.id).join(",")]);
+  }, [items.map((i) => `${i.kind}:${i.id}`).join(",")]);
 
   if (items.length === 0) {
     return (
@@ -52,8 +72,8 @@ export function InfoKosCarousel({ items }: { items: InfoItem[] }) {
           </Link>
         </div>
         <p className="mt-2 text-sm text-slate-500">
-          Belum ada pengumuman dari pemilik kos. Pengumuman baru akan tampil
-          di sini otomatis.
+          Belum ada pengumuman atau perawatan terjadwal. Informasi baru akan
+          tampil di sini otomatis.
         </p>
       </div>
     );
@@ -79,37 +99,26 @@ export function InfoKosCarousel({ items }: { items: InfoItem[] }) {
         </Link>
       </div>
 
-      {/* Slide content — pakai key supaya animation reset tiap ganti item */}
-      <Link
-        key={active.id}
-        href="/announcements"
-        className="mt-3 block rounded-lg bg-white/70 p-3 transition hover:bg-white"
+      {/*
+        key={active.kind + active.id} → force remount saat item berganti
+        sehingga CSS animation "animate-info-kos-slide" replay setiap
+        transisi. Height min supaya slide tidak jumping saat konten pendek.
+      */}
+      <div
+        key={`${active.kind}:${active.id}`}
+        className="animate-info-kos-slide mt-3 min-h-[92px]"
       >
-        <div className="text-[11px] uppercase tracking-wide text-slate-500 tabular-nums">
-          {new Date(active.createdAtISO).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })}
-        </div>
-        <div className="mt-0.5 font-semibold text-slate-800 line-clamp-1">
-          {active.title}
-        </div>
-        <p className="mt-1 text-sm text-slate-600 line-clamp-2 whitespace-pre-wrap">
-          {active.body}
-        </p>
-      </Link>
+        <SlideCard item={active} />
+      </div>
 
-      {/* Dot indicator */}
       {items.length > 1 && (
         <div className="mt-3 flex items-center justify-center gap-1.5">
           {items.map((it, i) => (
             <button
-              key={it.id}
+              key={`${it.kind}:${it.id}`}
               type="button"
               onClick={() => {
                 setIdx(i);
-                // Reset timer supaya user lihat slide ini penuh sebelum auto-next
                 setPaused(true);
                 setTimeout(() => setPaused(false), ROTATE_MS);
               }}
@@ -124,5 +133,77 @@ export function InfoKosCarousel({ items }: { items: InfoItem[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+function SlideCard({ item }: { item: InfoItem }) {
+  if (item.kind === "maintenance") {
+    const isProgress = item.status === "IN_PROGRESS";
+    const isPreventive = item.type === "PREVENTIVE";
+    return (
+      <Link
+        href={`/maintenance/${item.id}`}
+        className="block rounded-lg bg-white/70 p-3 transition hover:bg-white"
+      >
+        <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+          <span
+            className={`inline-flex items-center rounded-full px-1.5 py-0.5 font-semibold ${
+              isPreventive
+                ? "bg-sky-100 text-sky-800"
+                : "bg-violet-100 text-violet-800"
+            }`}
+          >
+            🛠️ {isPreventive ? "Preventif" : "Korektif"}
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full px-1.5 py-0.5 font-semibold ${
+              isProgress
+                ? "bg-amber-100 text-amber-800"
+                : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {isProgress ? "Dalam proses" : "Terjadwal"}
+          </span>
+          <span className="text-slate-500 tabular-nums">
+            Jadwal:{" "}
+            {new Date(item.scheduledDateISO).toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+        </div>
+        <div className="mt-1 font-semibold text-slate-800 line-clamp-1">
+          {item.title}
+        </div>
+        {item.body && (
+          <p className="mt-0.5 text-sm text-slate-600 line-clamp-2 whitespace-pre-wrap">
+            {item.body}
+          </p>
+        )}
+      </Link>
+    );
+  }
+  // announcement
+  return (
+    <Link
+      href="/announcements"
+      className="block rounded-lg bg-white/70 p-3 transition hover:bg-white"
+    >
+      <div className="text-[11px] uppercase tracking-wide text-slate-500 tabular-nums">
+        📢 Pengumuman ·{" "}
+        {new Date(item.createdAtISO).toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })}
+      </div>
+      <div className="mt-0.5 font-semibold text-slate-800 line-clamp-1">
+        {item.title}
+      </div>
+      <p className="mt-1 text-sm text-slate-600 line-clamp-2 whitespace-pre-wrap">
+        {item.body}
+      </p>
+    </Link>
   );
 }

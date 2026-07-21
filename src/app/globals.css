@@ -124,3 +124,27 @@ textarea {
     page-break-inside: avoid;
   }
 }
+
+/* Slide-in animation untuk carousel Informasi Kos di dashboard tenant.
+ * Ringan: cuma transform + opacity (GPU-accelerated), tanpa JS animation
+ * library. Durasi pendek supaya rotate 3-detik tetap terasa cepat.
+ * Respect prefers-reduced-motion: user yang matikan animasi tidak lihat
+ * transisi apapun. */
+@keyframes info-kos-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.animate-info-kos-slide {
+  animation: info-kos-slide-in 350ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-info-kos-slide {
+    animation: none;
+  }
+}

@@ -439,27 +439,98 @@ async function TenantDashboard({
       })
     : [];
 
-  // Untuk card "Informasi Kos": 5 pengumuman terbaru dari kos yang
-  // di-huni. Ditampilkan sebagai carousel yang berputar tiap 3 detik.
-  const infoAnnouncements = tenancy
-    ? await prisma.announcement.findMany({
-        where: {
-          OR: [
-            { kosId: tenancy.room.kos.id },
-            // Pengumuman "semua kos" dari pemilik kos yang dia tinggali.
-            { kosId: null, authorId: tenancy.room.kos.ownerId },
-          ],
-        },
-        select: {
-          id: true,
-          title: true,
-          body: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
+  // Untuk card "Informasi Kos" carousel: gabungan pengumuman terbaru
+  // + perawatan level kos yang aktif (SCHEDULED/IN_PROGRESS). Kedua
+  // sumber di-merge, di-sort by tanggal desc, lalu diambil 5 teratas.
+  // Fetch 8 masing-masing supaya setelah merge tetap dapat 5 varied.
+  const [infoAnnouncementsRaw, infoMaintenancesRaw] = tenancy
+    ? await Promise.all([
+        prisma.announcement.findMany({
+          where: {
+            OR: [
+              { kosId: tenancy.room.kos.id },
+              // Pengumuman "semua kos" dari pemilik kos yang dia tinggali.
+              { kosId: null, authorId: tenancy.room.kos.ownerId },
+            ],
+          },
+          select: {
+            id: true,
+            title: true,
+            body: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 8,
+        }),
+        prisma.maintenance.findMany({
+          where: {
+            kosId: tenancy.room.kos.id,
+            roomId: null,
+            status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+          },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            type: true,
+            status: true,
+            scheduledDate: true,
+          },
+          orderBy: [{ status: "asc" }, { scheduledDate: "asc" }],
+          take: 8,
+        }),
+      ])
+    : [[], []];
+
+  // Merge & sort untuk carousel. Pakai key waktu:
+  //  - Announcement: createdAt (kapan diposting)
+  //  - Maintenance: scheduledDate (kapan akan/sedang dilakukan)
+  // Item terbaru/terdekat tampil dulu. Ambil 5 teratas untuk carousel.
+  type CarouselDto =
+    | {
+        kind: "announcement";
+        id: string;
+        title: string;
+        body: string;
+        sortKey: number;
+        createdAtISO: string;
+      }
+    | {
+        kind: "maintenance";
+        id: string;
+        title: string;
+        body: string;
+        sortKey: number;
+        scheduledDateISO: string;
+        status: string;
+        type: string;
+      };
+  const merged: CarouselDto[] = [
+    ...infoAnnouncementsRaw.map(
+      (a): CarouselDto => ({
+        kind: "announcement",
+        id: a.id,
+        title: a.title,
+        body: a.body,
+        sortKey: a.createdAt.getTime(),
+        createdAtISO: a.createdAt.toISOString(),
       })
-    : [];
+    ),
+    ...infoMaintenancesRaw.map(
+      (m): CarouselDto => ({
+        kind: "maintenance",
+        id: m.id,
+        title: m.title,
+        body: m.description ?? "",
+        sortKey: m.scheduledDate.getTime(),
+        scheduledDateISO: m.scheduledDate.toISOString(),
+        status: m.status,
+        type: m.type,
+      })
+    ),
+  ]
+    .sort((a, b) => b.sortKey - a.sortKey)
+    .slice(0, 5);
 
   /* ---------- Chart 1: jadwal pembayaran 6 bulan SEJAK tenant masuk ---------- */
   //  - Bulan-bulan yang ditampilkan: 6 bulan berurutan mulai dari bulan
@@ -571,14 +642,26 @@ async function TenantDashboard({
             </div>
           </div>
           <InfoKosCarousel
-            items={infoAnnouncements.map(
-              (a): InfoItem => ({
-                id: a.id,
-                title: a.title,
-                body: a.body,
-                createdAtISO: a.createdAt.toISOString(),
-              })
-            )}
+            items={merged.map((m): InfoItem => {
+              if (m.kind === "announcement") {
+                return {
+                  kind: "announcement",
+                  id: m.id,
+                  title: m.title,
+                  body: m.body,
+                  createdAtISO: m.createdAtISO,
+                };
+              }
+              return {
+                kind: "maintenance",
+                id: m.id,
+                title: m.title,
+                body: m.body,
+                scheduledDateISO: m.scheduledDateISO,
+                status: m.status,
+                type: m.type,
+              };
+            })}
           />
           <BillingCard tenancy={tenancy} payments={payments} />
           {upcomingMaintenance.length > 0 && (
