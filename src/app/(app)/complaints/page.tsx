@@ -3,24 +3,88 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { EmptyState, ChatIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
+import {
+  OwnerComplaintsView,
+  type ComplaintItem,
+} from "./OwnerComplaintsView";
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "OPEN") return <span className="badge-yellow">Terbuka</span>;
-  if (status === "IN_PROGRESS") return <span className="badge-blue">Dalam proses</span>;
+  if (status === "IN_PROGRESS")
+    return <span className="badge-blue">Dalam proses</span>;
   return <span className="badge-green">Selesai</span>;
 }
+
+// Safety cap untuk owner. Data komplain lifetime bisa besar (200 penghuni
+// × N komplain/tahun) — untuk sekarang muat 500 terbaru; kalau tembus,
+// tambah pagination berbasis cursor. Client-side search+filter tetap
+// enak sampai ~1000 rows.
+const OWNER_TAKE_CAP = 500;
+
+type Status = "OPEN" | "IN_PROGRESS" | "RESOLVED";
 
 export default async function ComplaintsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const where =
-    user.role === "OWNER"
-      ? { tenancy: { room: { kos: { ownerId: user.id } } } }
-      : { tenancy: { tenantId: user.id } };
+  // ============ OWNER view (grouped + search + filter) ============
+  if (user.role === "OWNER") {
+    const rows = await prisma.complaint.findMany({
+      where: { tenancy: { room: { kos: { ownerId: user.id } } } },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: OWNER_TAKE_CAP,
+      include: {
+        tenancy: {
+          include: {
+            tenant: { select: { name: true } },
+            room: { include: { kos: { select: { name: true } } } },
+          },
+        },
+      },
+    });
 
+    const items: ComplaintItem[] = rows.map((c) => {
+      const photos: string[] = c.photoUrls ? JSON.parse(c.photoUrls) : [];
+      return {
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        status: c.status as Status,
+        createdAtISO: c.createdAt.toISOString(),
+        tenantName: c.tenancy.tenant.name,
+        kosName: c.tenancy.room.kos.name,
+        roomName: c.tenancy.room.name,
+        photoCount: photos.length,
+      };
+    });
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h1 className="text-2xl font-bold">Komplain</h1>
+        </div>
+        {items.length === 0 ? (
+          <EmptyState
+            icon={<ChatIcon />}
+            title="Tidak ada komplain saat ini"
+            description="Komplain dari penghuni kos Anda akan muncul di sini."
+          />
+        ) : (
+          <OwnerComplaintsView complaints={items} />
+        )}
+        {items.length === OWNER_TAKE_CAP && (
+          <p className="text-xs text-slate-500 italic">
+            Menampilkan {OWNER_TAKE_CAP} komplain terbaru. Komplain lebih lama
+            tersimpan tapi tidak ditampilkan di sini.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  // ============ TENANT view (unchanged — dataset kecil) ============
   const complaints = await prisma.complaint.findMany({
-    where,
+    where: { tenancy: { tenantId: user.id } },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: {
       tenancy: {
@@ -36,32 +100,18 @@ export default async function ComplaintsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Komplain</h1>
-        {user.role === "TENANT" && (
-          <Link href="/complaints/new" className="btn-primary">
-            + Buat komplain baru
-          </Link>
-        )}
+        <Link href="/complaints/new" className="btn-primary">
+          + Buat komplain baru
+        </Link>
       </div>
 
       <div className="space-y-3">
         {complaints.length === 0 && (
           <EmptyState
             icon={<ChatIcon />}
-            title={
-              user.role === "TENANT"
-                ? "Belum ada komplain"
-                : "Tidak ada komplain saat ini"
-            }
-            description={
-              user.role === "TENANT"
-                ? "Laporkan kerusakan atau masalah lain agar pemilik bisa tindak lanjut."
-                : "Komplain dari penghuni kos Anda akan muncul di sini."
-            }
-            action={
-              user.role === "TENANT"
-                ? { label: "Buat komplain", href: "/complaints/new" }
-                : undefined
-            }
+            title="Belum ada komplain"
+            description="Laporkan kerusakan atau masalah lain agar pemilik bisa tindak lanjut."
+            action={{ label: "Buat komplain", href: "/complaints/new" }}
           />
         )}
         {complaints.map((c) => {
@@ -76,9 +126,7 @@ export default async function ComplaintsPage() {
                 <div>
                   <div className="font-semibold">{c.title}</div>
                   <div className="text-sm text-slate-600">
-                    {user.role === "OWNER"
-                      ? `${c.tenancy.tenant.name} • ${c.tenancy.room.kos.name} / Kamar ${c.tenancy.room.name}`
-                      : `${c.tenancy.room.kos.name} / Kamar ${c.tenancy.room.name}`}
+                    {c.tenancy.room.kos.name} / Kamar {c.tenancy.room.name}
                   </div>
                   <p className="mt-1 text-sm text-slate-700 line-clamp-2">
                     {c.description}
