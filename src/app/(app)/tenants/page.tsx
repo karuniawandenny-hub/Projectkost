@@ -2,15 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { viewerUrl } from "@/lib/viewer";
-import { endTenancy } from "../kos/actions";
 import {
   approveMoveRequest,
   rejectMoveRequest,
 } from "../move-request/actions";
 import { PendingTenantCard, type KosOption } from "./PendingTenantCard";
-import { EditStartDateForm } from "./EditStartDateForm";
-import { DeleteTenantButton } from "./DeleteTenantButton";
+import {
+  ActiveTenantsView,
+  type ActiveTenant,
+} from "./ActiveTenantsView";
 
 export default async function TenantsPage() {
   const user = await getCurrentUser();
@@ -59,6 +59,21 @@ export default async function TenantsPage() {
     id: k.id,
     name: k.name,
     rooms: k.rooms,
+  }));
+
+  const activeTenants: ActiveTenant[] = tenancies.map((t) => ({
+    tenancyId: t.id,
+    userId: t.tenant.id,
+    name: t.tenant.name,
+    email: t.tenant.email,
+    phone: t.tenant.phone,
+    selfiePhotoUrl: t.tenant.selfiePhotoUrl,
+    ktpPhotoUrl: t.tenant.ktpPhotoUrl,
+    startDate: t.startDate.toISOString(),
+    kosId: t.room.kos.id,
+    kosName: t.room.kos.name,
+    roomName: t.room.name,
+    ownerSigned: !!t.ownerSignatureUrl,
   }));
 
   return (
@@ -191,103 +206,7 @@ export default async function TenantsPage() {
             </span>
           )}
         </h2>
-        {tenancies.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Belum ada penghuni aktif. Setujui pengajuan di atas dan assign ke
-            kamar untuk menambahkan penghuni.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {tenancies.map((t) => (
-              <div key={t.id} className="card">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="flex gap-3">
-                    {t.tenant.selfiePhotoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={t.tenant.selfiePhotoUrl}
-                        alt={t.tenant.name}
-                        className="h-14 w-14 rounded-full object-cover border"
-                      />
-                    ) : (
-                      <div className="h-14 w-14 rounded-full bg-slate-200 grid place-items-center font-bold text-slate-600">
-                        {t.tenant.name.slice(0, 1)}
-                      </div>
-                    )}
-                    <div>
-                      <div className="font-semibold">{t.tenant.name}</div>
-                      <div className="text-sm text-slate-600">
-                        {t.tenant.email}
-                      </div>
-                      {t.tenant.phone && (
-                        <div className="text-xs text-slate-500">
-                          {t.tenant.phone}
-                        </div>
-                      )}
-                      <div className="text-sm text-slate-500 mt-0.5">
-                        {t.room.kos.name} • Kamar {t.room.name} • Sejak{" "}
-                        {new Date(t.startDate).toLocaleDateString("id-ID", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {t.tenant.ktpPhotoUrl && (
-                      <a
-                        href={viewerUrl(t.tenant.ktpPhotoUrl, "Foto KTP")}
-                        className="btn-secondary"
-                      >
-                        Lihat KTP
-                      </a>
-                    )}
-                    <a
-                      href={`/tenancies/${t.id}/contract`}
-                      className={
-                        t.ownerSignatureUrl
-                          ? "btn-secondary"
-                          : "btn-secondary border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                      }
-                      title={
-                        t.ownerSignatureUrl
-                          ? "Kontrak sudah Anda tandatangani"
-                          : "Anda belum tandatangani sebagai PIHAK PERTAMA"
-                      }
-                    >
-                      📄 Kontrak
-                      {!t.ownerSignatureUrl && (
-                        <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-slate-900">
-                          Belum TTD
-                        </span>
-                      )}
-                    </a>
-                    <EditStartDateForm
-                      tenancyId={t.id}
-                      currentStartDate={t.startDate.toISOString()}
-                    />
-                    <form action={endTenancy}>
-                      <input type="hidden" name="tenancyId" value={t.id} />
-                      <button
-                        className="btn-danger"
-                        type="submit"
-                        formNoValidate
-                      >
-                        Akhiri sewa
-                      </button>
-                    </form>
-                    <DeleteTenantButton
-                      userId={t.tenant.id}
-                      tenantName={t.tenant.name}
-                      buttonLabel="Hapus penghuni"
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <ActiveTenantsView tenants={activeTenants} />
       </section>
     </div>
   );
