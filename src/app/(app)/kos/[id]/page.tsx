@@ -2,20 +2,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { CreateRoomForm } from "./CreateRoomForm";
-import { AssignTenantForm } from "./AssignTenantForm";
 import { EditKosForm } from "./EditKosForm";
-import { EditRoomForm } from "./EditRoomForm";
+import { KosRoomsView } from "./KosRoomsView";
 import {
   formatDateID,
   statusBadgeClass,
   statusLabel,
   typeLabel,
 } from "@/lib/maintenance";
-
-function rupiah(n: number) {
-  return "Rp " + n.toLocaleString("id-ID");
-}
 
 type MaintRow = {
   id: string;
@@ -49,30 +43,6 @@ function MaintenanceRow({ m }: { m: MaintRow }) {
         {m.completedDate ? formatDateID(m.completedDate) : formatDateID(m.scheduledDate)}
       </div>
     </Link>
-  );
-}
-
-function RoomMaintenanceHistory({ items }: { items: MaintRow[] }) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2">
-      <div className="px-1 py-0.5 text-xs font-semibold text-slate-500">
-        Riwayat perawatan ({items.length})
-      </div>
-      <div className="mt-1 space-y-0.5">
-        {items.slice(0, 5).map((m) => (
-          <MaintenanceRow key={m.id} m={m} />
-        ))}
-        {items.length > 5 && (
-          <Link
-            href={`/maintenance?kosId=${items[0] ? "" : ""}`}
-            className="block px-2 py-1 text-[11px] text-brand-700 hover:underline"
-          >
-            +{items.length - 5} lagi → buka menu Perawatan
-          </Link>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -130,18 +100,24 @@ export default async function KosDetailPage({
         completedDate: true,
         cost: true,
       },
-      take: 50,
+      take: 100,
     }),
   ]);
   if (!kos) notFound();
 
-  // Group maintenance by roomId untuk render di kartu kamar.
-  const maintByRoom = new Map<string, typeof maintenances>();
+  // Group maintenance by roomId untuk dilempar ke client component.
+  const maintByRoomId: Record<string, MaintRow[]> = {};
   for (const m of maintenances) {
     if (!m.roomId) continue;
-    const arr = maintByRoom.get(m.roomId) ?? [];
-    arr.push(m);
-    maintByRoom.set(m.roomId, arr);
+    if (!maintByRoomId[m.roomId]) maintByRoomId[m.roomId] = [];
+    maintByRoomId[m.roomId].push({
+      id: m.id,
+      type: m.type,
+      title: m.title,
+      status: m.status,
+      scheduledDate: m.scheduledDate,
+      completedDate: m.completedDate,
+    });
   }
   const kosLevelMaint = maintenances.filter((m) => !m.roomId);
 
@@ -150,6 +126,17 @@ export default async function KosDetailPage({
     name: t.name,
     email: t.email,
     onboarded: !!t.onboardedAt,
+  }));
+
+  const roomsForView = kos.rooms.map((r) => ({
+    id: r.id,
+    name: r.name,
+    monthlyPrice: r.monthlyPrice,
+    status: r.status,
+    tenancies: r.tenancies.map((t) => ({
+      id: t.id,
+      tenant: { name: t.tenant.name, email: t.tenant.email },
+    })),
   }));
 
   return (
@@ -177,76 +164,26 @@ export default async function KosDetailPage({
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-3">
-          <h2 className="font-semibold">Daftar kamar</h2>
-          {kos.rooms.length === 0 && (
-            <div className="card text-sm text-slate-500">
-              Belum ada kamar. Tambahkan kamar pertama.
-            </div>
-          )}
-          {kos.rooms.map((r) => {
-            const active = r.tenancies[0];
-            return (
-              <div key={r.id} className="card">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <div className="font-semibold">Kamar {r.name}</div>
-                    <div className="text-sm text-slate-600">
-                      {rupiah(r.monthlyPrice)} / bulan
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {r.status === "OCCUPIED" ? (
-                      <span className="badge-green">Terisi</span>
-                    ) : (
-                      <span className="badge-slate">Kosong</span>
-                    )}
-                    <EditRoomForm
-                      room={{ id: r.id, name: r.name, monthlyPrice: r.monthlyPrice }}
-                    />
-                  </div>
-                </div>
-                {active ? (
-                  <div className="mt-3 rounded-md bg-slate-50 p-3 text-sm">
-                    <span className="text-slate-500">Penghuni:</span>{" "}
-                    <span className="font-medium">{active.tenant.name}</span>{" "}
-                    <span className="text-slate-500">({active.tenant.email})</span>
-                  </div>
-                ) : (
-                  <div className="mt-3">
-                    <AssignTenantForm roomId={r.id} tenants={tenantOptions} />
-                  </div>
-                )}
-                <RoomMaintenanceHistory items={maintByRoom.get(r.id) ?? []} />
-              </div>
-            );
-          })}
+      <KosRoomsView
+        kosId={kos.id}
+        rooms={roomsForView}
+        tenantOptions={tenantOptions}
+        maintByRoomId={maintByRoomId}
+      />
 
-          {kosLevelMaint.length > 0 && (
-            <div className="card">
-              <h3 className="font-semibold">Perawatan fasilitas kos</h3>
-              <p className="text-xs text-slate-500">
-                Perawatan yang tidak terikat ke kamar tertentu (pompa, taman, dll).
-              </p>
-              <div className="mt-3 space-y-1.5">
-                {kosLevelMaint.map((m) => (
-                  <MaintenanceRow key={m.id} m={m} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <div className="card">
-            <h2 className="font-semibold">Tambah kamar</h2>
-            <div className="mt-3">
-              <CreateRoomForm kosId={kos.id} />
-            </div>
+      {kosLevelMaint.length > 0 && (
+        <div className="card">
+          <h3 className="font-semibold">Perawatan fasilitas kos</h3>
+          <p className="text-xs text-slate-500">
+            Perawatan yang tidak terikat ke kamar tertentu (pompa, taman, dll).
+          </p>
+          <div className="mt-3 space-y-1.5">
+            {kosLevelMaint.map((m) => (
+              <MaintenanceRow key={m.id} m={m} />
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
