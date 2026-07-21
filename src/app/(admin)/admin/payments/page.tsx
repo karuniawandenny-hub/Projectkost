@@ -1,36 +1,45 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { TestControls } from "./TestControls";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
-import { viewerUrl } from "@/lib/viewer";
+import {
+  AdminPaymentsView,
+  type AdminPaymentItem,
+} from "./AdminPaymentsView";
 
-const MONTHS = [
-  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-  "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-];
+const PER_PAGE = 100;
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === "DUE") return <span className="badge-yellow">Belum upload</span>;
-  if (status === "PENDING") return <span className="badge-yellow">Menunggu</span>;
-  if (status === "VERIFIED") return <span className="badge-green">Lunas</span>;
-  return <span className="badge-red">Ditolak</span>;
+function clampMonth(m: number): number | null {
+  if (!Number.isFinite(m) || m < 1 || m > 12) return null;
+  return m;
 }
-
-function formatDateID(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+function clampYear(y: number): number | null {
+  if (!Number.isFinite(y) || y < 2020 || y > 2100) return null;
+  return y;
+}
+function clampPage(p: number): number {
+  if (!Number.isFinite(p) || p < 1) return 1;
+  return Math.floor(p);
 }
 
 export default async function AdminPaymentsPage({
   searchParams,
 }: {
-  searchParams: { status?: string; q?: string };
+  searchParams: {
+    status?: string;
+    q?: string;
+    month?: string;
+    year?: string;
+    page?: string;
+  };
 }) {
-  const where: Record<string, unknown> = {};
+  const now = new Date();
+  const month = clampMonth(Number(searchParams.month)) ?? now.getMonth() + 1;
+  const year = clampYear(Number(searchParams.year)) ?? now.getFullYear();
+  const page = clampPage(Number(searchParams.page ?? 1));
+
+  const where: Record<string, unknown> = {
+    periodMonth: month,
+    periodYear: year,
+  };
   if (
     searchParams.status &&
     ["DUE", "PENDING", "VERIFIED", "REJECTED"].includes(searchParams.status)
@@ -48,31 +57,60 @@ export default async function AdminPaymentsPage({
       ],
     };
   }
-  const payments = await prisma.payment.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 200,
-    include: {
-      tenancy: {
-        include: {
-          tenant: { select: { name: true, email: true } },
-          room: { include: { kos: { include: { owner: { select: { name: true } } } } } },
+
+  const [total, payments, historyPeriods] = await Promise.all([
+    prisma.payment.count({ where }),
+    prisma.payment.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PER_PAGE,
+      take: PER_PAGE,
+      include: {
+        tenancy: {
+          include: {
+            tenant: { select: { name: true, email: true } },
+            room: {
+              include: {
+                kos: {
+                  include: { owner: { select: { name: true } } },
+                },
+              },
+            },
+          },
         },
+        _count: { select: { reminders: true } },
       },
-      _count: { select: { reminders: true } },
-    },
-  });
+    }),
+    // Aggregate periode yang punya data — untuk populate dropdown.
+    prisma.payment.groupBy({
+      by: ["periodMonth", "periodYear"],
+      orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+      take: 36,
+    }),
+  ]);
 
-  const filters = [
-    { href: "/admin/payments", label: "Semua" },
-    { href: "/admin/payments?status=PENDING", label: "Menunggu" },
-    { href: "/admin/payments?status=VERIFIED", label: "Lunas" },
-    { href: "/admin/payments?status=REJECTED", label: "Ditolak" },
-  ];
+  const items: AdminPaymentItem[] = payments.map((p) => ({
+    id: p.id,
+    status: p.status as AdminPaymentItem["status"],
+    periodMonth: p.periodMonth,
+    periodYear: p.periodYear,
+    amount: p.amount,
+    dueDateISO: p.dueDate ? p.dueDate.toISOString() : null,
+    proofUrl: p.proofUrl,
+    tenantName: p.tenancy.tenant.name,
+    tenantEmail: p.tenancy.tenant.email,
+    kosId: p.tenancy.room.kos.id,
+    kosName: p.tenancy.room.kos.name,
+    ownerName: p.tenancy.room.kos.owner.name,
+    roomName: p.tenancy.room.name,
+    reminderCount: p._count.reminders,
+  }));
 
-  const exportHref = searchParams.status
-    ? `/api/admin/payments/export?status=${searchParams.status}`
-    : "/api/admin/payments/export";
+  const exportParams = new URLSearchParams();
+  if (searchParams.status) exportParams.set("status", searchParams.status);
+  exportParams.set("month", String(month));
+  exportParams.set("year", String(year));
+  const exportHref = `/api/admin/payments/export?${exportParams.toString()}`;
 
   return (
     <div className="space-y-4">
@@ -100,87 +138,26 @@ export default async function AdminPaymentsPage({
           Export CSV
         </a>
       </div>
-      <form className="flex flex-wrap items-end gap-2">
-        <div className="flex-1 min-w-[200px]">
-          <label className="label">Cari (nama tenant / email / kos / kamar)</label>
-          <input
-            name="q"
-            defaultValue={searchParams.q ?? ""}
-            className="input"
-            placeholder="ketik untuk mencari"
-          />
-        </div>
-        <input type="hidden" name="status" value={searchParams.status ?? ""} />
-        <button type="submit" className="btn-primary">
-          Cari
-        </button>
-      </form>
 
-      <div className="flex flex-wrap gap-2">
-        {filters.map((f) => (
-          <Link
-            key={f.href}
-            href={f.href}
-            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-sm hover:bg-slate-50"
-          >
-            {f.label}
-          </Link>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {payments.length === 0 && (
-          <EmptyState
-            icon={<PaymentIcon />}
-            title="Tidak ada pembayaran"
-            description="Pembayaran dari penghuni di seluruh kos akan muncul di sini."
-          />
-        )}
-        {payments.map((p) => (
-          <div key={p.id} className="card">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <div className="font-semibold">
-                  {p.tenancy.tenant.name} → {p.tenancy.room.kos.name} / Kamar{" "}
-                  {p.tenancy.room.name}
-                </div>
-                <div className="text-xs text-slate-500">
-                  Pemilik: {p.tenancy.room.kos.owner.name} • Periode{" "}
-                  {MONTHS[p.periodMonth - 1]} {p.periodYear} • Rp{" "}
-                  {p.amount.toLocaleString("id-ID")}
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Jatuh tempo:{" "}
-                  <span className="font-medium text-slate-700">
-                    {formatDateID(p.dueDate)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-1">
-                <StatusBadge status={p.status} />
-                {p.proofUrl ? (
-                <a
-                  href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
-                  className="text-sm text-brand-700 hover:underline"
-                >
-                  Bukti
-                </a>
-                ) : (
-                  <span className="text-xs text-slate-400">—</span>
-                )}
-                {p.status === "VERIFIED" && (
-                  <Link
-                    href={`/payments/${p.id}/receipt`}
-                    className="text-sm text-emerald-700 hover:underline"
-                  >
-                    📄 Kuitansi
-                  </Link>
-                )}
-              </div>
-            </div>
-            <TestControls paymentId={p.id} reminderCount={p._count.reminders} />
-          </div>
-        ))}
-      </div>
+      {total === 0 && !searchParams.q && !searchParams.status ? (
+        <EmptyState
+          icon={<PaymentIcon />}
+          title="Tidak ada pembayaran"
+          description="Pembayaran dari penghuni di seluruh kos akan muncul di sini."
+        />
+      ) : (
+        <AdminPaymentsView
+          items={items}
+          period={{ month, year }}
+          page={page}
+          perPage={PER_PAGE}
+          total={total}
+          historyPeriods={historyPeriods.map((h) => ({
+            month: h.periodMonth,
+            year: h.periodYear,
+          }))}
+        />
+      )}
     </div>
   );
 }
