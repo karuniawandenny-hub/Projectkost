@@ -1,8 +1,15 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { EmptyState, InboxIcon } from "@/components/EmptyState";
 import { AnnouncementForm } from "./AnnouncementForm";
+import {
+  formatDateID,
+  statusBadgeClass,
+  statusLabel,
+  typeLabel,
+} from "@/lib/maintenance";
 
 function formatWhen(d: Date): string {
   return new Date(d).toLocaleString("id-ID", {
@@ -103,10 +110,10 @@ async function TenantView({ userId }: { userId: string }) {
     new Set(tenancies.map((t) => t.room.kos.ownerId))
   );
 
-  const announcements =
+  const [announcements, kosMaintenances] = await Promise.all([
     kosIds.length === 0
-      ? []
-      : await prisma.announcement.findMany({
+      ? Promise.resolve([])
+      : prisma.announcement.findMany({
           where: {
             OR: [
               { kosId: { in: kosIds } },
@@ -117,39 +124,133 @@ async function TenantView({ userId }: { userId: string }) {
           include: { kos: { select: { name: true } } },
           orderBy: { createdAt: "desc" },
           take: 50,
-        });
+        }),
+    // Perawatan LEVEL KOS (roomId=null) — dipindah dari dashboard tenant
+    // ke halaman Pengumuman. Hanya yang aktif (SCHEDULED / IN_PROGRESS).
+    kosIds.length === 0
+      ? Promise.resolve([])
+      : prisma.maintenance.findMany({
+          where: {
+            kosId: { in: kosIds },
+            roomId: null,
+            status: { in: ["SCHEDULED", "IN_PROGRESS"] },
+          },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            type: true,
+            status: true,
+            scheduledDate: true,
+            kos: { select: { name: true } },
+          },
+          orderBy: [{ status: "asc" }, { scheduledDate: "asc" }],
+          take: 20,
+        }),
+  ]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Pengumuman</h1>
         <p className="text-sm text-slate-600">
           Informasi dari pemilik kos Anda.
         </p>
       </div>
-      {announcements.length === 0 ? (
-        <EmptyState
-          icon={<InboxIcon />}
-          title="Belum ada pengumuman"
-          description="Pengumuman dari pemilik kos akan muncul di sini."
-        />
-      ) : (
-        <div className="space-y-2">
-          {announcements.map((a) => (
-            <div key={a.id} className="card">
-              <div className="flex items-start justify-between gap-3">
-                <div className="font-semibold">{a.title}</div>
-                <div className="shrink-0 text-xs text-slate-500">
-                  {formatWhen(a.createdAt)}
+
+      {/* Section: Perawatan Fasilitas Kos */}
+      {kosMaintenances.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-500">
+            🛠️ Perawatan Fasilitas Kos ({kosMaintenances.length})
+          </h2>
+          <p className="text-xs text-slate-500">
+            Perawatan fasilitas bersama (pompa, taman, AC lorong, dll) yang
+            terjadwal atau sedang berlangsung di kos Anda.
+          </p>
+          <div className="space-y-2">
+            {kosMaintenances.map((m) => (
+              <Link
+                key={m.id}
+                href={`/maintenance/${m.id}`}
+                className="block rounded-lg border border-slate-200 bg-white p-3 transition hover:border-brand-300 hover:bg-brand-50/40"
+              >
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={`badge text-[10px] ${
+                          m.type === "PREVENTIVE"
+                            ? "badge-blue"
+                            : "badge-violet"
+                        }`}
+                      >
+                        {typeLabel(m.type)}
+                      </span>
+                      <span
+                        className={`badge text-[10px] ${statusBadgeClass(m.status)}`}
+                      >
+                        {statusLabel(m.status)}
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        · {m.kos.name}
+                      </span>
+                    </div>
+                    <div className="mt-1 font-semibold text-slate-800">
+                      {m.title}
+                    </div>
+                    {m.description && (
+                      <p className="mt-0.5 text-sm text-slate-600 line-clamp-2">
+                        {m.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right text-xs text-slate-500">
+                    Jadwal
+                    <div className="font-medium text-slate-700 tabular-nums">
+                      {formatDateID(m.scheduledDate)}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
-                {a.body}
-              </p>
-            </div>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
+
+      {/* Section: Pengumuman */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-slate-500">
+          📢 Pengumuman ({announcements.length})
+        </h2>
+        {announcements.length === 0 && kosMaintenances.length === 0 ? (
+          <EmptyState
+            icon={<InboxIcon />}
+            title="Belum ada pengumuman"
+            description="Pengumuman dari pemilik kos akan muncul di sini."
+          />
+        ) : announcements.length === 0 ? (
+          <div className="card text-sm text-slate-500">
+            Belum ada pengumuman teks dari pemilik.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {announcements.map((a) => (
+              <div key={a.id} className="card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="font-semibold">{a.title}</div>
+                  <div className="shrink-0 text-xs text-slate-500">
+                    {formatWhen(a.createdAt)}
+                  </div>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                  {a.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

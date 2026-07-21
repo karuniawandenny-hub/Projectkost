@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { MissingPhoneBanner } from "../MissingPhoneBanner";
+import { InfoKosCarousel, type InfoItem } from "./InfoKosCarousel";
 import {
   PieChart,
   BarChart,
@@ -415,18 +416,15 @@ async function TenantDashboard({
     }),
   ]);
 
-  // Perawatan aktif (SCHEDULED / IN_PROGRESS) untuk kamar tenant.
-  // Ditampilkan sebagai card di dashboard supaya tenant tidak perlu
-  // mengandalkan notifikasi saja — saat buka aplikasi langsung lihat.
-  // Query bergantung pada tenancy: kalau belum punya, skip.
+  // Perawatan aktif (SCHEDULED / IN_PROGRESS) yang ditampilkan di
+  // dashboard tenant HANYA yang menyangkut KAMAR-nya sendiri.
+  // Perawatan level kos (roomId=null, mis. AC fasilitas kos) dipindah
+  // ke halaman Pengumuman supaya dashboard tetap fokus & personal.
   const upcomingMaintenance = tenancy
     ? await prisma.maintenance.findMany({
         where: {
           status: { in: ["SCHEDULED", "IN_PROGRESS"] },
-          OR: [
-            { roomId: tenancy.room.id },
-            { roomId: null, kosId: tenancy.room.kos.id },
-          ],
+          roomId: tenancy.room.id,
         },
         select: {
           id: true,
@@ -438,6 +436,28 @@ async function TenantDashboard({
         },
         orderBy: [{ status: "asc" }, { scheduledDate: "asc" }],
         take: 3,
+      })
+    : [];
+
+  // Untuk card "Informasi Kos": 5 pengumuman terbaru dari kos yang
+  // di-huni. Ditampilkan sebagai carousel yang berputar tiap 3 detik.
+  const infoAnnouncements = tenancy
+    ? await prisma.announcement.findMany({
+        where: {
+          OR: [
+            { kosId: tenancy.room.kos.id },
+            // Pengumuman "semua kos" dari pemilik kos yang dia tinggali.
+            { kosId: null, authorId: tenancy.room.kos.ownerId },
+          ],
+        },
+        select: {
+          id: true,
+          title: true,
+          body: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
       })
     : [];
 
@@ -550,6 +570,16 @@ async function TenantDashboard({
               </a>
             </div>
           </div>
+          <InfoKosCarousel
+            items={infoAnnouncements.map(
+              (a): InfoItem => ({
+                id: a.id,
+                title: a.title,
+                body: a.body,
+                createdAtISO: a.createdAt.toISOString(),
+              })
+            )}
+          />
           <BillingCard tenancy={tenancy} payments={payments} />
           {upcomingMaintenance.length > 0 && (
             <MaintenanceCard items={upcomingMaintenance} />
