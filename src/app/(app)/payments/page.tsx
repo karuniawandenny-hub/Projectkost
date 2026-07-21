@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 import { getCurrentUser } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
-import { verifyPayment, verifyPaymentManual } from "./actions";
+import { OwnerPaymentsView, type PaymentItem } from "./OwnerPaymentsView";
 
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
@@ -34,7 +34,7 @@ function StatusBadge({ status }: { status: string }) {
 export default async function PaymentsPage({
   searchParams,
 }: {
-  searchParams?: { uploaded?: string };
+  searchParams?: { uploaded?: string; month?: string; year?: string };
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -145,192 +145,89 @@ export default async function PaymentsPage({
     );
   }
 
-  // OWNER view
-  const payments = await prisma.payment.findMany({
-    where: { tenancy: { room: { kos: { ownerId: user.id } } } },
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    include: {
-      tenancy: {
-        include: {
-          tenant: true,
-          room: { include: { kos: true } },
+  // OWNER view — filter by periode di query param (default bulan berjalan)
+  const now = new Date();
+  const month = clampMonth(Number(searchParams?.month)) ?? now.getMonth() + 1;
+  const year = clampYear(Number(searchParams?.year)) ?? now.getFullYear();
+
+  const ownerScope = { tenancy: { room: { kos: { ownerId: user.id } } } };
+  const [payments, historyPeriods] = await Promise.all([
+    prisma.payment.findMany({
+      where: {
+        ...ownerScope,
+        periodMonth: month,
+        periodYear: year,
+      },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      include: {
+        tenancy: {
+          include: {
+            tenant: { select: { name: true } },
+            room: { include: { kos: { select: { id: true, name: true } } } },
+          },
         },
       },
-    },
+    }),
+    // Aggregate: berapa banyak riwayat VERIFIED/REJECTED per (month, year) —
+    // untuk populate dropdown periode dengan bulan-bulan yang punya data.
+    prisma.payment.groupBy({
+      by: ["periodMonth", "periodYear"],
+      where: {
+        ...ownerScope,
+        status: { in: ["VERIFIED", "REJECTED"] },
+      },
+      _count: { _all: true },
+      orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+      take: 36,
+    }),
+  ]);
+
+  const toItem = (p: (typeof payments)[number]): PaymentItem => ({
+    id: p.id,
+    status: p.status as PaymentItem["status"],
+    periodMonth: p.periodMonth,
+    periodYear: p.periodYear,
+    amount: p.amount,
+    proofUrl: p.proofUrl,
+    note: p.note,
+    reviewNote: p.reviewNote,
+    tenantName: p.tenancy.tenant.name,
+    kosId: p.tenancy.room.kos.id,
+    kosName: p.tenancy.room.kos.name,
+    roomName: p.tenancy.room.name,
+    reviewedAt: p.reviewedAt ? p.reviewedAt.toISOString() : null,
   });
 
-  const pending = payments.filter((p) => p.status === "PENDING");
-  const due = payments.filter((p) => p.status === "DUE");
-  const others = payments.filter(
-    (p) => p.status !== "PENDING" && p.status !== "DUE"
-  );
+  const pending = payments.filter((p) => p.status === "PENDING").map(toItem);
+  const due = payments.filter((p) => p.status === "DUE").map(toItem);
+  const history = payments
+    .filter((p) => p.status === "VERIFIED" || p.status === "REJECTED")
+    .map(toItem);
+  const historyCountsByPeriod = historyPeriods.map((h) => ({
+    month: h.periodMonth,
+    year: h.periodYear,
+    count: h._count._all,
+  }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <h1 className="text-2xl font-bold">Verifikasi pembayaran</h1>
-
-      <section>
-        <h2 className="text-sm font-semibold text-slate-500 mb-2">
-          Menunggu verifikasi ({pending.length})
-        </h2>
-        <div className="space-y-3">
-          {pending.length === 0 && (
-            <div className="card text-sm text-slate-500">
-              Tidak ada pembayaran yang menunggu verifikasi.
-            </div>
-          )}
-          {pending.map((p) => (
-            <PaymentRow key={p.id} p={p} verifyMode />
-          ))}
-        </div>
-      </section>
-
-      {due.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-500 mb-2">
-            Tagihan terbuka — belum diupload ({due.length})
-          </h2>
-          <p className="mb-3 text-xs text-slate-500">
-            Penghuni belum upload bukti. Kalau Anda menerima pembayaran di
-            luar app (cash / transfer manual), bisa tandai lunas via tombol
-            di setiap baris.
-          </p>
-          <div className="space-y-3">
-            {due.map((p) => (
-              <PaymentRow key={p.id} p={p} manualVerifyMode />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section>
-        <h2 className="text-sm font-semibold text-slate-500 mb-2">
-          Riwayat ({others.length})
-        </h2>
-        <div className="space-y-3">
-          {others.map((p) => (
-            <PaymentRow key={p.id} p={p} />
-          ))}
-        </div>
-      </section>
+      <OwnerPaymentsView
+        pending={pending}
+        due={due}
+        history={history}
+        period={{ month, year }}
+        historyCountsByPeriod={historyCountsByPeriod}
+      />
     </div>
   );
 }
 
-type PaymentWith = Awaited<
-  ReturnType<typeof prisma.payment.findMany<{
-    include: {
-      tenancy: {
-        include: {
-          tenant: true;
-          room: { include: { kos: true } };
-        };
-      };
-    };
-  }>>
->[number];
-
-function PaymentRow({
-  p,
-  verifyMode,
-  manualVerifyMode,
-}: {
-  p: PaymentWith;
-  verifyMode?: boolean;
-  manualVerifyMode?: boolean;
-}) {
-  return (
-    <div className="card">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <div className="font-semibold">
-            {p.tenancy.tenant.name} — {p.tenancy.room.kos.name} / Kamar{" "}
-            {p.tenancy.room.name}
-          </div>
-          <div className="text-sm text-slate-600">
-            {MONTHS[p.periodMonth - 1]} {p.periodYear} • {rupiah(p.amount)}
-          </div>
-          {p.note && (
-            <div className="text-xs text-slate-500 mt-1">Catatan: {p.note}</div>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <StatusBadge status={p.status} />
-          {p.proofUrl ? (
-            <a
-              href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
-              className="text-sm text-brand-700 hover:underline"
-            >
-              Lihat bukti
-            </a>
-          ) : (
-            <span className="text-xs text-slate-400">Belum upload bukti</span>
-          )}
-        </div>
-      </div>
-      {verifyMode && (
-        <form action={verifyPayment} className="mt-3 flex flex-wrap items-end gap-2">
-          <input type="hidden" name="paymentId" value={p.id} />
-          <div className="flex-1 min-w-[200px]">
-            <label className="label">Catatan review (opsional)</label>
-            <input
-              name="reviewNote"
-              className="input"
-              placeholder="Mis. nominal kurang, akan saya cek, dll"
-            />
-          </div>
-          <button
-            name="action"
-            value="VERIFY"
-            type="submit"
-            className="btn-success"
-          >
-            Setujui
-          </button>
-          <button
-            name="action"
-            value="REJECT"
-            type="submit"
-            className="btn-danger"
-          >
-            Tolak
-          </button>
-        </form>
-      )}
-      {manualVerifyMode && (
-        <form
-          action={verifyPaymentManual}
-          className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
-        >
-          <input type="hidden" name="paymentId" value={p.id} />
-          <div className="text-xs text-amber-800 mb-2">
-            ⚠️ Tandai lunas tanpa bukti upload — hanya gunakan kalau Anda
-            yakin pembayaran sudah diterima di luar app (cash / transfer).
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex-1 min-w-[200px]">
-              <label className="label">
-                Catatan verifikasi <span className="text-red-500">*</span>
-              </label>
-              <input
-                name="note"
-                required
-                maxLength={500}
-                className="input"
-                placeholder="Mis. cash 26 Mei 2026, transfer BCA langsung"
-              />
-            </div>
-            <button type="submit" className="btn-success">
-              Tandai Lunas Manual
-            </button>
-          </div>
-        </form>
-      )}
-      {!verifyMode && p.reviewNote && (
-        <div className="mt-2 text-xs text-slate-500">
-          Catatan pemilik: {p.reviewNote}
-        </div>
-      )}
-    </div>
-  );
+function clampMonth(m: number): number | null {
+  if (!Number.isFinite(m) || m < 1 || m > 12) return null;
+  return m;
+}
+function clampYear(y: number): number | null {
+  if (!Number.isFinite(y) || y < 2020 || y > 2100) return null;
+  return y;
 }
