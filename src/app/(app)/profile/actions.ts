@@ -5,11 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
 import {
-  defaultPrefs,
-  NotifCategory,
+  CATEGORIES_BY_ROLE,
   parsePrefs,
   type Channel,
-  type NotifCategory as NotifCategoryT,
+  type NotifRole,
 } from "@/lib/notif-prefs";
 
 export type UpdatePhoneState = {
@@ -47,22 +46,29 @@ export async function updateOwnPhone(
 export type UpdatePrefsState = { error?: string; success?: boolean };
 
 const CHANNELS: Channel[] = ["push", "email", "wa"];
-const CATEGORIES = Object.keys(NotifCategory) as NotifCategoryT[];
 
 /**
  * User menyimpan preferensi notifikasi sendiri. Format checkbox HTML:
  * field hadir dengan value "on" kalau dicentang, absen kalau tidak.
- * Mulai dari struktur default (semua on), set false untuk yang absen.
+ *
+ * Iterasi HANYA kategori yang relevan untuk role user — kategori lain
+ * (mis. OWNER_* saat user tenant) tetap di-preserve dari prefs eksisting
+ * supaya tidak tertimpa false secara diam-diam. Ini penting untuk
+ * hardening kalau ada user yang bertukar role di masa depan.
  */
 export async function updateNotifPrefs(
   _prev: UpdatePrefsState,
   formData: FormData
 ): Promise<UpdatePrefsState> {
   const me = await requireUser();
+  const role: NotifRole = me.role === "OWNER" ? "OWNER" : "TENANT";
+  const relevantCategories = CATEGORIES_BY_ROLE[role];
 
-  const prefs = defaultPrefs();
+  // Mulai dari prefs eksisting (setelah legacy migration di parsePrefs).
+  // Ini preserve kategori yang tidak di-render di form user ini.
+  const prefs = parsePrefs(me.notifPrefs ?? null);
   for (const ch of CHANNELS) {
-    for (const cat of CATEGORIES) {
+    for (const cat of relevantCategories) {
       prefs[ch][cat] = formData.get(`${ch}.${cat}`) === "on";
     }
   }

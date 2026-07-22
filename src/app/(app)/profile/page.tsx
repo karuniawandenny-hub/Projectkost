@@ -68,7 +68,7 @@ export default async function ProfilePage() {
           </p>
           <NotifPrefsForm
             initialPrefs={notifPrefs}
-            perspective={user.role === "OWNER" ? "OWNER" : "TENANT"}
+            role={user.role === "OWNER" ? "OWNER" : "TENANT"}
           />
         </div>
       )}

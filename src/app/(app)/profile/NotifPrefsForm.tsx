@@ -2,11 +2,10 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import {
-  NotifCategory,
-  categoryLabelFor,
-  categoryHintFor,
-  type NotifCategory as NotifCategoryT,
-  type NotifPerspective,
+  CATEGORIES_BY_ROLE,
+  NOTIF_CATEGORY_LABEL,
+  NOTIF_CATEGORY_HINT,
+  type NotifRole,
   type NotifPrefs,
 } from "@/lib/notif-prefs";
 import {
@@ -15,7 +14,6 @@ import {
 } from "./actions";
 
 const initial: UpdatePrefsState = {};
-const CATEGORIES = Object.keys(NotifCategory) as NotifCategoryT[];
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -30,12 +28,17 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
 
 export function NotifPrefsForm({
   initialPrefs,
-  perspective,
+  role,
 }: {
   initialPrefs: NotifPrefs;
-  perspective: NotifPerspective;
+  role: NotifRole;
 }) {
   const [state, formAction] = useFormState(updateNotifPrefs, initial);
+
+  // Kategori yang di-render — HANYA yang relevan untuk role user.
+  // Tenant tidak lihat toggle "Komplain baru dari penghuni", dan
+  // sebaliknya.
+  const categories = CATEGORIES_BY_ROLE[role];
 
   return (
     <form action={formAction} className="space-y-5">
@@ -51,9 +54,9 @@ export function NotifPrefsForm({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {CATEGORIES.map((cat) => {
-              const label = categoryLabelFor(cat, perspective);
-              const hint = categoryHintFor(cat, perspective);
+            {categories.map((cat) => {
+              const label = NOTIF_CATEGORY_LABEL[cat];
+              const hint = NOTIF_CATEGORY_HINT[cat];
               return (
                 <tr key={cat}>
                   <td className="px-3 py-2">

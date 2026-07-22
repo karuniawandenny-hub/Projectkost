@@ -1,86 +1,106 @@
 import { prisma } from "./prisma";
 
 /**
- * Kategori notifikasi (sisi user). Mapping dari `type` di notify() &
- * reminders.ts → kategori ditangani oleh categorize().
+ * Kategori notifikasi — DI-SPLIT per role.
+ *
+ * Sebelumnya 4 kategori shared (PAYMENT/ANNOUNCEMENT/OPERATIONAL/ACCOUNT)
+ * yang labelnya harus di-adaptasi per role. Sekarang kategori tegas
+ * per role:
+ *   - TENANT_*: kategori event yang penghuni terima.
+ *   - OWNER_*:  kategori event yang pemilik terima.
+ *
+ * Manfaat:
+ *   - UI form hanya tampilkan kategori yang relevan (tenant tidak
+ *     lihat toggle "Komplain baru dari penghuni" yang mereka tidak
+ *     pernah terima).
+ *   - Semantik jelas, tidak ambigu.
+ *   - Toggle lebih granular (contoh: penghuni bisa matikan reminder
+ *     tagihan tapi tetap terima notif akun disetujui).
+ *
+ * Migrasi: notifPrefs JSON lama dengan key PAYMENT/ANNOUNCEMENT/
+ * OPERATIONAL/ACCOUNT tetap dibaca via parsePrefs() dengan fallback
+ * mapping — user tidak kehilangan preferensi. Default kategori baru:
+ * semua true (opt-out model).
  */
 export const NotifCategory = {
-  PAYMENT: "PAYMENT", // tagihan, reminder H3 & overdue, verifikasi, ditolak
-  ANNOUNCEMENT: "ANNOUNCEMENT", // broadcast pemilik
-  OPERATIONAL: "OPERATIONAL", // komplain, perawatan, pindah kamar
-  ACCOUNT: "ACCOUNT", // perubahan status akun, assignment
+  // ----- TENANT-side -----
+  TENANT_PAYMENT: "TENANT_PAYMENT",
+  TENANT_ANNOUNCEMENT: "TENANT_ANNOUNCEMENT",
+  TENANT_COMPLAINT: "TENANT_COMPLAINT",
+  TENANT_MAINTENANCE: "TENANT_MAINTENANCE",
+  TENANT_MOVE: "TENANT_MOVE",
+  TENANT_ACCOUNT: "TENANT_ACCOUNT",
+
+  // ----- OWNER-side -----
+  OWNER_TENANT_PENDING: "OWNER_TENANT_PENDING",
+  OWNER_PAYMENT: "OWNER_PAYMENT",
+  OWNER_COMPLAINT: "OWNER_COMPLAINT",
+  OWNER_MOVE: "OWNER_MOVE",
+  OWNER_MAINTENANCE: "OWNER_MAINTENANCE",
 } as const;
 export type NotifCategory =
   (typeof NotifCategory)[keyof typeof NotifCategory];
 
-/**
- * Perspective menentukan sudut pandang label & hint kategori notifikasi.
- * Struktur data (NotifPrefs JSON) sama untuk semua role — hanya UI teks
- * yang adaptif.
- *   - "TENANT": penghuni (menerima info dari pemilik).
- *   - "OWNER":  pemilik/admin (menerima aktivitas dari penghuni).
- */
-export type NotifPerspective = "TENANT" | "OWNER";
+export type NotifRole = "TENANT" | "OWNER";
 
-/**
- * Label & hint kategori — tenant-centric (default lama, dipertahankan
- * demi backward-compat kalau ada caller lain yang import langsung).
- */
+/** Kategori yang relevan untuk role tertentu — dipakai oleh UI form. */
+export const CATEGORIES_BY_ROLE: Record<NotifRole, NotifCategory[]> = {
+  TENANT: [
+    NotifCategory.TENANT_PAYMENT,
+    NotifCategory.TENANT_ANNOUNCEMENT,
+    NotifCategory.TENANT_COMPLAINT,
+    NotifCategory.TENANT_MAINTENANCE,
+    NotifCategory.TENANT_MOVE,
+    NotifCategory.TENANT_ACCOUNT,
+  ],
+  OWNER: [
+    NotifCategory.OWNER_TENANT_PENDING,
+    NotifCategory.OWNER_PAYMENT,
+    NotifCategory.OWNER_COMPLAINT,
+    NotifCategory.OWNER_MOVE,
+    NotifCategory.OWNER_MAINTENANCE,
+  ],
+};
+
 export const NOTIF_CATEGORY_LABEL: Record<NotifCategory, string> = {
-  PAYMENT: "Pembayaran & reminder",
-  ANNOUNCEMENT: "Pengumuman pemilik",
-  OPERATIONAL: "Komplain, perawatan, pindah kamar",
-  ACCOUNT: "Status akun & penempatan",
+  // TENANT
+  TENANT_PAYMENT: "Pembayaran & tagihan",
+  TENANT_ANNOUNCEMENT: "Pengumuman kos",
+  TENANT_COMPLAINT: "Update komplain Anda",
+  TENANT_MAINTENANCE: "Perawatan kamar & kos",
+  TENANT_MOVE: "Pindah kamar",
+  TENANT_ACCOUNT: "Akun & penempatan",
+  // OWNER
+  OWNER_TENANT_PENDING: "Pengajuan penghuni baru",
+  OWNER_PAYMENT: "Pembayaran masuk dari penghuni",
+  OWNER_COMPLAINT: "Komplain baru",
+  OWNER_MOVE: "Permintaan pindah kamar",
+  OWNER_MAINTENANCE: "Jadwal perawatan",
 };
 
 export const NOTIF_CATEGORY_HINT: Record<NotifCategory, string> = {
-  PAYMENT: "Tagihan jatuh tempo H-3, konfirmasi pembayaran lunas, ditolak.",
-  ANNOUNCEMENT: "Pemberitahuan dari pemilik (mati air, kerja bakti, dsb).",
-  OPERATIONAL:
-    "Status komplain, jadwal perawatan kamar, hasil pengajuan pindah.",
-  ACCOUNT: "Akun disetujui, ditolak, dan perubahan penempatan kamar.",
+  // TENANT
+  TENANT_PAYMENT:
+    "Reminder H-3, hasil verifikasi (lunas/ditolak), dan konfirmasi upload bukti.",
+  TENANT_ANNOUNCEMENT:
+    "Pemberitahuan dari pemilik (mati air, kerja bakti, aturan baru, dsb).",
+  TENANT_COMPLAINT: "Balasan pemilik atas komplain yang Anda kirim.",
+  TENANT_MAINTENANCE:
+    "Jadwal perawatan kamar Anda dan fasilitas kos, mulai/selesai perawatan.",
+  TENANT_MOVE:
+    "Hasil pengajuan pindah kamar Anda (disetujui/ditolak).",
+  TENANT_ACCOUNT:
+    "Akun disetujui/ditolak dan perubahan penempatan kamar (mis. tanggal mulai sewa).",
+  // OWNER
+  OWNER_TENANT_PENDING:
+    "Ada calon penghuni baru mendaftar & menunggu persetujuan Anda.",
+  OWNER_PAYMENT:
+    "Penghuni upload bukti bayar — waktunya Anda verifikasi.",
+  OWNER_COMPLAINT: "Komplain baru dari penghuni yang perlu ditindak lanjuti.",
+  OWNER_MOVE: "Penghuni mengajukan pindah kamar.",
+  OWNER_MAINTENANCE:
+    "Pengingat H-7/H-3/H-1 untuk jadwal perawatan yang Anda catat.",
 };
-
-/**
- * Owner-centric labels & hints. Kategori sama (data JSON kompatibel),
- * tapi frasa disesuaikan supaya masuk akal untuk pemilik yang menerima
- * event DARI penghuni, bukan sebaliknya.
- */
-const NOTIF_CATEGORY_LABEL_OWNER: Record<NotifCategory, string> = {
-  PAYMENT: "Pembayaran masuk dari penghuni",
-  ANNOUNCEMENT: "Konfirmasi pengumuman terkirim",
-  OPERATIONAL: "Aktivitas penghuni",
-  ACCOUNT: "Pengajuan penghuni baru",
-};
-
-const NOTIF_CATEGORY_HINT_OWNER: Record<NotifCategory, string> = {
-  PAYMENT:
-    "Penghuni upload bukti bayar (menunggu verifikasi Anda), atau pembayaran gateway masuk.",
-  ANNOUNCEMENT:
-    "Ringkasan setelah pengumuman Anda dikirim (jumlah penerima, status delivery).",
-  OPERATIONAL:
-    "Komplain baru dari penghuni, permintaan pindah kamar, dan update perawatan.",
-  ACCOUNT:
-    "Ada calon penghuni yang mendaftar & menunggu persetujuan Anda.",
-};
-
-export function categoryLabelFor(
-  cat: NotifCategory,
-  perspective: NotifPerspective
-): string {
-  return perspective === "OWNER"
-    ? NOTIF_CATEGORY_LABEL_OWNER[cat]
-    : NOTIF_CATEGORY_LABEL[cat];
-}
-
-export function categoryHintFor(
-  cat: NotifCategory,
-  perspective: NotifPerspective
-): string {
-  return perspective === "OWNER"
-    ? NOTIF_CATEGORY_HINT_OWNER[cat]
-    : NOTIF_CATEGORY_HINT[cat];
-}
 
 export type Channel = "push" | "email" | "wa";
 
@@ -95,17 +115,23 @@ export type NotifPrefs = {
   };
 };
 
+const ALL_CATEGORIES = Object.values(NotifCategory) as NotifCategory[];
+
+function allOn(): Record<NotifCategory, boolean> {
+  return ALL_CATEGORIES.reduce(
+    (acc, k) => {
+      acc[k] = true;
+      return acc;
+    },
+    {} as Record<NotifCategory, boolean>
+  );
+}
+
 export function defaultPrefs(): NotifPrefs {
-  const allOn: Record<NotifCategory, boolean> = {
-    PAYMENT: true,
-    ANNOUNCEMENT: true,
-    OPERATIONAL: true,
-    ACCOUNT: true,
-  };
   return {
-    push: { ...allOn },
-    email: { ...allOn },
-    wa: { ...allOn },
+    push: allOn(),
+    email: allOn(),
+    wa: allOn(),
     quietHours: { enabled: true, startHour: 22, endHour: 6 },
   };
 }
@@ -114,6 +140,30 @@ function isBool(v: unknown): v is boolean {
   return typeof v === "boolean";
 }
 
+/**
+ * Legacy mapping — kategori shared lama (PAYMENT/ANNOUNCEMENT/
+ * OPERATIONAL/ACCOUNT) ke kategori baru. Kalau JSON prefs pengguna
+ * masih pakai key lama, kita fan-out ke semua kategori baru yang
+ * setara. Kategori yang tidak relevan role user tetap disimpan tapi
+ * tidak akan pernah di-check di runtime — harmless.
+ */
+const LEGACY_KEY_TO_NEW: Record<string, NotifCategory[]> = {
+  PAYMENT: [NotifCategory.TENANT_PAYMENT, NotifCategory.OWNER_PAYMENT],
+  ANNOUNCEMENT: [NotifCategory.TENANT_ANNOUNCEMENT],
+  OPERATIONAL: [
+    NotifCategory.TENANT_COMPLAINT,
+    NotifCategory.TENANT_MAINTENANCE,
+    NotifCategory.TENANT_MOVE,
+    NotifCategory.OWNER_COMPLAINT,
+    NotifCategory.OWNER_MOVE,
+    NotifCategory.OWNER_MAINTENANCE,
+  ],
+  ACCOUNT: [
+    NotifCategory.TENANT_ACCOUNT,
+    NotifCategory.OWNER_TENANT_PENDING,
+  ],
+};
+
 function sanitizeChannel(
   raw: unknown,
   fallback: Record<NotifCategory, boolean>
@@ -121,8 +171,21 @@ function sanitizeChannel(
   const out = { ...fallback };
   if (raw && typeof raw === "object") {
     const r = raw as Record<string, unknown>;
-    for (const k of Object.keys(NotifCategory) as NotifCategory[]) {
+    // Key baru — dibaca langsung.
+    for (const k of ALL_CATEGORIES) {
       if (isBool(r[k])) out[k] = r[k] as boolean;
+    }
+    // Key legacy — fan-out. Kalau BOTH legacy dan baru ada, key baru
+    // menang (di-set duluan di atas).
+    for (const [legacyKey, newCats] of Object.entries(LEGACY_KEY_TO_NEW)) {
+      if (isBool(r[legacyKey])) {
+        const v = r[legacyKey] as boolean;
+        for (const nc of newCats) {
+          // Hanya set kalau key baru belum ada di JSON — hindari
+          // menimpa preferensi eksplisit.
+          if (!isBool(r[nc])) out[nc] = v;
+        }
+      }
     }
   }
   return out;
@@ -171,26 +234,48 @@ function clampHour(v: unknown, fallback: number): number {
 }
 
 /**
- * Kategorisasi `type` notifikasi → kategori user-facing. Default
- * OPERATIONAL kalau tidak dikenali (paling konservatif: kemungkinan
- * besar dia event operasional yang penghuni butuh tahu).
+ * Kategorisasi `type` notifikasi → kategori user-facing baru.
+ * Fungsi ini menentukan channel/quiet-hours mana yang berlaku
+ * saat notif dikirim.
  */
 export function categorize(type: string): NotifCategory {
-  if (type.startsWith("PAYMENT_") || type.startsWith("REMINDER_")) {
-    return NotifCategory.PAYMENT;
-  }
-  if (type === "ANNOUNCEMENT") return NotifCategory.ANNOUNCEMENT;
+  // ----- TENANT-side events -----
   if (
-    type.startsWith("COMPLAINT_") ||
-    type.startsWith("MAINT_") ||
-    type.startsWith("MOVE_")
+    type === "PAYMENT_VERIFIED" ||
+    type === "PAYMENT_AUTO_VERIFIED" ||
+    type === "PAYMENT_REJECTED" ||
+    type === "PAYMENT_SUBMITTED_SELF" ||
+    type.startsWith("REMINDER_")
   ) {
-    return NotifCategory.OPERATIONAL;
+    return NotifCategory.TENANT_PAYMENT;
   }
-  if (type.startsWith("TENANT_") || type.startsWith("TENANCY_")) {
-    return NotifCategory.ACCOUNT;
+  if (type === "ANNOUNCEMENT") return NotifCategory.TENANT_ANNOUNCEMENT;
+  if (type === "COMPLAINT_UPDATE") return NotifCategory.TENANT_COMPLAINT;
+  if (type.startsWith("MAINT_TENANT_")) {
+    return NotifCategory.TENANT_MAINTENANCE;
   }
-  return NotifCategory.OPERATIONAL;
+  if (type === "MOVE_APPROVED" || type === "MOVE_REJECTED") {
+    return NotifCategory.TENANT_MOVE;
+  }
+  if (
+    type === "TENANT_APPROVED_ASSIGNED" ||
+    type === "TENANT_REJECTED" ||
+    type === "TENANCY_ASSIGNED" ||
+    type === "TENANCY_START_UPDATED"
+  ) {
+    return NotifCategory.TENANT_ACCOUNT;
+  }
+
+  // ----- OWNER-side events -----
+  if (type === "PAYMENT_SUBMITTED") return NotifCategory.OWNER_PAYMENT;
+  if (type === "COMPLAINT_NEW") return NotifCategory.OWNER_COMPLAINT;
+  if (type === "MOVE_REQUEST") return NotifCategory.OWNER_MOVE;
+  if (type === "TENANT_PENDING") return NotifCategory.OWNER_TENANT_PENDING;
+  if (type.startsWith("MAINT_")) return NotifCategory.OWNER_MAINTENANCE;
+
+  // Fallback: operasional-tenant (paling konservatif — item tidak dikenal
+  // biasanya adalah update operasional yang penghuni butuh tahu).
+  return NotifCategory.TENANT_ACCOUNT;
 }
 
 /**
