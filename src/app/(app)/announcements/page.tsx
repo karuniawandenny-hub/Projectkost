@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { EmptyState, InboxIcon } from "@/components/EmptyState";
 import { AnnouncementForm } from "./AnnouncementForm";
+import { DeleteAnnouncementButton } from "./DeleteAnnouncementButton";
 import {
   formatDateID,
   statusBadgeClass,
@@ -75,8 +76,11 @@ async function OwnerView({ userId, role }: { userId: string; role: string }) {
             <div key={a.id} className="card">
               <div className="flex items-start justify-between gap-3">
                 <div className="font-semibold">{a.title}</div>
-                <div className="shrink-0 text-xs text-slate-500">
-                  {formatWhen(a.createdAt)}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div className="text-xs text-slate-500">
+                    {formatWhen(a.createdAt)}
+                  </div>
+                  <DeleteAnnouncementButton id={a.id} />
                 </div>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">

@@ -129,3 +129,70 @@ export async function createAnnouncement(
     success: `Pengumuman terkirim ke ${announcement.audienceCount} penghuni.`,
   };
 }
+
+export type DeleteAnnouncementState = { error?: string; success?: string };
+
+/**
+ * Hapus pengumuman yang sudah pernah dikirim.
+ *
+ * Otorisasi:
+ *  - OWNER: hanya bisa hapus pengumuman yang dia sendiri buat (authorId).
+ *  - ADMIN: bisa hapus pengumuman siapa saja.
+ *
+ * Efek samping penting: notifikasi in-app terkait (type="ANNOUNCEMENT")
+ * yang sudah dikirim ke penghuni TIDAK ikut terhapus. Alasan:
+ *   - Riwayat notifikasi user adalah "log lonceng" yang independen —
+ *     kalau penghuni sudah membaca notifikasi lalu owner menghapus,
+ *     entri di lonceng akan tetap ada sebagai bukti pernah dikirim.
+ *   - Notification.link akan mengarah ke /announcements yang sekarang
+ *     tidak lagi menampilkan pengumuman ini — perilaku benar (tidak
+ *     ada 404 karena link mengarah ke halaman list, bukan detail).
+ */
+export async function deleteAnnouncement(
+  _prev: DeleteAnnouncementState,
+  formData: FormData
+): Promise<DeleteAnnouncementState> {
+  const me = await requireOwnerOrAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "ID pengumuman tidak valid." };
+
+  // Scope hard-check: OWNER hanya bisa akses miliknya sendiri.
+  const where =
+    me.role === "ADMIN" ? { id } : { id, authorId: me.id };
+
+  const existing = await prisma.announcement.findFirst({
+    where,
+    select: {
+      id: true,
+      title: true,
+      kosId: true,
+      audienceCount: true,
+      authorId: true,
+    },
+  });
+  if (!existing) {
+    return {
+      error:
+        "Pengumuman tidak ditemukan atau Anda tidak punya izin untuk menghapusnya.",
+    };
+  }
+
+  await prisma.announcement.delete({ where: { id: existing.id } });
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "ANNOUNCEMENT.DELETE",
+    entityType: "Announcement",
+    entityId: existing.id,
+    metadata: {
+      title: existing.title,
+      kosId: existing.kosId,
+      audienceCount: existing.audienceCount,
+      originalAuthorId: existing.authorId,
+    },
+  });
+
+  revalidatePath("/announcements");
+  return { success: "Pengumuman berhasil dihapus." };
+}

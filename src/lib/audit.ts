@@ -23,6 +23,7 @@ export type AuditAction =
   | "MAINTENANCE.COMPLETE"
   // Pengumuman & broadcast
   | "ANNOUNCEMENT.SEND"
+  | "ANNOUNCEMENT.DELETE"
   // System
   | "BACKUP.RUN"
   | "BACKUP.FAIL";
@@ -93,6 +94,7 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "COMPLAINT.RESOLVE": "Selesaikan komplain",
   "MAINTENANCE.COMPLETE": "Selesaikan perawatan",
   "ANNOUNCEMENT.SEND": "Kirim pengumuman",
+  "ANNOUNCEMENT.DELETE": "Hapus pengumuman",
   "BACKUP.RUN": "Backup database sukses",
   "BACKUP.FAIL": "Backup database GAGAL",
 };
