@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
+import { logAudit } from "@/lib/audit";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -129,6 +130,111 @@ export async function updateRoom(
   });
   revalidatePath(`/kos/${room.kosId}`);
   return { success: true };
+}
+
+export type DeleteRoomState = { error?: string; success?: string };
+
+/**
+ * Hapus kamar milik pemilik kos.
+ *
+ * Aturan:
+ *  - Hanya OWNER dari kos yang bersangkutan (query filter di WHERE).
+ *  - Kamar dengan tenancy AKTIF di-block hard — pemilik harus akhiri
+ *    kontrak dulu.
+ *  - Kalau kamar punya tenancy historis (sudah berakhir) atau
+ *    maintenance, cascade delete akan menghapus rekaman itu SECARA
+ *    PERMANEN via foreign key cascade schema:
+ *      Tenancy → Payment (kuitansi, riwayat) → ReminderLog + GatewayTxn
+ *      Tenancy → Complaint (dan foto komplain di JSON)
+ *      Tenancy → RoomMoveRequest
+ *      Maintenance.roomId → SetNull (histori maintenance tersimpan
+ *        tapi tanpa referensi ke room)
+ *  - UI di sisi klien menampilkan warning eksplisit jumlah data yang
+ *    akan hilang sebelum confirm.
+ */
+export async function deleteRoom(
+  _prev: DeleteRoomState,
+  formData: FormData
+): Promise<DeleteRoomState> {
+  const user = await requireUser();
+  if (user.role !== "OWNER") return { error: "FORBIDDEN" };
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "ID kamar tidak valid." };
+
+  // Fetch dengan filter ownership hard di WHERE — ID manipulation
+  // tidak bisa bypass.
+  const room = await prisma.room.findFirst({
+    where: { id, kos: { ownerId: user.id } },
+    include: {
+      kos: { select: { id: true, name: true } },
+      _count: {
+        select: {
+          tenancies: true,
+          maintenances: true,
+        },
+      },
+    },
+  });
+  if (!room) {
+    return {
+      error:
+        "Kamar tidak ditemukan atau Anda tidak punya izin untuk menghapusnya.",
+    };
+  }
+
+  // Hard block: kamar sedang dihuni.
+  if (room.status === "OCCUPIED") {
+    return {
+      error:
+        "Kamar ini masih dihuni. Akhiri kontrak penghuni terlebih dahulu sebelum menghapus.",
+    };
+  }
+  const activeTenancyCount = await prisma.tenancy.count({
+    where: { roomId: id, status: "ACTIVE" },
+  });
+  if (activeTenancyCount > 0) {
+    return {
+      error:
+        "Kamar ini masih memiliki kontrak sewa aktif. Akhiri dulu di menu Penghuni.",
+    };
+  }
+
+  // Hitung rekaman historis untuk audit metadata (dan supaya UI bisa
+  // menampilkan angka sebelum confirm — meski di server ini sudah
+  // eksekusi delete).
+  const [historicalTenancyCount, paymentCount, complaintCount] =
+    await Promise.all([
+      prisma.tenancy.count({ where: { roomId: id } }),
+      prisma.payment.count({ where: { tenancy: { roomId: id } } }),
+      prisma.complaint.count({ where: { tenancy: { roomId: id } } }),
+    ]);
+
+  await prisma.room.delete({ where: { id } });
+
+  await logAudit({
+    actorId: user.id,
+    actorName: user.name,
+    action: "ROOM.DELETE",
+    entityType: "Room",
+    entityId: id,
+    metadata: {
+      roomName: room.name,
+      kosId: room.kos.id,
+      kosName: room.kos.name,
+      cascade: {
+        historicalTenancies: historicalTenancyCount,
+        paymentsPurged: paymentCount,
+        complaintsPurged: complaintCount,
+        maintenancesDetached: room._count.maintenances,
+      },
+    },
+  });
+
+  revalidatePath(`/kos/${room.kos.id}`);
+  return {
+    success: `Kamar ${room.name} berhasil dihapus.`,
+  };
 }
 
 export type AssignState = { error?: string; success?: string };

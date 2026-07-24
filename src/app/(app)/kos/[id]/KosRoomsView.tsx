@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AssignTenantForm } from "./AssignTenantForm";
 import { EditRoomForm } from "./EditRoomForm";
 import { CreateRoomForm } from "./CreateRoomForm";
+import { DeleteRoomButton } from "./DeleteRoomButton";
 import {
   formatDateID,
   statusBadgeClass,
@@ -39,6 +40,9 @@ type Room = {
   name: string;
   monthlyPrice: number;
   status: string;
+  /** Total tenancy (aktif + historis) — dipakai untuk warning saat
+   *  pemilik akan menghapus kamar. */
+  totalTenancies: number;
   tenancies: {
     id: string;
     tenant: { name: string; email: string };
@@ -388,6 +392,26 @@ function RoomDetailModal({
             </div>
           </div>
         )}
+
+        {/* Danger zone — hapus kamar. Terpisah di paling bawah,
+            dengan border merah kalem supaya jelas beda dari aksi lain. */}
+        <div className="mt-2 rounded-lg border border-red-200 bg-red-50/40 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-700">
+            Zona Berbahaya
+          </div>
+          {occupied ? (
+            <div className="text-xs text-slate-600">
+              Kamar sedang dihuni — akhiri kontrak penghuni dulu di menu
+              Penghuni sebelum bisa hapus.
+            </div>
+          ) : (
+            <DeleteRoomButton
+              roomId={room.id}
+              roomName={room.name}
+              historicalTenancies={room.totalTenancies}
+            />
+          )}
+        </div>
       </div>
     </Modal>
   );

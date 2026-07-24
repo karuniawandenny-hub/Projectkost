@@ -66,6 +66,9 @@ export default async function KosDetailPage({
               where: { status: "ACTIVE" },
               include: { tenant: { select: { name: true, email: true } } },
             },
+            // Total tenancy (aktif + historis) — dipakai untuk warning
+            // saat pemilik mau menghapus kamar.
+            _count: { select: { tenancies: true } },
           },
         },
       },
@@ -133,6 +136,7 @@ export default async function KosDetailPage({
     name: r.name,
     monthlyPrice: r.monthlyPrice,
     status: r.status,
+    totalTenancies: r._count.tenancies,
     tenancies: r.tenancies.map((t) => ({
       id: t.id,
       tenant: { name: t.tenant.name, email: t.tenant.email },
