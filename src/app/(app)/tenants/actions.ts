@@ -340,6 +340,28 @@ export async function deleteTenant(
     .filter((t) => t.room.status === "OCCUPIED")
     .map((t) => t.room.id);
 
+  // === Step 2.5: hitung metadata cascade untuk audit trail ===
+  // Total record yang akan hilang via FK Cascade Prisma schema:
+  //   User → PasswordResetToken, Notification, PushSubscription, WaChatMessage
+  //   User → Tenancy → Payment → ReminderLog + GatewayTransaction
+  //   User → Tenancy → Complaint
+  //   User → Tenancy → RoomMoveRequest
+  //   User → AuditLog.actorId = SetNull (preserved, actor jadi null)
+  // Hitung sebelum delete supaya angka valid untuk audit.
+  const [
+    paymentCount,
+    complaintCount,
+    moveRequestCount,
+    notificationCount,
+  ] = await Promise.all([
+    prisma.payment.count({ where: { tenancy: { tenantId: target.id } } }),
+    prisma.complaint.count({ where: { tenancy: { tenantId: target.id } } }),
+    prisma.roomMoveRequest.count({
+      where: { tenancy: { tenantId: target.id } },
+    }),
+    prisma.notification.count({ where: { userId: target.id } }),
+  ]);
+
   // === Step 3: DB transaction — free rooms + delete user (cascade) ===
   try {
     await prisma.$transaction([
@@ -363,11 +385,39 @@ export async function deleteTenant(
   // swallowing error per file, jadi aman dipanggil di sini.
   void deleteUploadByUrl; // mark as used (re-export guard)
 
+  // === Step 5: audit log ===
+  // Rekam siapa hapus siapa dengan metadata cascade lengkap — supaya
+  // kalau ada dispute/inquiry di kemudian hari (mis. tenant klaim
+  // "kok data saya hilang"), owner bisa buktikan aksi tercatat.
+  // AuditLog entries dari tenant sendiri TIDAK ikut hilang karena
+  // schema AuditLog.actorId punya onDelete: SetNull (bukan Cascade)
+  // — actorId jadi null tapi entri log tetap ada.
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.DELETE",
+    entityType: "User",
+    entityId: target.id,
+    metadata: {
+      tenantName: target.name,
+      email: target.email,
+      cascade: {
+        tenancies: target.tenancies.length,
+        payments: paymentCount,
+        complaints: complaintCount,
+        moveRequests: moveRequestCount,
+        notifications: notificationCount,
+        filesDeleted: fileUrls.length,
+        roomsFreed: roomsToFree.length,
+      },
+    },
+  });
+
   revalidatePath("/tenants");
   revalidatePath("/kos");
   revalidatePath("/admin/users");
   return {
-    success: `Penghuni "${target.name}" beserta ${target.tenancies.length} tenancy & ${fileUrls.length} file terkait telah dihapus permanen.`,
+    success: `Penghuni "${target.name}" beserta ${target.tenancies.length} tenancy, ${paymentCount} pembayaran, ${complaintCount} komplain & ${fileUrls.length} file terkait telah dihapus permanen.`,
   };
 }
 
