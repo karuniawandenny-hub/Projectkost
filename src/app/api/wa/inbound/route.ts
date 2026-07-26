@@ -1,3 +1,4 @@
+import { canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
@@ -387,7 +388,7 @@ async function handleIncoming(
     role:
       user.role === "ADMIN"
         ? "ADMIN"
-        : user.role === "OWNER"
+        : canManageKos(user)
           ? "OWNER"
           : "TENANT",
   };

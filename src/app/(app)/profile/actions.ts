@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
 import {
   CATEGORIES_BY_ROLE,
@@ -61,7 +61,7 @@ export async function updateNotifPrefs(
   formData: FormData
 ): Promise<UpdatePrefsState> {
   const me = await requireUser();
-  const role: NotifRole = me.role === "OWNER" ? "OWNER" : "TENANT";
+  const role: NotifRole = canManageKos(me) ? "OWNER" : "TENANT";
   const relevantCategories = CATEGORIES_BY_ROLE[role];
 
   // Mulai dari prefs eksisting (setelah legacy migration di parsePrefs).

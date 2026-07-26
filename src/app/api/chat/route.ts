@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import {
   isChatConfigured,
   runChatTurnStreaming,
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     role:
       user.role === "ADMIN"
         ? "ADMIN"
-        : user.role === "OWNER"
+        : canManageKos(user)
           ? "OWNER"
           : "TENANT",
   };

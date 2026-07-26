@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { saveUploadedFile, deleteUploadsByUrls } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendEmailGeneric } from "@/lib/reminders";
@@ -161,7 +161,7 @@ export type MaintActionState = { error?: string; success?: string };
 
 async function requireOwnerOrAdmin() {
   const user = await requireUser();
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     throw new Error("FORBIDDEN");
   }
   return user;

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import {
   formatDateID,
   formatRupiah,
@@ -49,8 +49,8 @@ export default async function MaintenancePage({
   //    TIDAK ditampilkan di sini — sudah dipindah ke halaman Pengumuman
   //    supaya menu Perawatan tenant fokus & personal.
   const where: Record<string, unknown> = {};
-  if (user.role === "OWNER") {
-    where.kos = { ownerId: user.id };
+  if (canManageKos(user)) {
+    where.kos = { ownerId: getEffectiveOwnerId(user) };
   } else if (isTenant) {
     const activeTenancies = await prisma.tenancy.findMany({
       where: { tenantId: user.id, status: "ACTIVE" },
@@ -81,7 +81,7 @@ export default async function MaintenancePage({
     isTenant
       ? Promise.resolve([])
       : prisma.kos.findMany({
-          where: user.role === "OWNER" ? { ownerId: user.id } : {},
+          where: canManageKos(user) ? { ownerId: getEffectiveOwnerId(user) } : {},
           select: { id: true, name: true },
           orderBy: { name: "asc" },
         }),

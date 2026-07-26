@@ -17,6 +17,10 @@ export type AuditAction =
   | "TENANCY.END"
   // Kamar
   | "ROOM.DELETE"
+  // Pengelola (MANAGER — anggota tim pemilik)
+  | "MANAGER.INVITE"
+  | "MANAGER.ACCEPT"
+  | "MANAGER.REVOKE"
   // Expense
   | "EXPENSE.CREATE"
   | "EXPENSE.DELETE"
@@ -92,6 +96,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "TENANCY.CREATE": "Tambah penghuni ke kamar",
   "TENANCY.END": "Akhiri kontrak penghuni",
   "ROOM.DELETE": "Hapus kamar",
+  "MANAGER.INVITE": "Undang pengelola",
+  "MANAGER.ACCEPT": "Terima undangan pengelola",
+  "MANAGER.REVOKE": "Cabut akses pengelola",
   "EXPENSE.CREATE": "Catat pengeluaran",
   "EXPENSE.DELETE": "Hapus pengeluaran",
   "COMPLAINT.RESOLVE": "Selesaikan komplain",

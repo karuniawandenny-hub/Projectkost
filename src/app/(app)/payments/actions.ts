@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendPaymentVerifiedConfirmation } from "@/lib/payment-confirmation";
@@ -127,14 +127,14 @@ const MONTHS_ID = [
 
 export async function verifyPayment(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "OWNER") throw new Error("FORBIDDEN");
+  if (!canManageKos(user)) throw new Error("FORBIDDEN");
 
   const paymentId = String(formData.get("paymentId") ?? "");
   const action = String(formData.get("action") ?? "");
   const reviewNote = String(formData.get("reviewNote") ?? "").trim() || null;
 
   const payment = await prisma.payment.findFirst({
-    where: { id: paymentId, tenancy: { room: { kos: { ownerId: user.id } } } },
+    where: { id: paymentId, tenancy: { room: { kos: { ownerId: getEffectiveOwnerId(user) } } } },
     include: { tenancy: { include: { tenant: true, room: true } } },
   });
   if (!payment) throw new Error("NOT_FOUND");
@@ -200,7 +200,7 @@ export async function verifyPayment(formData: FormData) {
  */
 export async function verifyPaymentManual(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "OWNER") throw new Error("FORBIDDEN");
+  if (!canManageKos(user)) throw new Error("FORBIDDEN");
 
   const paymentId = String(formData.get("paymentId") ?? "");
   const note = String(formData.get("note") ?? "").trim();
@@ -217,7 +217,7 @@ export async function verifyPaymentManual(formData: FormData) {
     where: {
       id: paymentId,
       status: "DUE",
-      tenancy: { room: { kos: { ownerId: user.id } } },
+      tenancy: { room: { kos: { ownerId: getEffectiveOwnerId(user) } } },
     },
     include: { tenancy: { include: { tenant: true, room: true } } },
   });

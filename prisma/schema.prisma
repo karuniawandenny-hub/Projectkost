@@ -18,7 +18,7 @@ model User {
   passwordHash    String
   name            String
   phone           String?
-  role            String    // "OWNER" | "TENANT" | "ADMIN"
+  role            String    // "OWNER" | "TENANT" | "ADMIN" | "MANAGER"
   status          String    @default("ACTIVE") // "ACTIVE" | "PENDING" | "SUSPENDED"
   ktpPhotoUrl     String?
   selfiePhotoUrl  String?
@@ -26,6 +26,13 @@ model User {
   // Preferensi notifikasi (JSON). Null = pakai default (semua on,
   // jam tenang aktif 22-06). Shape didefinisikan di src/lib/notif-prefs.ts.
   notifPrefs      String?
+  // Untuk role MANAGER (pengelola tim): pointer ke OWNER pemiliknya.
+  // MANAGER berbagi akses ke seluruh kos milik OWNER ini, tapi audit
+  // trail tetap tercatat atas nama MANAGER sendiri. Cascade delete:
+  // kalau OWNER dihapus, semua MANAGER dibawahnya juga terhapus.
+  managedByOwnerId String?
+  managedBy       User?    @relation("ManagedManagers", fields: [managedByOwnerId], references: [id], onDelete: Cascade)
+  manages         User[]   @relation("ManagedManagers")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -38,6 +45,28 @@ model User {
   expensesCreated   Expense[]      @relation("ExpenseCreator")
   auditEntries      AuditLog[]
   waChatMessages    WaChatMessage[]
+  managerInvites    ManagerInvite[] @relation("ManagerInvitesByOwner")
+
+  @@index([managedByOwnerId])
+}
+
+/// Token untuk owner mengundang pengelola (MANAGER) via email.
+/// Owner klik "Undang pengelola" → sistem create token → kirim email
+/// dengan link /invite/[token]. Calon pengelola klik → set nama +
+/// password → akun MANAGER dibuat dengan managedByOwnerId=owner.id.
+model ManagerInvite {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation("ManagerInvitesByOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  email       String
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId])
+  @@index([email])
+  @@index([expiresAt])
 }
 
 model PasswordResetToken {

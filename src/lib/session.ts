@@ -47,7 +47,7 @@ export async function readSession(): Promise<SessionPayload | null> {
     if (
       typeof payload.userId === "string" &&
       typeof payload.role === "string" &&
-      ["OWNER", "TENANT", "ADMIN"].includes(payload.role)
+      ["OWNER", "TENANT", "ADMIN", "MANAGER"].includes(payload.role)
     ) {
       return { userId: payload.userId, role: payload.role as Role };
     }
@@ -67,4 +67,40 @@ export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) throw new Error("UNAUTHORIZED");
   return user;
+}
+
+/**
+ * Type minimal untuk helper role/scope — kompatibel dengan hasil
+ * getCurrentUser() (User dari Prisma) dan payload session ringan.
+ */
+type UserWithRoleAndOwner = {
+  id: string;
+  role: string;
+  managedByOwnerId?: string | null;
+};
+
+/**
+ * Apakah user boleh kelola kos? OWNER punya kos-nya sendiri; MANAGER
+ * (pengelola tim) diundang OWNER, punya akses setara ke seluruh kos
+ * milik OWNER-nya. Dua-duanya boleh manage.
+ */
+export function canManageKos(user: UserWithRoleAndOwner): boolean {
+  return user.role === "OWNER" || user.role === "MANAGER";
+}
+
+/**
+ * Owner ID efektif untuk scoping query. OWNER → id sendiri;
+ * MANAGER → id owner yang mengundangnya. Semua query yang biasanya
+ * `where: { ownerId: user.id }` seharusnya pakai fungsi ini supaya
+ * MANAGER bisa akses data yang sama seperti OWNER-nya.
+ *
+ * Kalau MANAGER tidak punya managedByOwnerId (impossible dalam kondisi
+ * normal — schema mengharuskan), fallback ke user.id sendiri (yang
+ * akan hasilkan query kosong — safe default, bukan cross-tenant leak).
+ */
+export function getEffectiveOwnerId(user: UserWithRoleAndOwner): string {
+  if (user.role === "MANAGER" && user.managedByOwnerId) {
+    return user.managedByOwnerId;
+  }
+  return user.id;
 }

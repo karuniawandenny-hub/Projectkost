@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
 import { PushToggle } from "@/components/PushToggle";
 import { PhoneEditForm } from "./PhoneEditForm";
@@ -32,7 +32,7 @@ export default async function ProfilePage() {
             <div className="text-lg font-semibold">{user.name}</div>
             <div className="text-sm text-slate-600">{user.email}</div>
             <div className="text-xs text-slate-500 mt-1">
-              {user.role === "OWNER" ? "Pemilik kos" : "Penghuni"}
+              {canManageKos(user) ? "Pemilik kos" : "Penghuni"}
             </div>
           </div>
         </div>
@@ -62,13 +62,13 @@ export default async function ProfilePage() {
         <div className="card">
           <h2 className="text-lg font-semibold">Preferensi notifikasi</h2>
           <p className="mt-1 mb-3 text-sm text-slate-600">
-            {user.role === "OWNER"
+            {canManageKos(user)
               ? "Pilih jenis notifikasi aktivitas penghuni yang mau Anda terima lewat HP, email, atau WhatsApp. Atur jam tenang agar tidak terganggu malam hari."
               : "Pilih jenis notifikasi apa yang dikirim lewat HP, email, atau WhatsApp. Atur jam tenang agar tidak terganggu malam hari."}
           </p>
           <NotifPrefsForm
             initialPrefs={notifPrefs}
-            role={user.role === "OWNER" ? "OWNER" : "TENANT"}
+            role={canManageKos(user) ? "OWNER" : "TENANT"}
           />
         </div>
       )}

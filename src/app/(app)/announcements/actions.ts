@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendEmailGeneric } from "@/lib/reminders";
 import { logAudit } from "@/lib/audit";
@@ -11,7 +11,7 @@ export type AnnouncementState = { error?: string; success?: string };
 
 async function requireOwnerOrAdmin() {
   const user = await requireUser();
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     throw new Error("FORBIDDEN");
   }
   return user;
@@ -43,9 +43,9 @@ export async function createAnnouncement(
   if (body.length < 5) return { error: "Isi pengumuman minimal 5 karakter." };
 
   // Validasi kepemilikan kos kalau owner memilih kos spesifik.
-  if (kosId && me.role === "OWNER") {
+  if (kosId && canManageKos(me)) {
     const owns = await prisma.kos.findFirst({
-      where: { id: kosId, ownerId: me.id },
+      where: { id: kosId, ownerId: getEffectiveOwnerId(me) },
       select: { id: true },
     });
     if (!owns) return { error: "Anda tidak punya akses ke kos tersebut." };
@@ -55,8 +55,8 @@ export async function createAnnouncement(
   const tenancyWhere: Record<string, unknown> = { status: "ACTIVE" };
   if (kosId) {
     tenancyWhere.room = { kosId };
-  } else if (me.role === "OWNER") {
-    tenancyWhere.room = { kos: { ownerId: me.id } };
+  } else if (canManageKos(me)) {
+    tenancyWhere.room = { kos: { ownerId: getEffectiveOwnerId(me) } };
   }
   // ADMIN + tanpa kosId → semua kos sistem (tenancyWhere tanpa filter kos).
 

@@ -4,6 +4,7 @@ import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { NotifBell } from "./NotifBell";
 import { UserMenu } from "./UserMenu";
+import { canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { MobileNavMenu } from "./MobileNavMenu";
 import { DesktopNavLinks } from "./NavLinks";
 import { ChatBubble } from "./ChatBubble";
@@ -17,7 +18,10 @@ type Props = {
 type NavItem = { href: string; label: string; badge?: number };
 
 export default async function Shell({ user, children }: Props) {
-  const isOwner = user.role === "OWNER";
+  // "Owner-like" = pemilik OR pengelola (MANAGER) yang mengelola atas
+  // nama pemilik. Semua tampilan navigasi dan aksi owner disamakan.
+  const isOwner = canManageKos(user);
+  const effectiveOwnerId = getEffectiveOwnerId(user);
 
   const [unread, pendingTenants, pendingMoveOwner] = await Promise.all([
     prisma.notification.count({ where: { userId: user.id, read: false } }),
@@ -26,7 +30,10 @@ export default async function Shell({ user, children }: Props) {
       : Promise.resolve(0),
     isOwner
       ? prisma.roomMoveRequest.count({
-          where: { status: "PENDING", toRoom: { kos: { ownerId: user.id } } },
+          where: {
+            status: "PENDING",
+            toRoom: { kos: { ownerId: effectiveOwnerId } },
+          },
         })
       : Promise.resolve(0),
   ]);
@@ -50,6 +57,10 @@ export default async function Shell({ user, children }: Props) {
         { href: "/maintenance", label: "Perawatan" },
         { href: "/announcements", label: "Pengumuman" },
         { href: "/reports", label: "Laporan" },
+        // OWNER-only: manage anggota tim (MANAGER tidak boleh invite lain)
+        ...(user.role === "OWNER"
+          ? [{ href: "/managers", label: "Anggota Tim" }]
+          : []),
       ]
     : [
         { href: "/dashboard", label: "Dashboard" },
@@ -99,7 +110,13 @@ export default async function Shell({ user, children }: Props) {
               <UserMenu
                 label={user.name.split(" ")[0]}
                 summaryClassName="block max-w-[110px] truncate rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700 sm:max-w-none"
-                subtitle={`Masuk sebagai ${isOwner ? "Pemilik" : "Penghuni"}`}
+                subtitle={`Masuk sebagai ${
+                  user.role === "MANAGER"
+                    ? "Pengelola"
+                    : isOwner
+                      ? "Pemilik"
+                      : "Penghuni"
+                }`}
                 items={[
                   { type: "link", href: "/profile", label: "Profil saya" },
                   {

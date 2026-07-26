@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { EditKosForm } from "./EditKosForm";
 import { KosRoomsView } from "./KosRoomsView";
 import {
@@ -53,11 +53,11 @@ export default async function KosDetailPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "OWNER") redirect("/dashboard");
+  if (!canManageKos(user)) redirect("/dashboard");
 
   const [kos, availableTenants, maintenances] = await Promise.all([
     prisma.kos.findFirst({
-      where: { id: params.id, ownerId: user.id },
+      where: { id: params.id, ownerId: getEffectiveOwnerId(user) },
       include: {
         rooms: {
           orderBy: { createdAt: "asc" },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { MissingPhoneBanner } from "../MissingPhoneBanner";
 import { InfoKosCarousel, type InfoItem } from "./InfoKosCarousel";
 import {
@@ -65,7 +65,7 @@ export default async function DashboardPage() {
     console.error("ensureBillsForUser error:", e);
   }
 
-  if (user.role === "OWNER") {
+  if (canManageKos(user)) {
     return <OwnerDashboard ownerId={user.id} name={user.name} phone={user.phone} />;
   }
   return <TenantDashboard userId={user.id} name={user.name} phone={user.phone} />;

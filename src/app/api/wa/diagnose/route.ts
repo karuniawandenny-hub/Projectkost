@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { toWhatsAppFormat } from "@/lib/phone";
 import { providerStatus } from "@/lib/ai-chat";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (user.role !== "OWNER" && user.role !== "ADMIN")) {
+  if (!user || (!canManageKos(user) && user.role !== "ADMIN")) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

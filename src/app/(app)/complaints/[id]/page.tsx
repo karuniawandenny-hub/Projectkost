@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { galleryViewerUrl } from "@/lib/viewer";
 import { removeResolutionPhoto } from "../actions";
 import { OwnerReplyForm } from "./OwnerReplyForm";
@@ -33,7 +33,7 @@ export default async function ComplaintDetailPage({
   });
   if (!c) notFound();
 
-  const isOwner = user.role === "OWNER" && c.tenancy.room.kos.ownerId === user.id;
+  const isOwner = canManageKos(user) && c.tenancy.room.kos.ownerId === user.id;
   const isTenant = user.role === "TENANT" && c.tenancy.tenantId === user.id;
   if (!isOwner && !isTenant) redirect("/complaints");
 

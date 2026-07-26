@@ -1,18 +1,18 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { NewMaintenanceForm } from "./NewMaintenanceForm";
 
 export default async function NewMaintenancePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     redirect("/dashboard");
   }
 
   const kosWithRooms = await prisma.kos.findMany({
-    where: user.role === "OWNER" ? { ownerId: user.id } : {},
+    where: canManageKos(user) ? { ownerId: getEffectiveOwnerId(user) } : {},
     include: {
       rooms: {
         select: { id: true, name: true },

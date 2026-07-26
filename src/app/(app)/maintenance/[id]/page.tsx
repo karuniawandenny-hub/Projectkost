@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import {
   formatDateID,
   formatRupiah,
@@ -50,7 +50,7 @@ export default async function MaintenanceDetailPage({
   //         AC fasilitas kos"): akses kalau penghuni sedang sewa
   //         aktif kamar mana pun di kos itu.
   //    Read-only — semua tombol aksi di-hide di bawah.
-  const isOwnerOfKos = user.role === "OWNER" && m.kos.ownerId === user.id;
+  const isOwnerOfKos = canManageKos(user) && m.kos.ownerId === user.id;
   const isAdmin = user.role === "ADMIN";
   let isAffectedTenant = false;
   if (user.role === "TENANT") {

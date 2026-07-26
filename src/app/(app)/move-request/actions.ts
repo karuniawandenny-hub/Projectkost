@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { notify } from "@/lib/notify";
 
 export type MoveRequestState = { error?: string; success?: string };
@@ -117,7 +117,7 @@ export async function cancelMoveRequest(formData: FormData) {
  */
 export async function approveMoveRequest(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     throw new Error("FORBIDDEN");
   }
   const requestId = String(formData.get("requestId") ?? "");
@@ -135,7 +135,7 @@ export async function approveMoveRequest(formData: FormData) {
   if (req.status !== "PENDING") throw new Error("ALREADY_DECIDED");
 
   // OWNER hanya boleh approve di kos miliknya.
-  if (user.role === "OWNER" && req.toRoom.kos.ownerId !== user.id) {
+  if (canManageKos(user) && req.toRoom.kos.ownerId !== user.id) {
     throw new Error("FORBIDDEN");
   }
 
@@ -209,7 +209,7 @@ export async function approveMoveRequest(formData: FormData) {
  */
 export async function rejectMoveRequest(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     throw new Error("FORBIDDEN");
   }
   const requestId = String(formData.get("requestId") ?? "");
@@ -225,7 +225,7 @@ export async function rejectMoveRequest(formData: FormData) {
   });
   if (!req) throw new Error("NOT_FOUND");
   if (req.status !== "PENDING") throw new Error("ALREADY_DECIDED");
-  if (user.role === "OWNER" && req.toRoom.kos.ownerId !== user.id) {
+  if (canManageKos(user) && req.toRoom.kos.ownerId !== user.id) {
     throw new Error("FORBIDDEN");
   }
 

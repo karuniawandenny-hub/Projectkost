@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
 import { OwnerPaymentsView, type PaymentItem } from "./OwnerPaymentsView";
 
@@ -150,7 +150,7 @@ export default async function PaymentsPage({
   const month = clampMonth(Number(searchParams?.month)) ?? now.getMonth() + 1;
   const year = clampYear(Number(searchParams?.year)) ?? now.getFullYear();
 
-  const ownerScope = { tenancy: { room: { kos: { ownerId: user.id } } } };
+  const ownerScope = { tenancy: { room: { kos: { ownerId: getEffectiveOwnerId(user) } } } };
   const [payments, historyPeriods] = await Promise.all([
     prisma.payment.findMany({
       where: {

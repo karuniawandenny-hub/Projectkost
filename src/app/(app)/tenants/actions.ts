@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
@@ -21,7 +21,7 @@ export type ApproveTenantState = { error?: string; success?: string };
 
 async function requireOwnerOrAdmin() {
   const user = await requireUser();
-  if (user.role !== "OWNER" && user.role !== "ADMIN") {
+  if (!canManageKos(user) && user.role !== "ADMIN") {
     throw new Error("FORBIDDEN");
   }
   return user;
@@ -67,8 +67,8 @@ export async function approveAndAssignTenant(
   // - ADMIN boleh assign ke kamar manapun.
   const room = await prisma.room.findFirst({
     where:
-      me.role === "OWNER"
-        ? { id: roomId, kos: { ownerId: me.id } }
+      canManageKos(me)
+        ? { id: roomId, kos: { ownerId: getEffectiveOwnerId(me) } }
         : { id: roomId },
     include: { kos: { select: { name: true, ownerId: true } } },
   });
@@ -211,7 +211,7 @@ export async function updateTenancyStartDate(
   if (!tenancy) return { error: "Tenancy tidak ditemukan." };
 
   // OWNER hanya boleh edit tenancy di kos miliknya.
-  if (me.role === "OWNER" && tenancy.room.kos.ownerId !== me.id) {
+  if (canManageKos(me) && tenancy.room.kos.ownerId !== me.id) {
     return { error: "Anda tidak punya akses untuk mengubah penghuni ini." };
   }
 
@@ -300,7 +300,7 @@ export async function deleteTenant(
   }
 
   // Scope check untuk OWNER: tenant harus pernah tinggal di kos miliknya.
-  if (me.role === "OWNER") {
+  if (canManageKos(me)) {
     const inMyKos = target.tenancies.some(
       (t) => t.room.kos.ownerId === me.id
     );

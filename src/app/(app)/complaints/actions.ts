@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { saveUploadedFile } from "@/lib/upload";
 import { notify } from "@/lib/notify";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
@@ -95,7 +95,7 @@ export async function replyComplaint(
     include: { tenancy: { include: { tenant: true, room: { include: { kos: true } } } } },
   });
   if (!complaint) return { error: "Komplain tidak ditemukan." };
-  if (user.role !== "OWNER" || complaint.tenancy.room.kos.ownerId !== user.id) {
+  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== user.id) {
     return { error: "Anda tidak punya akses untuk membalas komplain ini." };
   }
 
@@ -248,7 +248,7 @@ export async function removeResolutionPhoto(formData: FormData) {
     include: { tenancy: { include: { room: { include: { kos: true } } } } },
   });
   if (!complaint) return;
-  if (user.role !== "OWNER" || complaint.tenancy.room.kos.ownerId !== user.id) {
+  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== user.id) {
     return;
   }
 

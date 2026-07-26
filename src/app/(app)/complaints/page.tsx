@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { EmptyState, ChatIcon } from "@/components/EmptyState";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import {
   OwnerComplaintsView,
   type ComplaintItem,
@@ -28,9 +28,9 @@ export default async function ComplaintsPage() {
   if (!user) redirect("/login");
 
   // ============ OWNER view (grouped + search + filter) ============
-  if (user.role === "OWNER") {
+  if (canManageKos(user)) {
     const rows = await prisma.complaint.findMany({
-      where: { tenancy: { room: { kos: { ownerId: user.id } } } },
+      where: { tenancy: { room: { kos: { ownerId: getEffectiveOwnerId(user) } } } },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: OWNER_TAKE_CAP,
       include: {

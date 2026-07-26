@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { EmptyState, InboxIcon } from "@/components/EmptyState";
 import { AnnouncementForm } from "./AnnouncementForm";
 import { DeleteAnnouncementButton } from "./DeleteAnnouncementButton";
@@ -26,22 +26,44 @@ export default async function AnnouncementsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  if (user.role === "OWNER" || user.role === "ADMIN") {
-    return <OwnerView userId={user.id} role={user.role} />;
+  if (canManageKos(user) || user.role === "ADMIN") {
+    return (
+      <OwnerView
+        effectiveOwnerId={getEffectiveOwnerId(user)}
+        isAdmin={user.role === "ADMIN"}
+      />
+    );
   }
   return <TenantView userId={user.id} />;
 }
 
 /* ============================ OWNER / ADMIN ============================ */
-async function OwnerView({ userId, role }: { userId: string; role: string }) {
+async function OwnerView({
+  effectiveOwnerId,
+  isAdmin,
+}: {
+  effectiveOwnerId: string;
+  isAdmin: boolean;
+}) {
   const [kosList, history] = await Promise.all([
     prisma.kos.findMany({
-      where: role === "OWNER" ? { ownerId: userId } : {},
+      where: isAdmin ? {} : { ownerId: effectiveOwnerId },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.announcement.findMany({
-      where: role === "OWNER" ? { authorId: userId } : {},
+      where: isAdmin
+        ? {}
+        : {
+            // Riwayat pengumuman untuk pemilik: yang dia buat sendiri
+            // ATAU yang dibuat oleh pengelola (MANAGER) atas nama-nya.
+            author: {
+              OR: [
+                { id: effectiveOwnerId },
+                { managedByOwnerId: effectiveOwnerId },
+              ],
+            },
+          },
       include: { kos: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
       take: 50,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import {
   approveMoveRequest,
   rejectMoveRequest,
@@ -15,11 +15,11 @@ import {
 export default async function TenantsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.role !== "OWNER") redirect("/dashboard");
+  if (!canManageKos(user)) redirect("/dashboard");
 
   const [tenancies, pendingTenants, kosWithRooms, moveRequests] = await Promise.all([
     prisma.tenancy.findMany({
-      where: { status: "ACTIVE", room: { kos: { ownerId: user.id } } },
+      where: { status: "ACTIVE", room: { kos: { ownerId: getEffectiveOwnerId(user) } } },
       include: {
         tenant: true,
         room: { include: { kos: true } },
@@ -31,7 +31,7 @@ export default async function TenantsPage() {
       orderBy: { createdAt: "desc" },
     }),
     prisma.kos.findMany({
-      where: { ownerId: user.id },
+      where: { ownerId: getEffectiveOwnerId(user) },
       orderBy: { name: "asc" },
       include: {
         rooms: {
@@ -44,7 +44,7 @@ export default async function TenantsPage() {
     prisma.roomMoveRequest.findMany({
       where: {
         status: "PENDING",
-        toRoom: { kos: { ownerId: user.id } },
+        toRoom: { kos: { ownerId: getEffectiveOwnerId(user) } },
       },
       orderBy: { createdAt: "desc" },
       include: {

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
 import { logAudit } from "@/lib/audit";
@@ -23,7 +23,7 @@ export async function createKos(
   formData: FormData
 ): Promise<KosState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa menambah kos." };
+  if (!canManageKos(user)) return { error: "Hanya pemilik yang bisa menambah kos." };
 
   const name = String(formData.get("name") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
@@ -33,7 +33,7 @@ export async function createKos(
   if (address.length < 5) return { error: "Alamat tidak valid." };
 
   await prisma.kos.create({
-    data: { ownerId: user.id, name, address, description },
+    data: { ownerId: getEffectiveOwnerId(user), name, address, description },
   });
   revalidatePath("/kos");
   redirect("/kos");
@@ -46,7 +46,7 @@ export async function updateKos(
   formData: FormData
 ): Promise<UpdateKosState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa mengubah kos." };
+  if (!canManageKos(user)) return { error: "Hanya pemilik yang bisa mengubah kos." };
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -58,7 +58,7 @@ export async function updateKos(
   if (address.length < 5) return { error: "Alamat tidak valid." };
 
   const kos = await prisma.kos.findFirst({
-    where: { id, ownerId: user.id },
+    where: { id, ownerId: getEffectiveOwnerId(user) },
     select: { id: true },
   });
   if (!kos) return { error: "Kos tidak ditemukan." };
@@ -79,14 +79,14 @@ export async function createRoom(
   formData: FormData
 ): Promise<RoomState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa menambah kamar." };
+  if (!canManageKos(user)) return { error: "Hanya pemilik yang bisa menambah kamar." };
 
   const kosId = String(formData.get("kosId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const priceRaw = String(formData.get("monthlyPrice") ?? "");
   const monthlyPrice = parseInt(priceRaw.replace(/\D/g, ""), 10);
 
-  const kos = await prisma.kos.findFirst({ where: { id: kosId, ownerId: user.id } });
+  const kos = await prisma.kos.findFirst({ where: { id: kosId, ownerId: getEffectiveOwnerId(user) } });
   if (!kos) return { error: "Kos tidak ditemukan." };
   if (name.length < 1) return { error: "Nama/nomor kamar wajib diisi." };
   if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0) {
@@ -105,7 +105,7 @@ export async function updateRoom(
   formData: FormData
 ): Promise<UpdateRoomState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "Hanya pemilik yang bisa mengubah kamar." };
+  if (!canManageKos(user)) return { error: "Hanya pemilik yang bisa mengubah kamar." };
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -119,7 +119,7 @@ export async function updateRoom(
   }
 
   const room = await prisma.room.findFirst({
-    where: { id, kos: { ownerId: user.id } },
+    where: { id, kos: { ownerId: getEffectiveOwnerId(user) } },
     select: { id: true, kosId: true },
   });
   if (!room) return { error: "Kamar tidak ditemukan." };
@@ -157,7 +157,7 @@ export async function deleteRoom(
   formData: FormData
 ): Promise<DeleteRoomState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "FORBIDDEN" };
+  if (!canManageKos(user)) return { error: "FORBIDDEN" };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "ID kamar tidak valid." };
@@ -165,7 +165,7 @@ export async function deleteRoom(
   // Fetch dengan filter ownership hard di WHERE — ID manipulation
   // tidak bisa bypass.
   const room = await prisma.room.findFirst({
-    where: { id, kos: { ownerId: user.id } },
+    where: { id, kos: { ownerId: getEffectiveOwnerId(user) } },
     include: {
       kos: { select: { id: true, name: true } },
       _count: {
@@ -244,7 +244,7 @@ export async function assignTenant(
   formData: FormData
 ): Promise<AssignState> {
   const user = await requireUser();
-  if (user.role !== "OWNER") return { error: "Tidak diizinkan." };
+  if (!canManageKos(user)) return { error: "Tidak diizinkan." };
 
   const roomId = String(formData.get("roomId") ?? "");
   const tenantId = String(formData.get("tenantId") ?? "");
@@ -265,7 +265,7 @@ export async function assignTenant(
   }
 
   const room = await prisma.room.findFirst({
-    where: { id: roomId, kos: { ownerId: user.id } },
+    where: { id: roomId, kos: { ownerId: getEffectiveOwnerId(user) } },
     include: { kos: { select: { name: true } } },
   });
   if (!room) return { error: "Kamar tidak ditemukan." };
@@ -357,11 +357,11 @@ export async function assignTenant(
 
 export async function endTenancy(formData: FormData) {
   const user = await requireUser();
-  if (user.role !== "OWNER") throw new Error("FORBIDDEN");
+  if (!canManageKos(user)) throw new Error("FORBIDDEN");
   const tenancyId = String(formData.get("tenancyId") ?? "");
 
   const tenancy = await prisma.tenancy.findFirst({
-    where: { id: tenancyId, room: { kos: { ownerId: user.id } } },
+    where: { id: tenancyId, room: { kos: { ownerId: getEffectiveOwnerId(user) } } },
     include: { room: true },
   });
   if (!tenancy) throw new Error("NOT_FOUND");

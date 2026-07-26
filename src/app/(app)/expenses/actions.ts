@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { isExpenseCategory } from "@/lib/expenses";
 import { logAudit } from "@/lib/audit";
 
@@ -10,7 +10,7 @@ export type ExpenseState = { error?: string; success?: string };
 
 async function requireOwner() {
   const user = await requireUser();
-  if (user.role !== "OWNER") throw new Error("FORBIDDEN");
+  if (!canManageKos(user)) throw new Error("FORBIDDEN");
   return user;
 }
 
@@ -100,7 +100,7 @@ export async function deleteExpense(
 
   // Verifikasi kepemilikan via relasi kos.
   const expense = await prisma.expense.findFirst({
-    where: { id, kos: { ownerId: me.id } },
+    where: { id, kos: { ownerId: getEffectiveOwnerId(me) } },
     include: { kos: { select: { name: true } } },
   });
   if (!expense) return { error: "Pengeluaran tidak ditemukan." };

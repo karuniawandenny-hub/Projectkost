@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +58,7 @@ function statusLabel(s: string): string {
  */
 export async function GET(req: Request) {
   const me = await getCurrentUser();
-  if (!me || (me.role !== "OWNER" && me.role !== "ADMIN")) {
+  if (!me || (!canManageKos(me) && me.role !== "ADMIN")) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -70,7 +70,7 @@ export async function GET(req: Request) {
   const to = url.searchParams.get("to");
 
   const where: Record<string, unknown> = {};
-  if (me.role === "OWNER") where.kos = { ownerId: me.id };
+  if (canManageKos(me)) where.kos = { ownerId: getEffectiveOwnerId(me) };
   if (type && ["PREVENTIVE", "CORRECTIVE"].includes(type)) where.type = type;
   if (
     status &&
