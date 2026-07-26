@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { generateResetToken, hashToken, isDevEmailMode } from "@/lib/email";
 import { sendEmailGeneric } from "@/lib/reminders";
 import { logAudit } from "@/lib/audit";
+import { normalizePhone } from "@/lib/phone";
 
 /**
  * Fitur "Anggota Tim" (Pengelola) — hanya OWNER yang boleh manage.
@@ -122,6 +123,11 @@ Sebagai Pengelola, Anda akan bantu ${me.name} mengelola kos: cek pembayaran, ver
 
 Terima undangan lewat link berikut (berlaku 3 hari):
 ${inviteUrl}
+
+Saat menerima undangan, Anda akan diminta:
+- Nama lengkap
+- Nomor WhatsApp aktif (wajib — untuk notifikasi & fitur chat AI)
+- Password akun
 
 Kalau Anda tidak mengenal ${me.name} atau tidak merasa mengharapkan undangan ini, abaikan email ini.
 
@@ -244,6 +250,7 @@ export async function acceptManagerInvite(
 ): Promise<AcceptInviteState> {
   const token = String(formData.get("token") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
 
@@ -251,6 +258,23 @@ export async function acceptManagerInvite(
   if (name.length < 2) return { error: "Nama minimal 2 karakter." };
   if (password.length < 8) return { error: "Password minimal 8 karakter." };
   if (password !== confirm) return { error: "Konfirmasi password tidak cocok." };
+
+  // Nomor WA WAJIB untuk pengelola — supaya bisa terima notifikasi &
+  // pakai fitur chat AI via WhatsApp. Bot AI cocokkan sender WA
+  // dengan User.phone; kalau nomor kosong / tidak match, bot tidak
+  // bisa mengenal pengelola.
+  if (!phoneRaw) {
+    return {
+      error:
+        "Nomor WhatsApp wajib diisi — supaya bisa dapat notifikasi & pakai chat AI Kos Baiti.",
+    };
+  }
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) {
+    return {
+      error: "Nomor WhatsApp tidak valid. Gunakan format 08xxxxxxxxxx.",
+    };
+  }
 
   const tokenHash = hashToken(token);
   const invite = await prisma.managerInvite.findUnique({
@@ -287,6 +311,7 @@ export async function acceptManagerInvite(
         email: invite.email,
         passwordHash,
         name,
+        phone,
         role: "MANAGER",
         status: "ACTIVE",
         managedByOwnerId: invite.ownerId,

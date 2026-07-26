@@ -32,6 +32,7 @@ export default async function ManagersPage() {
         id: true,
         name: true,
         email: true,
+        phone: true,
         createdAt: true,
       },
     }),
@@ -129,7 +130,16 @@ export default async function ManagersPage() {
                       {m.name}
                     </div>
                     <div className="text-xs text-slate-500 truncate">
-                      {m.email} · bergabung {formatWhen(m.createdAt)}
+                      {m.email}
+                      {m.phone && (
+                        <>
+                          {" · "}
+                          <span className="font-mono">{m.phone}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Bergabung {formatWhen(m.createdAt)}
                     </div>
                   </div>
                 </div>

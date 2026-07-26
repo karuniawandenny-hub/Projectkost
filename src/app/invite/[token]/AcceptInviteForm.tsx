@@ -74,6 +74,26 @@ export function AcceptInviteForm({
       </div>
 
       <div>
+        <label className="label" htmlFor="acc-phone">
+          Nomor WhatsApp aktif <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="acc-phone"
+          name="phone"
+          type="tel"
+          required
+          inputMode="numeric"
+          className="input h-10 text-[16px]"
+          autoComplete="tel"
+          placeholder="08xxxxxxxxxx"
+        />
+        <p className="mt-1 text-[11px] text-slate-500">
+          Wajib — supaya bisa dapat notifikasi WhatsApp &amp; pakai fitur
+          chat AI Kos Baiti. Pastikan nomor yang aktif digunakan.
+        </p>
+      </div>
+
+      <div>
         <label className="label" htmlFor="acc-pw">
           Password baru
         </label>
