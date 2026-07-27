@@ -35,6 +35,51 @@ function formatDateShort(iso: string): string {
   });
 }
 
+/**
+ * Thumbnail dokumen identitas dalam modal detail penghuni.
+ * Kalau URL ada: preview 96px + link ke viewer.
+ * Kalau null: placeholder abu-abu dengan status jelas "Belum diupload".
+ */
+function IdentityPhoto({
+  label,
+  url,
+  caption,
+}: {
+  label: string;
+  url: string | null;
+  caption: string;
+}) {
+  if (url) {
+    return (
+      <a
+        href={viewerUrl(url, label)}
+        className="block rounded-lg border border-slate-200 bg-white p-2 transition hover:border-brand-400 hover:shadow-sm"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={label}
+          className="mb-2 h-24 w-full rounded object-cover"
+        />
+        <div className="text-xs font-medium text-slate-800">{label}</div>
+        <div className="text-[10px] text-brand-700">Klik untuk perbesar</div>
+      </a>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2 text-center">
+      <div className="grid h-24 w-full place-items-center rounded bg-slate-100 text-2xl text-slate-400">
+        📄
+      </div>
+      <div className="mt-2 text-xs font-medium text-slate-600">{label}</div>
+      <div className="text-[10px] text-amber-700">Belum diupload</div>
+      <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+        {caption}
+      </div>
+    </div>
+  );
+}
+
 export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
@@ -412,16 +457,32 @@ function TenantDetailModal({
             </div>
           </dl>
 
+          {/* Dokumen Identitas — SELALU tampil, meski null. Kalau penghuni
+              belum onboarding upload KTP/selfie (mis. di-assign owner
+              langsung tanpa lewat onboarding), status "Belum diupload"
+              muncul jelas — sebelumnya tombol "Lihat KTP" cuma di-hide
+              yang bikin owner bingung apakah datanya ada tapi tersembunyi
+              atau memang tidak ada. */}
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Dokumen Identitas
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <IdentityPhoto
+                label="Foto KTP"
+                url={t.ktpPhotoUrl}
+                caption="Kartu Tanda Penduduk"
+              />
+              <IdentityPhoto
+                label="Foto Diri (Selfie)"
+                url={t.selfiePhotoUrl}
+                caption="Verifikasi wajah"
+              />
+            </div>
+          </div>
+
           {/* Actions */}
           <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-            {t.ktpPhotoUrl && (
-              <a
-                href={viewerUrl(t.ktpPhotoUrl, "Foto KTP")}
-                className="btn-secondary"
-              >
-                Lihat KTP
-              </a>
-            )}
             <a
               href={`/tenancies/${t.tenancyId}/contract`}
               className={
