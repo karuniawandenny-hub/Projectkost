@@ -156,9 +156,24 @@ export async function deleteAnnouncement(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "ID pengumuman tidak valid." };
 
-  // Scope hard-check: OWNER hanya bisa akses miliknya sendiri.
+  // Scope hard-check:
+  //  - ADMIN: bebas hapus apa saja.
+  //  - OWNER: bisa hapus miliknya + yang dibuat pengelola-nya.
+  //  - MANAGER: bisa hapus miliknya + milik owner-nya + milik manager
+  //    lain di tim yang sama (semua under effectiveOwnerId).
+  const effectiveOwnerId = getEffectiveOwnerId(me);
   const where =
-    me.role === "ADMIN" ? { id } : { id, authorId: me.id };
+    me.role === "ADMIN"
+      ? { id }
+      : {
+          id,
+          author: {
+            OR: [
+              { id: effectiveOwnerId },
+              { managedByOwnerId: effectiveOwnerId },
+            ],
+          },
+        };
 
   const existing = await prisma.announcement.findFirst({
     where,

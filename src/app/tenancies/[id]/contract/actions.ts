@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, getEffectiveOwnerId } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 
 export type SignState = { error?: string; success?: boolean };
@@ -65,7 +65,7 @@ export async function signContract(
   if (!tenancy) return { error: "Tenancy tidak ditemukan." };
 
   const isTenant = tenancy.tenant.id === me.id;
-  const isOwner = tenancy.room.kos.ownerId === me.id;
+  const isOwner = tenancy.room.kos.ownerId === getEffectiveOwnerId(me);
   if (!isTenant && !isOwner) {
     return { error: "Anda tidak berwenang menandatangani kontrak ini." };
   }

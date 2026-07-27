@@ -66,7 +66,17 @@ export default async function DashboardPage() {
   }
 
   if (canManageKos(user)) {
-    return <OwnerDashboard ownerId={user.id} name={user.name} phone={user.phone} />;
+    // Untuk MANAGER (pengelola), ownerId efektif = ID owner yang
+    // mengundangnya. Semua query di OwnerDashboard filter berdasarkan
+    // ownerId — kalau kita pass user.id (MANAGER sendiri), semua query
+    // return kosong karena Kos.ownerId tidak pernah = manager.id.
+    return (
+      <OwnerDashboard
+        ownerId={getEffectiveOwnerId(user)}
+        name={user.name}
+        phone={user.phone}
+      />
+    );
   }
   return <TenantDashboard userId={user.id} name={user.name} phone={user.phone} />;
 }

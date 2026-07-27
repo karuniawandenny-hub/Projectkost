@@ -33,7 +33,7 @@ export default async function ComplaintDetailPage({
   });
   if (!c) notFound();
 
-  const isOwner = canManageKos(user) && c.tenancy.room.kos.ownerId === user.id;
+  const isOwner = canManageKos(user) && c.tenancy.room.kos.ownerId === getEffectiveOwnerId(user);
   const isTenant = user.role === "TENANT" && c.tenancy.tenantId === user.id;
   if (!isOwner && !isTenant) redirect("/complaints");
 

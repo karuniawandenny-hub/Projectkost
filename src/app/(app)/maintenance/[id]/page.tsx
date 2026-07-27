@@ -50,7 +50,7 @@ export default async function MaintenanceDetailPage({
   //         AC fasilitas kos"): akses kalau penghuni sedang sewa
   //         aktif kamar mana pun di kos itu.
   //    Read-only — semua tombol aksi di-hide di bawah.
-  const isOwnerOfKos = canManageKos(user) && m.kos.ownerId === user.id;
+  const isOwnerOfKos = canManageKos(user) && m.kos.ownerId === getEffectiveOwnerId(user);
   const isAdmin = user.role === "ADMIN";
   let isAffectedTenant = false;
   if (user.role === "TENANT") {

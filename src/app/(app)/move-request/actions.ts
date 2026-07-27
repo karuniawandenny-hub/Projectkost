@@ -135,7 +135,7 @@ export async function approveMoveRequest(formData: FormData) {
   if (req.status !== "PENDING") throw new Error("ALREADY_DECIDED");
 
   // OWNER hanya boleh approve di kos miliknya.
-  if (canManageKos(user) && req.toRoom.kos.ownerId !== user.id) {
+  if (canManageKos(user) && req.toRoom.kos.ownerId !== getEffectiveOwnerId(user)) {
     throw new Error("FORBIDDEN");
   }
 
@@ -225,7 +225,7 @@ export async function rejectMoveRequest(formData: FormData) {
   });
   if (!req) throw new Error("NOT_FOUND");
   if (req.status !== "PENDING") throw new Error("ALREADY_DECIDED");
-  if (canManageKos(user) && req.toRoom.kos.ownerId !== user.id) {
+  if (canManageKos(user) && req.toRoom.kos.ownerId !== getEffectiveOwnerId(user)) {
     throw new Error("FORBIDDEN");
   }
 

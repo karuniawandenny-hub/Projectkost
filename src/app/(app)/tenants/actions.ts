@@ -211,7 +211,7 @@ export async function updateTenancyStartDate(
   if (!tenancy) return { error: "Tenancy tidak ditemukan." };
 
   // OWNER hanya boleh edit tenancy di kos miliknya.
-  if (canManageKos(me) && tenancy.room.kos.ownerId !== me.id) {
+  if (canManageKos(me) && tenancy.room.kos.ownerId !== getEffectiveOwnerId(me)) {
     return { error: "Anda tidak punya akses untuk mengubah penghuni ini." };
   }
 
@@ -302,7 +302,7 @@ export async function deleteTenant(
   // Scope check untuk OWNER: tenant harus pernah tinggal di kos miliknya.
   if (canManageKos(me)) {
     const inMyKos = target.tenancies.some(
-      (t) => t.room.kos.ownerId === me.id
+      (t) => t.room.kos.ownerId === getEffectiveOwnerId(me)
     );
     if (!inMyKos) {
       return { error: "Anda tidak punya akses untuk menghapus penghuni ini." };

@@ -95,7 +95,7 @@ export async function replyComplaint(
     include: { tenancy: { include: { tenant: true, room: { include: { kos: true } } } } },
   });
   if (!complaint) return { error: "Komplain tidak ditemukan." };
-  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== user.id) {
+  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== getEffectiveOwnerId(user)) {
     return { error: "Anda tidak punya akses untuk membalas komplain ini." };
   }
 
@@ -248,7 +248,7 @@ export async function removeResolutionPhoto(formData: FormData) {
     include: { tenancy: { include: { room: { include: { kos: true } } } } },
   });
   if (!complaint) return;
-  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== user.id) {
+  if (!canManageKos(user) || complaint.tenancy.room.kos.ownerId !== getEffectiveOwnerId(user)) {
     return;
   }
 
