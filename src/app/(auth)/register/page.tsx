@@ -104,6 +104,20 @@ export default function RegisterPage() {
           </div>
         </div>
 
+        {/* Info wajib upload KTP + selfie khusus untuk calon penghuni */}
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="font-semibold">📋 Khusus penghuni:</div>
+          <div className="mt-0.5">
+            Setelah daftar, Anda <strong>wajib</strong> mengupload foto{" "}
+            <strong>KTP</strong> &amp; <strong>foto diri (selfie)</strong>{" "}
+            terlebih dahulu. Tanpa dokumen ini, pengajuan Anda tidak akan bisa
+            ditinjau oleh pemilik kos.
+          </div>
+          <div className="mt-1 text-[11px] text-amber-800">
+            Siapkan KTP di dekat Anda sebelum lanjut.
+          </div>
+        </div>
+
         {state?.error && (
           <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
             {state?.error}

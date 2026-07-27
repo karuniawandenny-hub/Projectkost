@@ -216,12 +216,25 @@ export default async function AdminUsersPage({
                 {u.status === "PENDING" &&
                   (u.role === "OWNER" || u.role === "TENANT") && (
                     <>
-                      <form action={approveUser}>
-                        <input type="hidden" name="userId" value={u.id} />
-                        <button type="submit" className="btn-success">
-                          Setujui
-                        </button>
-                      </form>
+                      {/* TENANT hanya boleh disetujui setelah KTP + selfie
+                          diupload. Kalau belum, arahkan admin ke halaman
+                          detail untuk upload atas nama tenant. */}
+                      {u.role === "TENANT" &&
+                      (!u.ktpPhotoUrl || !u.selfiePhotoUrl) ? (
+                        <Link
+                          href={`/admin/users/${u.id}`}
+                          className="btn-secondary text-xs"
+                        >
+                          Butuh KTP/selfie →
+                        </Link>
+                      ) : (
+                        <form action={approveUser}>
+                          <input type="hidden" name="userId" value={u.id} />
+                          <button type="submit" className="btn-success">
+                            Setujui
+                          </button>
+                        </form>
+                      )}
                       <form action={rejectUser}>
                         <input type="hidden" name="userId" value={u.id} />
                         <button type="submit" className="btn-danger">

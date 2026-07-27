@@ -25,6 +25,14 @@ export async function approveUser(formData: FormData) {
     throw new Error("BAD_ROLE");
   }
   if (target.status === "ACTIVE") return;
+  // TENANT wajib sudah upload KTP + selfie sebelum boleh diaktifkan.
+  // Admin bisa upload atas nama tenant dari /admin/users/[id] kalau perlu.
+  if (
+    target.role === "TENANT" &&
+    (!target.ktpPhotoUrl || !target.selfiePhotoUrl)
+  ) {
+    throw new Error("DOCS_INCOMPLETE");
+  }
 
   await prisma.user.update({
     where: { id: target.id },
@@ -68,7 +76,18 @@ export async function bulkApproveUsers(formData: FormData) {
     },
   });
 
+  // Skip TENANT yang belum lengkapi KTP + selfie — mereka tidak bisa
+  // di-approve dari bulk action ini. Admin harus buka detail user &
+  // upload dulu (atau minta tenant upload sendiri).
+  const skipped: string[] = [];
   for (const target of targets) {
+    if (
+      target.role === "TENANT" &&
+      (!target.ktpPhotoUrl || !target.selfiePhotoUrl)
+    ) {
+      skipped.push(target.name);
+      continue;
+    }
     await prisma.user.update({
       where: { id: target.id },
       data: { status: "ACTIVE" },
@@ -86,6 +105,15 @@ export async function bulkApproveUsers(formData: FormData) {
           : "Akun penghuni Anda telah disetujui oleh administrator. Silakan login & akses dashboard.",
       link: "/login",
     });
+  }
+
+  if (skipped.length > 0) {
+    // Best-effort: kasih tahu admin lewat log. UI batch tidak punya jalur
+    // error UI yang jelas jadi log ini yang dipakai untuk debugging.
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[bulkApproveUsers] ${skipped.length} tenant di-skip karena KTP/selfie belum lengkap: ${skipped.join(", ")}`
+    );
   }
 
   revalidatePath("/admin");

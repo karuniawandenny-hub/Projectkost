@@ -7,6 +7,7 @@ import {
   rejectMoveRequest,
 } from "../move-request/actions";
 import { PendingTenantCard, type KosOption } from "./PendingTenantCard";
+import { IncompleteRegistrationCard } from "./IncompleteRegistrationCard";
 import {
   ActiveTenantsView,
   type ActiveTenant,
@@ -55,6 +56,19 @@ export default async function TenantsPage() {
     }),
   ]);
 
+  // Pisahkan pending berdasarkan kelengkapan dokumen:
+  //  - readyPending: sudah upload KTP + selfie → boleh masuk antrean utama
+  //    "Pengajuan menunggu" dan bisa disetujui.
+  //  - incompletePending: belum lengkap → dianggap BELUM mengajukan sama
+  //    sekali. Muncul di section terpisah "Belum melengkapi pendaftaran"
+  //    yang tidak punya tombol setuju.
+  const readyPending = pendingTenants.filter(
+    (t) => t.ktpPhotoUrl && t.selfiePhotoUrl
+  );
+  const incompletePending = pendingTenants.filter(
+    (t) => !t.ktpPhotoUrl || !t.selfiePhotoUrl
+  );
+
   const kosOptions: KosOption[] = kosWithRooms.map((k) => ({
     id: k.id,
     name: k.name,
@@ -86,14 +100,14 @@ export default async function TenantsPage() {
         </p>
       </div>
 
-      {/* ===== Section: Pengajuan menunggu ===== */}
+      {/* ===== Section: Pengajuan menunggu (dokumen lengkap) ===== */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="text-lg font-semibold">
             Pengajuan menunggu
-            {pendingTenants.length > 0 && (
+            {readyPending.length > 0 && (
               <span className="ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-bold text-slate-900">
-                {pendingTenants.length}
+                {readyPending.length}
               </span>
             )}
           </h2>
@@ -104,14 +118,15 @@ export default async function TenantsPage() {
           )}
         </div>
 
-        {pendingTenants.length === 0 ? (
+        {readyPending.length === 0 ? (
           <div className="card text-sm text-slate-500">
-            Tidak ada pengajuan penghuni saat ini. Setiap kali ada penghuni baru
-            mendaftar, mereka akan muncul di sini.
+            Tidak ada pengajuan penghuni saat ini. Penghuni harus menyelesaikan
+            upload KTP + foto diri terlebih dulu supaya pengajuannya masuk ke
+            antrean ini.
           </div>
         ) : (
           <div className="space-y-3">
-            {pendingTenants.map((t) => (
+            {readyPending.map((t) => (
               <PendingTenantCard
                 key={t.id}
                 tenant={{
@@ -130,6 +145,47 @@ export default async function TenantsPage() {
           </div>
         )}
       </section>
+
+      {/* ===== Section: Belum melengkapi pendaftaran ===== */}
+      {/* Penghuni yang sudah register tapi belum upload KTP/selfie tidak
+          dianggap "mengajukan" — mereka muncul di section terpisah ini,
+          tanpa tombol setuju. Owner bisa ingatkan via WA atau upload
+          dokumen atas nama mereka supaya mereka bisa masuk ke antrean
+          utama. Section ini di-hide kalau tidak ada. */}
+      {incompletePending.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">
+              Belum melengkapi pendaftaran
+              <span className="ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-100 px-1.5 text-xs font-bold text-red-800">
+                {incompletePending.length}
+              </span>
+            </h2>
+            <p className="text-sm text-slate-600">
+              Penghuni ini sudah register tapi belum upload KTP + foto diri,
+              sehingga <strong>belum bisa mengajukan diri</strong>. Ingatkan
+              mereka untuk menyelesaikan onboarding — atau upload dokumen atas
+              nama mereka di sini.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {incompletePending.map((t) => (
+              <IncompleteRegistrationCard
+                key={t.id}
+                tenant={{
+                  id: t.id,
+                  name: t.name,
+                  email: t.email,
+                  phone: t.phone,
+                  ktpPhotoUrl: t.ktpPhotoUrl,
+                  selfiePhotoUrl: t.selfiePhotoUrl,
+                  createdAt: t.createdAt.toISOString(),
+                }}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ===== Section: Permintaan pindah kamar ===== */}
       {moveRequests.length > 0 && (
