@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { notify } from "@/lib/notify";
+import { normalizeEmail, isValidEmail } from "@/lib/password";
+import { normalizePhone } from "@/lib/phone";
+import { logAudit } from "@/lib/audit";
 
 async function requireAdmin() {
   const user = await requireUser();
@@ -292,4 +295,124 @@ export async function changeOwnPassword(
     data: { passwordHash },
   });
   return { success: true };
+}
+
+export type UpdateProfileState = { error?: string; success?: string };
+
+/**
+ * Admin update profil user manapun: name, email, phone, username.
+ * Email & username di-cek unique. Phone otomatis di-normalize.
+ * Field yang di-submit kosong akan di-skip (jangan reset field lain
+ * yang tidak dimaksud). Untuk clear username, kirim string "-" atau
+ * kosongkan tapi centang opsi khusus (di UI diberi tombol terpisah).
+ */
+export async function updateUserProfile(
+  _prev: UpdateProfileState,
+  formData: FormData
+): Promise<UpdateProfileState> {
+  const me = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "User tidak ditemukan." };
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return { error: "User tidak ditemukan." };
+
+  const nameRaw = String(formData.get("name") ?? "").trim();
+  const emailRaw = String(formData.get("email") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const usernameRaw = String(formData.get("username") ?? "").trim();
+
+  const updates: {
+    name?: string;
+    email?: string;
+    phone?: string | null;
+    username?: string | null;
+  } = {};
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+  if (nameRaw && nameRaw !== target.name) {
+    if (nameRaw.length < 2) return { error: "Nama minimal 2 karakter." };
+    updates.name = nameRaw;
+    changes.name = { from: target.name, to: nameRaw };
+  }
+
+  if (emailRaw) {
+    const email = normalizeEmail(emailRaw);
+    if (!isValidEmail(email)) return { error: "Format email tidak valid." };
+    if (email !== target.email) {
+      const conflict = await prisma.user.findUnique({ where: { email } });
+      if (conflict && conflict.id !== target.id) {
+        return { error: `Email ${email} sudah dipakai user lain.` };
+      }
+      updates.email = email;
+      changes.email = { from: target.email, to: email };
+    }
+  }
+
+  if (phoneRaw) {
+    const norm = normalizePhone(phoneRaw);
+    if (!norm) {
+      return { error: "Nomor HP tidak valid. Gunakan format 08xxxxxxxxxx." };
+    }
+    if (norm !== target.phone) {
+      updates.phone = norm;
+      changes.phone = { from: target.phone, to: norm };
+    }
+  }
+
+  if (usernameRaw) {
+    // "-" adalah sentinel untuk "hapus username" (biarkan null).
+    if (usernameRaw === "-") {
+      if (target.username !== null) {
+        updates.username = null;
+        changes.username = { from: target.username, to: null };
+      }
+    } else if (usernameRaw !== target.username) {
+      if (usernameRaw.length < 3) {
+        return { error: "Username minimal 3 karakter (atau '-' untuk hapus)." };
+      }
+      if (!/^[a-zA-Z0-9._-]+$/.test(usernameRaw)) {
+        return {
+          error:
+            "Username hanya boleh huruf, angka, titik, dash, atau underscore.",
+        };
+      }
+      const conflict = await prisma.user.findUnique({
+        where: { username: usernameRaw },
+      });
+      if (conflict && conflict.id !== target.id) {
+        return { error: `Username ${usernameRaw} sudah dipakai user lain.` };
+      }
+      updates.username = usernameRaw;
+      changes.username = { from: target.username, to: usernameRaw };
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return { error: "Tidak ada perubahan yang perlu disimpan." };
+  }
+
+  await prisma.user.update({
+    where: { id: target.id },
+    data: updates,
+  });
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.APPROVE",
+    entityType: "User",
+    entityId: target.id,
+    metadata: {
+      subAction: "UPDATE_PROFILE",
+      targetName: target.name,
+      changes,
+    },
+  });
+
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${target.id}`);
+  return {
+    success: `Profil ${target.name} berhasil diperbarui (${Object.keys(changes).join(", ")}).`,
+  };
 }

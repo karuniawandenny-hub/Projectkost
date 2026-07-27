@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
 import { setUserRole, setUserStatus } from "../../../actions";
 import { ResetPasswordForm } from "./ResetPasswordForm";
+import { EditProfileForm } from "./EditProfileForm";
 import { UploadDocsForm } from "@/app/(app)/tenants/UploadDocsForm";
 
 function RoleBadge({ role }: { role: string }) {
@@ -64,6 +65,25 @@ export default async function AdminUserDetailPage({
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <div className="card lg:col-span-2">
+          <h2 className="font-semibold">Edit profil</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Ubah nama, email, nomor HP, atau username. Kosongkan field yang
+            tidak ingin diubah.
+          </p>
+          <div className="mt-3">
+            <EditProfileForm
+              userId={u.id}
+              defaults={{
+                name: u.name,
+                email: u.email,
+                phone: u.phone,
+                username: u.username,
+              }}
+            />
+          </div>
+        </div>
+
         <div className="card">
           <h2 className="font-semibold">Ubah peran</h2>
           <form action={setUserRole} className="mt-3 flex items-end gap-2">
