@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { viewerUrl } from "@/lib/viewer";
 import { setUserRole, setUserStatus } from "../../../actions";
 import { ResetPasswordForm } from "./ResetPasswordForm";
+import { UploadDocsForm } from "@/app/(app)/tenants/UploadDocsForm";
 
 function RoleBadge({ role }: { role: string }) {
   if (role === "ADMIN") return <span className="badge-blue">Admin</span>;
@@ -151,6 +153,82 @@ export default async function AdminUserDetailPage({
             )}
           </div>
         )}
+
+        {u.role === "TENANT" && (
+          <div className="card lg:col-span-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="font-semibold">Dokumen identitas</h2>
+              {(!u.ktpPhotoUrl || !u.selfiePhotoUrl) && (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                  ⚠️ Kurang lengkap
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              KTP & foto diri wajib ada untuk penghuni. Kalau kurang, admin bisa
+              upload atas nama penghuni.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <IdentityCard
+                label="Foto KTP"
+                url={u.ktpPhotoUrl}
+                viewerLabel="Foto KTP"
+              />
+              <IdentityCard
+                label="Foto Diri (Selfie)"
+                url={u.selfiePhotoUrl}
+                viewerLabel="Foto Diri"
+              />
+            </div>
+            <div className="mt-4">
+              <UploadDocsForm
+                userId={u.id}
+                hasKtp={!!u.ktpPhotoUrl}
+                hasSelfie={!!u.selfiePhotoUrl}
+                tenantName={u.name}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IdentityCard({
+  label,
+  url,
+  viewerLabel,
+}: {
+  label: string;
+  url: string | null;
+  viewerLabel: string;
+}) {
+  if (url) {
+    return (
+      <a
+        href={viewerUrl(url, viewerLabel)}
+        className="block rounded-lg border border-slate-200 bg-white p-2 transition hover:border-brand-400 hover:shadow-sm"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={url}
+          alt={label}
+          className="mb-2 h-28 w-full rounded object-cover"
+        />
+        <div className="text-xs font-medium text-slate-800">{label}</div>
+        <div className="text-[10px] text-brand-700">Klik untuk perbesar</div>
+      </a>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-red-300 bg-red-50/50 p-2 text-center">
+      <div className="grid h-28 w-full place-items-center rounded bg-red-50 text-3xl text-red-300">
+        📄
+      </div>
+      <div className="mt-2 text-xs font-medium text-slate-700">{label}</div>
+      <div className="text-[10px] font-semibold text-red-700">
+        Belum diupload
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
 import { sendWAWithTemplate } from "@/lib/wa-templates";
-import { deleteUploadByUrl, deleteUploadsByUrls } from "@/lib/upload";
+import { deleteUploadByUrl, deleteUploadsByUrls, saveUploadedFile } from "@/lib/upload";
 import { logAudit } from "@/lib/audit";
 
 function originFromHeaders(): string {
@@ -61,6 +61,17 @@ export async function approveAndAssignTenant(
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target) return { error: "User tidak ditemukan." };
   if (target.role !== "TENANT") return { error: "Bukan akun penghuni." };
+
+  // KTP + selfie wajib. Owner boleh upload atas nama penghuni via
+  // uploadTenantDocs sebelum setuju.
+  if (!target.ktpPhotoUrl || !target.selfiePhotoUrl) {
+    const missing: string[] = [];
+    if (!target.ktpPhotoUrl) missing.push("KTP");
+    if (!target.selfiePhotoUrl) missing.push("foto diri");
+    return {
+      error: `Dokumen ${missing.join(" & ")} penghuni belum ada. Minta penghuni upload lewat onboarding, atau upload sendiri dari kartu ini sebelum menyetujui.`,
+    };
+  }
 
   // Cek kepemilikan kamar:
   // - OWNER hanya boleh assign ke kamar yang dia miliki.
@@ -419,6 +430,130 @@ export async function deleteTenant(
   return {
     success: `Penghuni "${target.name}" beserta ${target.tenancies.length} tenancy, ${paymentCount} pembayaran, ${complaintCount} komplain & ${fileUrls.length} file terkait telah dihapus permanen.`,
   };
+}
+
+export type UploadTenantDocsState = { error?: string; success?: string };
+
+/**
+ * Owner/admin upload KTP + selfie ATAS NAMA penghuni.
+ *
+ * Kasus pakai: penghuni PENDING tidak mampu / tidak mau upload sendiri
+ * (mis. gaptek, HP tidak mendukung), owner sudah pegang copy KTP fisik.
+ * Owner tetap dituntut untuk mendapat izin lisan dari penghuni.
+ *
+ * Bisa dipakai juga untuk mengganti dokumen penghuni AKTIF yang buram /
+ * salah upload.
+ *
+ * Akses: OWNER (hanya untuk tenant di kos-nya), ADMIN (bebas).
+ * Untuk tenant AKTIF: OWNER dibatasi lewat cek tenancy.
+ * Untuk tenant PENDING (belum ada tenancy): OWNER selalu boleh — karena
+ * PendingTenantCard yang menampilkannya sudah discope owner-side.
+ */
+export async function uploadTenantDocs(
+  _prev: UploadTenantDocsState,
+  formData: FormData
+): Promise<UploadTenantDocsState> {
+  const me = await requireOwnerOrAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "User tidak ditemukan." };
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      tenancies: {
+        select: { room: { select: { kos: { select: { ownerId: true } } } } },
+      },
+    },
+  });
+  if (!target) return { error: "User tidak ditemukan." };
+  if (target.role !== "TENANT") {
+    return { error: "Hanya akun penghuni yang bisa diupload dokumennya." };
+  }
+
+  // Scope untuk OWNER: tenant PENDING boleh, tenant AKTIF hanya kalau ada
+  // tenancy di kos milik effective owner.
+  if (canManageKos(me)) {
+    const hasActiveInMyKos = target.tenancies.some(
+      (t) => t.room.kos.ownerId === getEffectiveOwnerId(me)
+    );
+    if (target.status !== "PENDING" && !hasActiveInMyKos) {
+      return { error: "Anda tidak punya akses untuk mengupload dokumen penghuni ini." };
+    }
+  }
+
+  const ktpFile = formData.get("ktp");
+  const selfieFile = formData.get("selfie");
+
+  const hasKtp = ktpFile instanceof File && ktpFile.size > 0;
+  const hasSelfie = selfieFile instanceof File && selfieFile.size > 0;
+  if (!hasKtp && !hasSelfie) {
+    return { error: "Pilih minimal satu file (KTP atau foto diri) untuk diupload." };
+  }
+
+  const updates: {
+    ktpPhotoUrl?: string;
+    selfiePhotoUrl?: string;
+    onboardedAt?: Date;
+  } = {};
+  const oldFilesToDelete: string[] = [];
+
+  try {
+    if (hasKtp) {
+      const url = await saveUploadedFile(ktpFile as File, `users/${target.id}/ktp`);
+      if (target.ktpPhotoUrl) oldFilesToDelete.push(target.ktpPhotoUrl);
+      updates.ktpPhotoUrl = url;
+    }
+    if (hasSelfie) {
+      const url = await saveUploadedFile(selfieFile as File, `users/${target.id}/selfie`);
+      if (target.selfiePhotoUrl) oldFilesToDelete.push(target.selfiePhotoUrl);
+      updates.selfiePhotoUrl = url;
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Gagal upload file." };
+  }
+
+  // Kalau setelah upload ini KTP + selfie sudah lengkap, tandai onboarded
+  // supaya redirect middleware tidak paksa penghuni ke /onboarding lagi.
+  const willHaveKtp = updates.ktpPhotoUrl ?? target.ktpPhotoUrl;
+  const willHaveSelfie = updates.selfiePhotoUrl ?? target.selfiePhotoUrl;
+  if (willHaveKtp && willHaveSelfie && !target.onboardedAt) {
+    updates.onboardedAt = new Date();
+  }
+
+  await prisma.user.update({
+    where: { id: target.id },
+    data: updates,
+  });
+
+  // Best-effort: hapus file lama supaya tidak numpuk di disk.
+  await deleteUploadsByUrls(oldFilesToDelete);
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.APPROVE",
+    entityType: "User",
+    entityId: target.id,
+    metadata: {
+      subAction: "UPLOAD_DOCS_ON_BEHALF",
+      tenantName: target.name,
+      uploaded: {
+        ktp: hasKtp,
+        selfie: hasSelfie,
+      },
+    },
+  });
+
+  revalidatePath("/tenants");
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${target.id}`);
+  const uploaded = [
+    hasKtp ? "KTP" : null,
+    hasSelfie ? "foto diri" : null,
+  ]
+    .filter(Boolean)
+    .join(" & ");
+  return { success: `${uploaded} berhasil diupload untuk ${target.name}.` };
 }
 
 /**

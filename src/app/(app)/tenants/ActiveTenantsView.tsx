@@ -5,6 +5,7 @@ import { viewerUrl } from "@/lib/viewer";
 import { endTenancy } from "../kos/actions";
 import { EditStartDateForm } from "./EditStartDateForm";
 import { DeleteTenantButton } from "./DeleteTenantButton";
+import { UploadDocsForm } from "./UploadDocsForm";
 
 export type ActiveTenant = {
   tenancyId: string;
@@ -21,7 +22,7 @@ export type ActiveTenant = {
   ownerSigned: boolean;
 };
 
-type FilterMode = "all" | "unsigned";
+type FilterMode = "all" | "unsigned" | "docsMissing";
 
 function initials(name: string): string {
   return name.trim().slice(0, 1).toUpperCase();
@@ -99,6 +100,9 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const unsignedCount = tenants.filter((t) => !t.ownerSigned).length;
+    const docsMissingCount = tenants.filter(
+      (t) => !t.ktpPhotoUrl || !t.selfiePhotoUrl
+    ).length;
     return {
       grouped: kosArr,
       kosList: kosArr.map((k) => ({ id: k.id, name: k.name, count: k.items.length })),
@@ -106,6 +110,7 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
         total: tenants.length,
         kosCount: kosArr.length,
         unsigned: unsignedCount,
+        docsMissing: docsMissingCount,
       },
     };
   }, [tenants]);
@@ -117,6 +122,8 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
       if (!hay.includes(q)) return false;
     }
     if (filter === "unsigned" && t.ownerSigned) return false;
+    if (filter === "docsMissing" && t.ktpPhotoUrl && t.selfiePhotoUrl)
+      return false;
     return true;
   };
 
@@ -137,7 +144,7 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
   return (
     <div className="space-y-4">
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <StatTile label="Total penghuni aktif" value={String(stats.total)} />
         <StatTile
           label="Tersebar di kos"
@@ -146,6 +153,16 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
             .slice(0, 3)
             .map((k) => `${k.name} (${k.count})`)
             .join(" · ")}
+        />
+        <StatTile
+          label="Dokumen kurang"
+          value={String(stats.docsMissing)}
+          tone={stats.docsMissing > 0 ? "red" : "neutral"}
+          sub={
+            stats.docsMissing > 0
+              ? "KTP/foto diri belum lengkap"
+              : "Semua dokumen lengkap"
+          }
         />
         <StatTile
           label="Kontrak belum TTD"
@@ -177,6 +194,17 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
         <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 text-sm">
           <FilterBtn active={filter === "all"} onClick={() => setFilter("all")}>
             Semua
+          </FilterBtn>
+          <FilterBtn
+            active={filter === "docsMissing"}
+            onClick={() => setFilter("docsMissing")}
+          >
+            Dok kurang
+            {stats.docsMissing > 0 && (
+              <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {stats.docsMissing}
+              </span>
+            )}
           </FilterBtn>
           <FilterBtn
             active={filter === "unsigned"}
@@ -213,6 +241,9 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
               userState === undefined ? idx > 0 : userState;
             const unsignedInGroup = g.items.filter((t) => !t.ownerSigned)
               .length;
+            const docsMissingInGroup = g.items.filter(
+              (t) => !t.ktpPhotoUrl || !t.selfiePhotoUrl
+            ).length;
             return (
               <div
                 key={g.id}
@@ -235,6 +266,11 @@ export function ActiveTenantsView({ tenants }: { tenants: ActiveTenant[] }) {
                     <span className="text-xs text-slate-500">
                       ({g.items.length} penghuni)
                     </span>
+                    {docsMissingInGroup > 0 && (
+                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
+                        {docsMissingInGroup} dok kurang
+                      </span>
+                    )}
                     {unsignedInGroup > 0 && (
                       <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                         {unsignedInGroup} belum TTD
@@ -278,13 +314,20 @@ function StatTile({
   label: string;
   value: string;
   sub?: string;
-  tone?: "amber" | "neutral";
+  tone?: "amber" | "red" | "neutral";
 }) {
   const bg =
     tone === "amber"
       ? "bg-amber-50 border-amber-200"
+      : tone === "red"
+      ? "bg-red-50 border-red-200"
       : "bg-white border-slate-200";
-  const valueColor = tone === "amber" ? "text-amber-700" : "text-slate-800";
+  const valueColor =
+    tone === "amber"
+      ? "text-amber-700"
+      : tone === "red"
+      ? "text-red-700"
+      : "text-slate-800";
   return (
     <div className={`rounded-lg border ${bg} px-3 py-2`}>
       <div className="text-[11px] font-medium text-slate-500">{label}</div>
@@ -351,10 +394,15 @@ function TenantRow({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <span className="truncate font-medium text-slate-800">
               {t.name}
             </span>
+            {(!t.ktpPhotoUrl || !t.selfiePhotoUrl) && (
+              <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
+                Dokumen kurang
+              </span>
+            )}
             {!t.ownerSigned && (
               <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
                 Belum TTD
@@ -464,8 +512,15 @@ function TenantDetailModal({
               yang bikin owner bingung apakah datanya ada tapi tersembunyi
               atau memang tidak ada. */}
           <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Dokumen Identitas
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Dokumen Identitas
+              </div>
+              {(!t.ktpPhotoUrl || !t.selfiePhotoUrl) && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                  ⚠️ Kurang lengkap
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <IdentityPhoto
@@ -477,6 +532,14 @@ function TenantDetailModal({
                 label="Foto Diri (Selfie)"
                 url={t.selfiePhotoUrl}
                 caption="Verifikasi wajah"
+              />
+            </div>
+            <div className="mt-3">
+              <UploadDocsForm
+                userId={t.userId}
+                hasKtp={!!t.ktpPhotoUrl}
+                hasSelfie={!!t.selfiePhotoUrl}
+                tenantName={t.name}
               />
             </div>
           </div>

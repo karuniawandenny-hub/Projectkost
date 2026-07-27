@@ -202,6 +202,12 @@ export default async function AdminUsersPage({
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   <RoleBadge role={u.role} />
                   <StatusBadge status={u.status} />
+                  {u.role === "TENANT" &&
+                    (!u.ktpPhotoUrl || !u.selfiePhotoUrl) && (
+                      <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-800">
+                        Dok kurang
+                      </span>
+                    )}
                 </div>
                 </div>
               </div>

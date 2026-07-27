@@ -279,6 +279,14 @@ export async function assignTenant(
   if (tenant.status !== "ACTIVE") {
     return { error: "Akun penghuni belum aktif (masih menunggu approval)." };
   }
+  if (!tenant.ktpPhotoUrl || !tenant.selfiePhotoUrl) {
+    const missing: string[] = [];
+    if (!tenant.ktpPhotoUrl) missing.push("KTP");
+    if (!tenant.selfiePhotoUrl) missing.push("foto diri");
+    return {
+      error: `Dokumen ${missing.join(" & ")} penghuni belum ada. Buka halaman Penghuni dan upload dokumen atas namanya dulu, atau minta penghuni upload sendiri.`,
+    };
+  }
 
   const active = await prisma.tenancy.findFirst({
     where: { tenantId: tenant.id, status: "ACTIVE" },
