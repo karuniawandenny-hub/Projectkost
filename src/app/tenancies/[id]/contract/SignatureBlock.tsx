@@ -33,9 +33,14 @@ function SubmitBtn({ disabled }: { disabled: boolean }) {
 function SignaturePad({
   inputName,
   onChange,
+  defaultSignatureUrl,
 }: {
   inputName: string;
   onChange?: (dataUrl: string | null) => void;
+  /** Kalau di-set, canvas auto-populated dengan gambar ini saat mount.
+   *  Owner tinggal klik "Simpan tandatangan" tanpa gores manual, atau
+   *  "Hapus & ulang" untuk mulai dari kanvas kosong. */
+  defaultSignatureUrl?: string | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -62,7 +67,29 @@ function SignaturePad({
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctxRef.current = ctx;
-  }, []);
+
+    // Preload default signature ke canvas (contain-fit, center).
+    if (defaultSignatureUrl) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const cw = rect.width;
+        const ch = rect.height;
+        // Fit gambar ke canvas dengan preserved aspect ratio (contain).
+        const scale = Math.min(cw / img.width, ch / img.height, 1);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const dx = (cw - w) / 2;
+        const dy = (ch - h) / 2;
+        ctx.drawImage(img, dx, dy, w, h);
+        const dataUrl = canvas.toDataURL("image/png");
+        setEncoded(dataUrl);
+        onChange?.(dataUrl);
+      };
+      img.src = defaultSignatureUrl;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultSignatureUrl]);
 
   function pos(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
@@ -158,11 +185,15 @@ export function SignatureBlock({
   role,
   signedUrl,
   signedAt,
+  defaultSignatureUrl,
 }: {
   tenancyId: string;
   role: "TENANT" | "OWNER";
   signedUrl: string | null;
   signedAt: Date | null;
+  /** TTD default owner. Hanya di-pass dari page ketika viewer adalah
+   *  owner sendiri (bukan tenant/admin) dan role="OWNER". */
+  defaultSignatureUrl?: string | null;
 }) {
   const [state, formAction] = useFormState(signContract, initial);
   const [hasSig, setHasSig] = useState(false);
@@ -211,10 +242,17 @@ export function SignatureBlock({
         {role === "OWNER" ? "PIHAK PERTAMA" : "PIHAK KEDUA"} — belum
         ditandatangani
       </div>
+      {defaultSignatureUrl && (
+        <div className="mb-2 rounded-md border border-brand-200 bg-brand-50/50 px-2 py-1 text-center text-[11px] text-brand-800">
+          ✍️ Tandatangan default sudah dimuat — klik <em>Simpan tandatangan</em>
+          {" "}untuk pakai, atau <em>Hapus &amp; ulang</em> untuk gambar manual.
+        </div>
+      )}
       <input type="hidden" name="tenancyId" value={tenancyId} />
       <SignaturePad
         inputName="signature"
         onChange={(v) => setHasSig(!!v)}
+        defaultSignatureUrl={defaultSignatureUrl ?? null}
       />
       <div className="mt-2 flex items-center justify-between">
         <SubmitBtn disabled={!hasSig} />

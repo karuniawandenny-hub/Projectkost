@@ -1,15 +1,27 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
+import { prisma } from "@/lib/prisma";
 import { PushToggle } from "@/components/PushToggle";
 import { PhoneEditForm } from "./PhoneEditForm";
 import { NotifPrefsForm } from "./NotifPrefsForm";
+import { DefaultSignatureForm } from "./DefaultSignatureForm";
 import { getMyNotifPrefs } from "./actions";
 
 export default async function ProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const notifPrefs = await getMyNotifPrefs();
+
+  // Owner/manager: ambil defaultSignatureUrl dari DB
+  const defaultSignatureUrl = canManageKos(user)
+    ? (
+        await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { defaultSignatureUrl: true },
+        })
+      )?.defaultSignatureUrl ?? null
+    : null;
 
   return (
     <div className="space-y-4">
@@ -48,6 +60,19 @@ export default async function ProfilePage() {
         <h2 className="mb-3 text-lg font-semibold">Kontak WhatsApp</h2>
         <PhoneEditForm currentPhone={user.phone} />
       </div>
+
+      {canManageKos(user) && (
+        <div className="card">
+          <h2 className="text-lg font-semibold">Tandatangan default</h2>
+          <p className="mt-1 mb-3 text-sm text-slate-600">
+            Set tandatangan digital yang otomatis muncul di canvas
+            setiap kontrak baru — Anda tinggal klik <em>Simpan tandatangan</em>{" "}
+            tanpa perlu tanda tangan ulang. Bisa dihapus atau diganti kapan
+            saja lewat tombol di bawah.
+          </p>
+          <DefaultSignatureForm currentUrl={defaultSignatureUrl} />
+        </div>
+      )}
 
       <div className="card">
         <h2 className="text-lg font-semibold">Notifikasi di HP</h2>

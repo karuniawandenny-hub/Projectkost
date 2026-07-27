@@ -22,6 +22,10 @@ model User {
   status          String    @default("ACTIVE") // "ACTIVE" | "PENDING" | "SUSPENDED"
   ktpPhotoUrl     String?
   selfiePhotoUrl  String?
+  // Tandatangan default untuk owner. Kalau di-set, canvas signature
+  // kontrak baru auto-populated dengan gambar ini. Owner tetap bisa
+  // "Hapus & ulang" atau tandatangan manual per kontrak.
+  defaultSignatureUrl String?
   onboardedAt     DateTime?
   // Preferensi notifikasi (JSON). Null = pakai default (semua on,
   // jam tenang aktif 22-06). Shape didefinisikan di src/lib/notif-prefs.ts.

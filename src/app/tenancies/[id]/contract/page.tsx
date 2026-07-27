@@ -41,7 +41,15 @@ export default async function ContractPage({
         include: {
           kos: {
             include: {
-              owner: { select: { id: true, name: true, email: true, phone: true } },
+              owner: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                  defaultSignatureUrl: true,
+                },
+              },
             },
           },
         },
@@ -246,6 +254,9 @@ export default async function ContractPage({
                 role="OWNER"
                 signedUrl={tenancy.ownerSignatureUrl ?? null}
                 signedAt={tenancy.ownerSignedAt ?? null}
+                defaultSignatureUrl={
+                  isOwner ? tenancy.room.kos.owner.defaultSignatureUrl : null
+                }
               />
               <div className="mt-1 font-semibold">
                 {tenancy.room.kos.owner.name}
@@ -258,6 +269,7 @@ export default async function ContractPage({
                 role="TENANT"
                 signedUrl={tenancy.tenantSignatureUrl ?? null}
                 signedAt={tenancy.tenantSignedAt ?? null}
+                defaultSignatureUrl={null}
               />
               <div className="mt-1 font-semibold">{tenancy.tenant.name}</div>
               <div className="text-xs text-slate-500">Penghuni</div>

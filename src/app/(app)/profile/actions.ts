@@ -1,9 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
+import { deleteUploadByUrl } from "@/lib/upload";
+import { logAudit } from "@/lib/audit";
 import {
   CATEGORIES_BY_ROLE,
   parsePrefs,
@@ -104,4 +109,133 @@ export async function getMyNotifPrefs() {
     select: { notifPrefs: true },
   });
   return parsePrefs(u?.notifPrefs ?? null);
+}
+
+export type SetDefaultSignatureState = {
+  error?: string;
+  success?: string;
+};
+
+const MAX_SIG_BYTES = 100 * 1024; // 100 KB
+
+const UPLOAD_ROOT =
+  process.env.UPLOADS_DIR && process.env.UPLOADS_DIR.length > 0
+    ? process.env.UPLOADS_DIR
+    : path.join(process.cwd(), "public", "uploads");
+
+/**
+ * Owner (atau ADMIN) set gambar TTD default. Sumber bisa dari:
+ *  1. Data URL PNG (hasil canvas signature pad di /profile), atau
+ *  2. Upload file PNG langsung.
+ *
+ * Disimpan sebagai file di uploads (bukan inline data URL) supaya
+ * ukuran DB tetap kecil & cache/CDN bisa optimize. File lama otomatis
+ * dihapus setiap ganti.
+ */
+export async function setDefaultSignature(
+  _prev: SetDefaultSignatureState,
+  formData: FormData
+): Promise<SetDefaultSignatureState> {
+  const me = await requireUser();
+  if (!canManageKos(me) && me.role !== "ADMIN") {
+    return { error: "Hanya pemilik/pengelola yang bisa set TTD default." };
+  }
+
+  const dataUrl = String(formData.get("signature") ?? "");
+  const file = formData.get("file");
+
+  let bytes: Buffer;
+  if (dataUrl) {
+    const m = dataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) return { error: "Format tandatangan tidak valid." };
+    if (dataUrl.length > MAX_SIG_BYTES * 1.4) {
+      return { error: "Tandatangan terlalu besar. Coba gores lebih singkat." };
+    }
+    if (m[1].length < 200) {
+      return {
+        error:
+          "Tandatangan terlihat kosong. Goreskan tanda tangan di kotak dulu.",
+      };
+    }
+    bytes = Buffer.from(m[1], "base64");
+  } else if (file instanceof File && file.size > 0) {
+    if (file.size > MAX_SIG_BYTES) {
+      return { error: "File terlalu besar (maks 100 KB)." };
+    }
+    if (file.type !== "image/png") {
+      return { error: "File harus PNG." };
+    }
+    bytes = Buffer.from(await file.arrayBuffer());
+  } else {
+    return { error: "Belum ada tandatangan yang dikirim." };
+  }
+
+  // Simpan ke uploads
+  const subdir = `users/${me.id}/signature`;
+  const dir = path.join(UPLOAD_ROOT, subdir);
+  await mkdir(dir, { recursive: true });
+  const filename = `default-${Date.now()}-${randomBytes(4).toString("hex")}.png`;
+  await writeFile(path.join(dir, filename), bytes);
+  const url = `/uploads/${subdir}/${filename}`;
+
+  // Ambil existing untuk dihapus.
+  const existing = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { defaultSignatureUrl: true },
+  });
+
+  await prisma.user.update({
+    where: { id: me.id },
+    data: { defaultSignatureUrl: url },
+  });
+
+  if (existing?.defaultSignatureUrl) {
+    await deleteUploadByUrl(existing.defaultSignatureUrl);
+  }
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.APPROVE",
+    entityType: "User",
+    entityId: me.id,
+    metadata: { subAction: "SET_DEFAULT_SIGNATURE" },
+  });
+
+  revalidatePath("/profile");
+  return { success: "Tandatangan default tersimpan." };
+}
+
+/**
+ * Hapus TTD default. Setelah dihapus, canvas kontrak baru akan
+ * kembali kosong (owner harus tandatangan manual). Silent no-op
+ * kalau memang belum ada default — form UI hanya render tombol ini
+ * ketika default sudah aktif, jadi race-condition harmless.
+ */
+export async function clearDefaultSignature(): Promise<void> {
+  const me = await requireUser();
+  if (!canManageKos(me) && me.role !== "ADMIN") return;
+
+  const existing = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { defaultSignatureUrl: true },
+  });
+  if (!existing?.defaultSignatureUrl) return;
+
+  await prisma.user.update({
+    where: { id: me.id },
+    data: { defaultSignatureUrl: null },
+  });
+  await deleteUploadByUrl(existing.defaultSignatureUrl);
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.APPROVE",
+    entityType: "User",
+    entityId: me.id,
+    metadata: { subAction: "CLEAR_DEFAULT_SIGNATURE" },
+  });
+
+  revalidatePath("/profile");
 }
