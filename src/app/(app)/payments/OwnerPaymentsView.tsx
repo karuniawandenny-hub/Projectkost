@@ -412,6 +412,9 @@ function PendingTable({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
+              <th className="w-12 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                No.
+              </th>
               <SortHeader
                 label="Penghuni"
                 active={sort.key === "nama"}
@@ -440,11 +443,14 @@ function PendingTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {items.map((p) => {
+            {items.map((p, idx) => {
               const isOpen = expandedId === p.id;
               return (
                 <Fragment key={p.id}>
                   <tr className="hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
+                      {idx + 1}
+                    </td>
                     <td className="px-3 py-2.5 font-medium text-slate-800">
                       {p.tenantName}
                     </td>
@@ -486,7 +492,7 @@ function PendingTable({
                   </tr>
                   {isOpen && (
                     <tr className="bg-slate-50">
-                      <td colSpan={6} className="px-3 py-3">
+                      <td colSpan={7} className="px-3 py-3">
                         {p.note && (
                           <div className="mb-2 text-xs text-slate-600">
                             Catatan penghuni: {p.note}
@@ -600,6 +606,9 @@ function DueTable({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
+              <th className="w-12 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                No.
+              </th>
               <SortHeader
                 label="Penghuni"
                 active={sort.key === "nama"}
@@ -631,11 +640,14 @@ function DueTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {items.map((p) => {
+            {items.map((p, idx) => {
               const isOpen = expandedId === p.id;
               return (
                 <Fragment key={p.id}>
                   <tr className="hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
+                      {idx + 1}
+                    </td>
                     <td className="px-3 py-2.5 font-medium text-slate-800">
                       {p.tenantName}
                     </td>
@@ -672,7 +684,7 @@ function DueTable({
                   </tr>
                   {isOpen && (
                     <tr className="bg-amber-50">
-                      <td colSpan={6} className="px-3 py-3">
+                      <td colSpan={7} className="px-3 py-3">
                         <DueActionForm p={p} />
                       </td>
                     </tr>
@@ -775,6 +787,9 @@ function HistoryTable({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
+              <th className="w-12 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                No.
+              </th>
               <SortHeader
                 label="Penghuni"
                 active={sort.key === "nama"}
@@ -811,12 +826,15 @@ function HistoryTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {items.map((p) => {
+            {items.map((p, idx) => {
               const isVerified = p.status === "VERIFIED";
               const isRejected = p.status === "REJECTED";
               const isManual = !!p.reviewNote?.startsWith("[MANUAL]");
               return (
                 <tr key={p.id} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
+                    {idx + 1}
+                  </td>
                   <td className="px-3 py-2.5 font-medium text-slate-800">
                     {p.tenantName}
                   </td>
