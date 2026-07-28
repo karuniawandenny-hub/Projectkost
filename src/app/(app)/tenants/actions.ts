@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { ensureBillsForOneTenancy } from "@/lib/billing";
 import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email";
@@ -238,6 +239,17 @@ export async function updateTenancyStartDate(
     data: { startDate },
   });
 
+  // Cleanup tagihan yang tidak valid lagi karena startDate berubah.
+  // Contoh: sebelumnya startDate Juni → tagihan Juni digenerate. Owner
+  // update ke 30 Juli → tagihan Juni yang statusnya masih DUE/REJECTED
+  // harus dihapus. PENDING/VERIFIED dilindungi (uang sudah/akan masuk).
+  //
+  // ensureBillsForOneTenancy juga sudah melakukan cleanup ini di
+  // internal-nya (self-healing), tapi kita jalankan eksplisit di sini
+  // supaya efek langsung terlihat + selanjutnya regenerate periode
+  // baru sesuai startDate baru.
+  await ensureBillsForOneTenancy(tenancy.id);
+
   // Notifikasi ke penghuni — agar mereka tahu jatuh tempo bulanan berubah.
   const startStr = startDate.toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -256,6 +268,7 @@ export async function updateTenancyStartDate(
   revalidatePath("/dashboard");
   revalidatePath("/kos");
   revalidatePath(`/kos/${tenancy.room.kosId}`);
+  revalidatePath("/payments");
   return { success: `Tanggal mulai sewa ${tenancy.tenant.name} diperbarui ke ${startStr}.` };
 }
 

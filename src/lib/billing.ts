@@ -225,6 +225,15 @@ export async function ensureBillsForAllActive() {
 }
 
 /**
+ * Generate ulang tagihan untuk SATU tenancy. Dipakai setelah owner
+ * update startDate — cleanup + regenerate langsung terjadi tanpa
+ * harus scan seluruh tenancy aktif.
+ */
+export async function ensureBillsForOneTenancy(tenancyId: string) {
+  return ensureBillsFor({ id: tenancyId });
+}
+
+/**
  * Generate tagihan untuk tenancy yang dimiliki user tertentu (sebagai
  * tenant atau owner). Dipanggil lazy saat user buka dashboard/payments.
  *
@@ -263,6 +272,33 @@ async function ensureBillsForTenancy(
   existing: { periodMonth: number; periodYear: number }[]
 ): Promise<number> {
   const today = new Date();
+
+  // Cleanup pass: hapus tagihan DUE/REJECTED untuk periode SEBELUM
+  // startDate. Skenario: owner sempat set startDate lebih awal (mis.
+  // Juni), tagihan Juni terlanjur digenerate. Lalu owner update
+  // startDate ke Juli — tagihan Juni harus hilang, bukan tetap
+  // menghantui sebagai tunggakan palsu.
+  //
+  // Aman karena:
+  //  - DUE     = tagihan otomatis belum ada aktivitas pembayaran
+  //  - REJECTED = bukti pernah ditolak, tidak merepresentasikan uang
+  //    masuk. Owner + tenant sepakat itu bukan pembayaran sah.
+  //  - PENDING & VERIFIED tidak disentuh — uang sudah/akan masuk,
+  //    tidak boleh dihapus otomatis. Kalau owner mundurkan startDate
+  //    tapi ada VERIFIED di periode sebelumnya, biarkan sebagai
+  //    "kelebihan bayar" untuk dihandle manual owner.
+  const startY = startDate.getFullYear();
+  const startM = startDate.getMonth() + 1; // 1-12
+  await prisma.payment.deleteMany({
+    where: {
+      tenancyId,
+      status: { in: ["DUE", "REJECTED"] },
+      OR: [
+        { periodYear: { lt: startY } },
+        { periodYear: startY, periodMonth: { lt: startM } },
+      ],
+    },
+  });
 
   // Seed = startDate (tanggal komitmen sewa yang di-set owner saat
   // approve). Sebelumnya kami pakai max(startDate, createdAt) untuk
