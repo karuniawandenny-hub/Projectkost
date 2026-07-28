@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { viewerUrl } from "@/lib/viewer";
 import { OverdueBadge } from "@/components/OverdueBadge";
@@ -51,6 +51,50 @@ export type PaymentItem = {
   dueDate: string | null;
 };
 
+// ---------- Sorting ----------
+type SortKey = "nama" | "amount" | "overdue" | "reviewedAt" | "periode";
+type SortDir = "asc" | "desc";
+type SortState = { key: SortKey; dir: SortDir };
+
+function overdueDays(p: PaymentItem): number {
+  if (!p.dueDate) return -1;
+  const info = computeOverdue(p.dueDate, p.status);
+  return info?.daysOverdue ?? -1;
+}
+function periodNum(p: PaymentItem): number {
+  return p.periodYear * 12 + p.periodMonth;
+}
+
+function sortItems(items: PaymentItem[], s: SortState): PaymentItem[] {
+  const sign = s.dir === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    let cmp = 0;
+    switch (s.key) {
+      case "nama":
+        cmp = a.tenantName.localeCompare(b.tenantName);
+        break;
+      case "amount":
+        cmp = a.amount - b.amount;
+        break;
+      case "overdue":
+        cmp = overdueDays(a) - overdueDays(b);
+        break;
+      case "reviewedAt": {
+        const av = a.reviewedAt ? new Date(a.reviewedAt).getTime() : 0;
+        const bv = b.reviewedAt ? new Date(b.reviewedAt).getTime() : 0;
+        cmp = av - bv;
+        break;
+      }
+      case "periode":
+        cmp = periodNum(a) - periodNum(b);
+        break;
+    }
+    if (cmp !== 0) return cmp * sign;
+    // Tie-breaker: nama asc supaya stabil.
+    return a.tenantName.localeCompare(b.tenantName);
+  });
+}
+
 export function OwnerPaymentsView({
   pending,
   due,
@@ -62,14 +106,32 @@ export function OwnerPaymentsView({
   due: PaymentItem[];
   history: PaymentItem[];
   period: { month: number; year: number };
-  // Untuk info di dropdown periode — jumlah row tiap periode yang ada
   historyCountsByPeriod: { month: number; year: number; count: number }[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
+  const [kosFilter, setKosFilter] = useState<string>("all");
 
-  const applySearch = (p: PaymentItem): boolean => {
+  // Sort state per section — default berbeda:
+  // - Menunggu: nama asc (biar reviewer verify berurutan)
+  // - Tagihan terbuka: overdue desc (terlama telat di paling atas)
+  // - Riwayat: reviewedAt desc (verifikasi terbaru dulu)
+  const [pendingSort, setPendingSort] = useState<SortState>({
+    key: "nama",
+    dir: "asc",
+  });
+  const [dueSort, setDueSort] = useState<SortState>({
+    key: "overdue",
+    dir: "desc",
+  });
+  const [historySort, setHistorySort] = useState<SortState>({
+    key: "reviewedAt",
+    dir: "desc",
+  });
+
+  const applyFilters = (p: PaymentItem): boolean => {
+    if (kosFilter !== "all" && p.kosId !== kosFilter) return false;
     const q = search.trim().toLowerCase();
     if (!q) return true;
     return (
@@ -80,19 +142,19 @@ export function OwnerPaymentsView({
   };
 
   const pendingFiltered = useMemo(
-    () => pending.filter(applySearch),
+    () => sortItems(pending.filter(applyFilters), pendingSort),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pending, search]
+    [pending, search, kosFilter, pendingSort]
   );
   const dueFiltered = useMemo(
-    () => due.filter(applySearch),
+    () => sortItems(due.filter(applyFilters), dueSort),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [due, search]
+    [due, search, kosFilter, dueSort]
   );
   const historyFiltered = useMemo(
-    () => history.filter(applySearch),
+    () => sortItems(history.filter(applyFilters), historySort),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [history, search]
+    [history, search, kosFilter, historySort]
   );
 
   const stats = useMemo(() => {
@@ -101,9 +163,6 @@ export function OwnerPaymentsView({
     const verifiedAmount = history
       .filter((p) => p.status === "VERIFIED")
       .reduce((s, p) => s + p.amount, 0);
-    // Telat > 7 hari = level "critical" — hitung dari DUE + REJECTED
-    // di periode yang sedang ditampilkan. REJECTED juga counted karena
-    // bukti mereka ditolak dan belum kirim ulang.
     const criticalOverdue = [...due, ...history.filter((p) => p.status === "REJECTED")]
       .map((p) => computeOverdue(p.dueDate ?? "", p.status))
       .filter((info): info is NonNullable<typeof info> => !!info && info.level === "critical").length;
@@ -116,6 +175,17 @@ export function OwnerPaymentsView({
       verifiedAmount,
       criticalOverdue,
     };
+  }, [pending, due, history]);
+
+  // Kos options utk dropdown filter — union semua kos dari 3 dataset.
+  const kosOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of [...pending, ...due, ...history]) {
+      map.set(p.kosId, p.kosName);
+    }
+    return [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [pending, due, history]);
 
   function changePeriod(month: number, year: number) {
@@ -145,7 +215,26 @@ export function OwnerPaymentsView({
               🔍
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {kosOptions.length > 1 && (
+              <>
+                <label className="text-xs font-medium text-slate-600">
+                  Kos:
+                </label>
+                <select
+                  value={kosFilter}
+                  onChange={(e) => setKosFilter(e.target.value)}
+                  className="input h-10 text-sm"
+                >
+                  <option value="all">Semua Kos ({kosOptions.length})</option>
+                  {kosOptions.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
             <label className="text-xs font-medium text-slate-600">
               Periode:
             </label>
@@ -196,17 +285,14 @@ export function OwnerPaymentsView({
         tone="amber"
       >
         {pending.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Tidak ada pembayaran menunggu verifikasi di {periodLabel}.
-          </div>
+          <EmptyRow>Tidak ada pembayaran menunggu verifikasi di {periodLabel}.</EmptyRow>
         ) : pendingFiltered.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Tidak ada yang cocok dengan pencarian.
-          </div>
+          <EmptyRow>Tidak ada yang cocok dengan pencarian/filter.</EmptyRow>
         ) : (
-          <KosGroupedList
+          <PendingTable
             items={pendingFiltered}
-            renderRow={(p) => <PendingRow key={p.id} p={p} />}
+            sort={pendingSort}
+            onSort={setPendingSort}
           />
         )}
       </Section>
@@ -218,24 +304,17 @@ export function OwnerPaymentsView({
         count={dueFiltered.length}
       >
         {due.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Tidak ada tagihan terbuka di {periodLabel}.
-          </div>
+          <EmptyRow>Tidak ada tagihan terbuka di {periodLabel}.</EmptyRow>
         ) : dueFiltered.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Tidak ada yang cocok dengan pencarian.
-          </div>
+          <EmptyRow>Tidak ada yang cocok dengan pencarian/filter.</EmptyRow>
         ) : (
           <>
             <p className="mb-2 text-xs text-slate-500">
               Penghuni belum upload bukti. Kalau Anda menerima pembayaran di
-              luar app (cash / transfer manual), bisa tandai lunas via tombol
-              di setiap baris.
+              luar app (cash / transfer manual), bisa tandai lunas via tombol di
+              setiap baris.
             </p>
-            <KosGroupedList
-              items={dueFiltered}
-              renderRow={(p) => <DueRow key={p.id} p={p} />}
-            />
+            <DueTable items={dueFiltered} sort={dueSort} onSort={setDueSort} />
           </>
         )}
       </Section>
@@ -247,18 +326,17 @@ export function OwnerPaymentsView({
         count={historyFiltered.length}
       >
         {history.length === 0 ? (
-          <div className="card text-sm text-slate-500">
+          <EmptyRow>
             Belum ada riwayat verifikasi/tolak di {periodLabel}. Ganti periode
             di toolbar untuk lihat bulan lain.
-          </div>
+          </EmptyRow>
         ) : historyFiltered.length === 0 ? (
-          <div className="card text-sm text-slate-500">
-            Tidak ada yang cocok dengan pencarian.
-          </div>
+          <EmptyRow>Tidak ada yang cocok dengan pencarian/filter.</EmptyRow>
         ) : (
-          <KosGroupedList
+          <HistoryTable
             items={historyFiltered}
-            renderRow={(p) => <HistoryRow key={p.id} p={p} />}
+            sort={historySort}
+            onSort={setHistorySort}
           />
         )}
       </Section>
@@ -267,7 +345,619 @@ export function OwnerPaymentsView({
 }
 
 // =========================
-// Sub-components
+// Table components
+// =========================
+//
+// Pola responsive: desktop (md+) render sebagai <table> dengan header
+// sortable. Mobile (<md) render sebagai card compact. Datasetnya sama
+// — cuma tampilan yang beda. Dua-duanya di-render tapi disembunyikan
+// via Tailwind hidden/block class, sehingga tidak perlu dua kali fetch.
+
+function SortHeader({
+  label,
+  active,
+  dir,
+  align = "left",
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  align?: "left" | "right";
+  onClick: () => void;
+}) {
+  const arrow = active ? (dir === "asc" ? "↑" : "↓") : "↕";
+  const alignClass = align === "right" ? "text-right" : "text-left";
+  return (
+    <th className={`px-3 py-2 ${alignClass}`}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide ${
+          active ? "text-slate-800" : "text-slate-500 hover:text-slate-700"
+        }`}
+      >
+        {label}
+        <span className={active ? "opacity-100" : "opacity-40"}>{arrow}</span>
+      </button>
+    </th>
+  );
+}
+
+function toggleSort(
+  current: SortState,
+  key: SortKey,
+  defaultDir: SortDir
+): SortState {
+  if (current.key !== key) return { key, dir: defaultDir };
+  return { key, dir: current.dir === "asc" ? "desc" : "asc" };
+}
+
+// ---------- Pending ----------
+
+function PendingTable({
+  items,
+  sort,
+  onSort,
+}: {
+  items: PaymentItem[];
+  sort: SortState;
+  onSort: (s: SortState) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  return (
+    <>
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white md:block">
+        <table className="w-full text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <SortHeader
+                label="Penghuni"
+                active={sort.key === "nama"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "nama", "asc"))}
+              />
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Kamar · Kos
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Periode
+              </th>
+              <SortHeader
+                label="Jumlah"
+                align="right"
+                active={sort.key === "amount"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "amount", "desc"))}
+              />
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Bukti
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((p) => {
+              const isOpen = expandedId === p.id;
+              return (
+                <Fragment key={p.id}>
+                  <tr className="hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-medium text-slate-800">
+                      {p.tenantName}
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">
+                      Kamar {p.roomName}
+                      <span className="ml-1 text-xs text-slate-400">
+                        · {p.kosName}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">
+                      {MONTHS[p.periodMonth - 1]} {p.periodYear}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                      {rupiah(p.amount)}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {p.proofUrl ? (
+                        <a
+                          href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
+                          className="text-sm text-brand-700 hover:underline"
+                        >
+                          📎 Lihat
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId(isOpen ? null : p.id)
+                        }
+                        className="text-sm font-medium text-brand-700 hover:underline"
+                      >
+                        {isOpen ? "Tutup" : "Verifikasi"}
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="bg-slate-50">
+                      <td colSpan={6} className="px-3 py-3">
+                        {p.note && (
+                          <div className="mb-2 text-xs text-slate-600">
+                            Catatan penghuni: {p.note}
+                          </div>
+                        )}
+                        <PendingActionForm p={p} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-2 md:hidden">
+        {items.map((p) => (
+          <PendingCard key={p.id} p={p} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PendingCard({ p }: { p: PaymentItem }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium text-slate-800 truncate">
+            {p.tenantName}
+          </div>
+          <div className="text-xs text-slate-500">
+            Kamar {p.roomName} · {p.kosName}
+          </div>
+          <div className="text-xs text-slate-500">
+            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
+          </div>
+          {p.note && (
+            <div className="text-xs text-slate-500 mt-0.5">
+              Catatan: {p.note}
+            </div>
+          )}
+        </div>
+        {p.proofUrl && (
+          <a
+            href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
+            className="shrink-0 text-sm font-medium text-brand-700 hover:underline"
+          >
+            📎 Bukti
+          </a>
+        )}
+      </div>
+      <PendingActionForm p={p} />
+    </div>
+  );
+}
+
+function PendingActionForm({ p }: { p: PaymentItem }) {
+  return (
+    <form
+      action={verifyPayment}
+      className="flex flex-wrap items-end gap-2 rounded-md bg-slate-50 p-2"
+    >
+      <input type="hidden" name="paymentId" value={p.id} />
+      <div className="flex-1 min-w-[180px]">
+        <input
+          name="reviewNote"
+          className="input h-9 text-sm"
+          placeholder="Catatan review (opsional, wajib kalau menolak)"
+        />
+      </div>
+      <button
+        name="action"
+        value="VERIFY"
+        type="submit"
+        className="btn-success h-9 px-3 text-sm"
+      >
+        Setujui
+      </button>
+      <button
+        name="action"
+        value="REJECT"
+        type="submit"
+        className="btn-danger h-9 px-3 text-sm"
+      >
+        Tolak
+      </button>
+    </form>
+  );
+}
+
+// ---------- Due ----------
+
+function DueTable({
+  items,
+  sort,
+  onSort,
+}: {
+  items: PaymentItem[];
+  sort: SortState;
+  onSort: (s: SortState) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  return (
+    <>
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white md:block">
+        <table className="w-full text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <SortHeader
+                label="Penghuni"
+                active={sort.key === "nama"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "nama", "asc"))}
+              />
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Kamar · Kos
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Periode
+              </th>
+              <SortHeader
+                label="Jumlah"
+                align="right"
+                active={sort.key === "amount"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "amount", "desc"))}
+              />
+              <SortHeader
+                label="Telat"
+                active={sort.key === "overdue"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "overdue", "desc"))}
+              />
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Aksi
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((p) => {
+              const isOpen = expandedId === p.id;
+              return (
+                <Fragment key={p.id}>
+                  <tr className="hover:bg-slate-50/60">
+                    <td className="px-3 py-2.5 font-medium text-slate-800">
+                      {p.tenantName}
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">
+                      Kamar {p.roomName}
+                      <span className="ml-1 text-xs text-slate-400">
+                        · {p.kosName}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-600">
+                      {MONTHS[p.periodMonth - 1]} {p.periodYear}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                      {rupiah(p.amount)}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <OverdueBadge
+                        dueDate={p.dueDate}
+                        status={p.status}
+                        size="xs"
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId(isOpen ? null : p.id)
+                        }
+                        className="text-sm font-medium text-brand-700 hover:underline"
+                      >
+                        {isOpen ? "Batal" : "Tandai lunas"}
+                      </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="bg-amber-50">
+                      <td colSpan={6} className="px-3 py-3">
+                        <DueActionForm p={p} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-2 md:hidden">
+        {items.map((p) => (
+          <DueCard key={p.id} p={p} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function DueCard({ p }: { p: PaymentItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-slate-800 truncate">
+              {p.tenantName}
+            </span>
+            <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
+          </div>
+          <div className="text-xs text-slate-500">
+            Kamar {p.roomName} · {p.kosName}
+          </div>
+          <div className="text-xs text-slate-500">
+            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="shrink-0 text-sm font-medium text-brand-700 hover:underline"
+        >
+          {open ? "Batal" : "Tandai lunas"}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-2">
+          <DueActionForm p={p} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DueActionForm({ p }: { p: PaymentItem }) {
+  return (
+    <form
+      action={verifyPaymentManual}
+      className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
+    >
+      <input type="hidden" name="paymentId" value={p.id} />
+      <div className="text-xs text-amber-800 mb-2">
+        ⚠️ Tandai lunas tanpa bukti upload — hanya gunakan kalau Anda yakin
+        pembayaran sudah diterima di luar app.
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <input
+          name="note"
+          required
+          maxLength={500}
+          className="input h-9 text-sm flex-1 min-w-[180px]"
+          placeholder="Mis. cash 26 Mei 2026, transfer BCA langsung"
+        />
+        <button type="submit" className="btn-success h-9 px-3 text-sm">
+          Tandai Lunas
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ---------- History ----------
+
+function HistoryTable({
+  items,
+  sort,
+  onSort,
+}: {
+  items: PaymentItem[];
+  sort: SortState;
+  onSort: (s: SortState) => void;
+}) {
+  return (
+    <>
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white md:block">
+        <table className="w-full text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50">
+            <tr>
+              <SortHeader
+                label="Penghuni"
+                active={sort.key === "nama"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "nama", "asc"))}
+              />
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Kamar · Kos
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Periode
+              </th>
+              <SortHeader
+                label="Jumlah"
+                align="right"
+                active={sort.key === "amount"}
+                dir={sort.dir}
+                onClick={() => onSort(toggleSort(sort, "amount", "desc"))}
+              />
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Status
+              </th>
+              <SortHeader
+                label="Verifikasi"
+                active={sort.key === "reviewedAt"}
+                dir={sort.dir}
+                onClick={() =>
+                  onSort(toggleSort(sort, "reviewedAt", "desc"))
+                }
+              />
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Bukti
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {items.map((p) => {
+              const isVerified = p.status === "VERIFIED";
+              const isRejected = p.status === "REJECTED";
+              const isManual = !!p.reviewNote?.startsWith("[MANUAL]");
+              return (
+                <tr key={p.id} className="hover:bg-slate-50/60">
+                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                    {p.tenantName}
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    Kamar {p.roomName}
+                    <span className="ml-1 text-xs text-slate-400">
+                      · {p.kosName}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {MONTHS[p.periodMonth - 1]} {p.periodYear}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                    {rupiah(p.amount)}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-1">
+                      {isVerified && (
+                        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                          {isManual ? "Manual" : "Lunas"}
+                        </span>
+                      )}
+                      {isRejected && (
+                        <>
+                          <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
+                            Ditolak
+                          </span>
+                          <OverdueBadge
+                            dueDate={p.dueDate}
+                            status={p.status}
+                            size="xs"
+                          />
+                        </>
+                      )}
+                    </div>
+                    {p.reviewNote && (
+                      <div className="mt-0.5 text-xs text-slate-500 line-clamp-1">
+                        {p.reviewNote}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-slate-500">
+                    {p.reviewedAt
+                      ? new Date(p.reviewedAt).toLocaleDateString("id-ID", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {p.proofUrl ? (
+                      <a
+                        href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
+                        className="text-sm text-brand-700 hover:underline"
+                      >
+                        📎 Lihat
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-2 md:hidden">
+        {items.map((p) => (
+          <HistoryCard key={p.id} p={p} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function HistoryCard({ p }: { p: PaymentItem }) {
+  const isVerified = p.status === "VERIFIED";
+  const isRejected = p.status === "REJECTED";
+  const isManual = !!p.reviewNote?.startsWith("[MANUAL]");
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-slate-800 truncate">
+              {p.tenantName}
+            </span>
+            {isVerified && (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
+                {isManual ? "Manual" : "Lunas"}
+              </span>
+            )}
+            {isRejected && (
+              <>
+                <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
+                  Ditolak
+                </span>
+                <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
+              </>
+            )}
+          </div>
+          <div className="text-xs text-slate-500 mt-0.5">
+            Kamar {p.roomName} · {p.kosName}
+          </div>
+          <div className="text-xs text-slate-500">
+            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
+            {p.reviewedAt && (
+              <>
+                {" · "}
+                {new Date(p.reviewedAt).toLocaleDateString("id-ID", {
+                  day: "2-digit",
+                  month: "short",
+                })}
+              </>
+            )}
+          </div>
+          {p.reviewNote && (
+            <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+              Catatan: {p.reviewNote}
+            </div>
+          )}
+        </div>
+        {p.proofUrl && (
+          <a
+            href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
+            className="shrink-0 text-xs text-brand-700 hover:underline"
+          >
+            📎 Bukti
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =========================
+// Small UI primitives
 // =========================
 
 function Section({
@@ -309,245 +999,10 @@ function Section({
   );
 }
 
-function KosGroupedList({
-  items,
-  renderRow,
-}: {
-  items: PaymentItem[];
-  renderRow: (p: PaymentItem) => React.ReactNode;
-}) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-
-  const groups = useMemo(() => {
-    const byKos = new Map<string, { name: string; items: PaymentItem[] }>();
-    for (const p of items) {
-      const g = byKos.get(p.kosId) ?? { name: p.kosName, items: [] };
-      g.items.push(p);
-      byKos.set(p.kosId, g);
-    }
-    return [...byKos.entries()]
-      .map(([id, g]) => ({ id, name: g.name, items: g.items }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
-
+function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
-      {groups.map((g, idx) => {
-        const userState = collapsed[g.id];
-        const isCollapsed = userState === undefined ? false : userState;
-        const totalAmount = g.items.reduce((s, p) => s + p.amount, 0);
-        return (
-          <div
-            key={g.id}
-            className="overflow-hidden rounded-lg border border-slate-200 bg-white"
-          >
-            <button
-              type="button"
-              onClick={() =>
-                setCollapsed((c) => ({ ...c, [g.id]: !isCollapsed }))
-              }
-              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-slate-50"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs text-slate-400">
-                  {isCollapsed ? "▶" : "▼"}
-                </span>
-                <span className="truncate font-semibold text-slate-800">
-                  {g.name}
-                </span>
-                <span className="text-xs text-slate-500">
-                  ({g.items.length})
-                </span>
-              </div>
-              <span className="shrink-0 text-xs font-medium text-slate-600 tabular-nums">
-                {rupiahShort(totalAmount)}
-              </span>
-            </button>
-            {!isCollapsed && (
-              <ul className="divide-y divide-slate-100">
-                {g.items.map((p) => (
-                  <li key={p.id}>{renderRow(p)}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PendingRow({ p }: { p: PaymentItem }) {
-  return (
-    <div className="px-3 py-3 space-y-2 hover:bg-slate-50/60">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="font-medium text-slate-800">
-            {p.tenantName}{" "}
-            <span className="text-xs font-normal text-slate-500">
-              · Kamar {p.roomName}
-            </span>
-          </div>
-          <div className="text-xs text-slate-500">
-            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
-          </div>
-          {p.note && (
-            <div className="text-xs text-slate-500 mt-0.5">
-              Catatan penghuni: {p.note}
-            </div>
-          )}
-        </div>
-        {p.proofUrl && (
-          <a
-            href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
-            className="shrink-0 text-sm font-medium text-brand-700 hover:underline"
-          >
-            📎 Lihat bukti
-          </a>
-        )}
-      </div>
-      <form
-        action={verifyPayment}
-        className="flex flex-wrap items-end gap-2 rounded-md bg-slate-50 p-2"
-      >
-        <input type="hidden" name="paymentId" value={p.id} />
-        <div className="flex-1 min-w-[180px]">
-          <input
-            name="reviewNote"
-            className="input h-9 text-sm"
-            placeholder="Catatan review (opsional, wajib kalau menolak)"
-          />
-        </div>
-        <button
-          name="action"
-          value="VERIFY"
-          type="submit"
-          className="btn-success h-9 px-3 text-sm"
-        >
-          Setujui
-        </button>
-        <button
-          name="action"
-          value="REJECT"
-          type="submit"
-          className="btn-danger h-9 px-3 text-sm"
-        >
-          Tolak
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function DueRow({ p }: { p: PaymentItem }) {
-  const [openManual, setOpenManual] = useState(false);
-  return (
-    <div className="px-3 py-3 hover:bg-slate-50/60">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-slate-800">{p.tenantName}</span>
-            <span className="text-xs font-normal text-slate-500">
-              · Kamar {p.roomName}
-            </span>
-            <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
-          </div>
-          <div className="text-xs text-slate-500">
-            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpenManual((v) => !v)}
-          className="shrink-0 text-sm font-medium text-brand-700 hover:underline"
-        >
-          {openManual ? "Batal" : "Tandai lunas manual"}
-        </button>
-      </div>
-      {openManual && (
-        <form
-          action={verifyPaymentManual}
-          className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
-        >
-          <input type="hidden" name="paymentId" value={p.id} />
-          <div className="text-xs text-amber-800 mb-2">
-            ⚠️ Tandai lunas tanpa bukti upload — hanya gunakan kalau Anda
-            yakin pembayaran sudah diterima di luar app.
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <input
-              name="note"
-              required
-              maxLength={500}
-              className="input h-9 text-sm flex-1 min-w-[180px]"
-              placeholder="Mis. cash 26 Mei 2026, transfer BCA langsung"
-            />
-            <button type="submit" className="btn-success h-9 px-3 text-sm">
-              Tandai Lunas
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
-  );
-}
-
-function HistoryRow({ p }: { p: PaymentItem }) {
-  const isVerified = p.status === "VERIFIED";
-  const isRejected = p.status === "REJECTED";
-  const isManual = !!p.reviewNote?.startsWith("[MANUAL]");
-  return (
-    <div className="px-3 py-2.5 hover:bg-slate-50/60">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-slate-800 truncate">
-              {p.tenantName}
-            </span>
-            <span className="text-xs text-slate-500">
-              · Kamar {p.roomName}
-            </span>
-            {isVerified && (
-              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800">
-                {isManual ? "Manual" : "Lunas"}
-              </span>
-            )}
-            {isRejected && (
-              <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800">
-                Ditolak
-              </span>
-            )}
-            {isRejected && (
-              <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
-            )}
-          </div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
-            {p.reviewedAt && (
-              <>
-                {" · "}
-                {new Date(p.reviewedAt).toLocaleDateString("id-ID", {
-                  day: "2-digit",
-                  month: "short",
-                })}
-              </>
-            )}
-          </div>
-          {p.reviewNote && (
-            <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
-              Catatan: {p.reviewNote}
-            </div>
-          )}
-        </div>
-        {p.proofUrl && (
-          <a
-            href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
-            className="shrink-0 text-xs text-brand-700 hover:underline"
-          >
-            📎 Bukti
-          </a>
-        )}
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">
+      {children}
     </div>
   );
 }
@@ -603,8 +1058,6 @@ function PeriodPicker({
   historyCounts: { month: number; year: number; count: number }[];
   onChange: (m: number, y: number) => void;
 }) {
-  // Build list of periods to show in dropdown — union dari (bulan berjalan
-  // ± 12 bulan) dan periode yang punya data historical. Diurut desc.
   const options = useMemo(() => {
     const now = new Date();
     const set = new Set<string>();
