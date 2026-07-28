@@ -262,10 +262,29 @@ async function ensureBillsForTenancy(
   monthlyPrice: number,
   existing: { periodMonth: number; periodYear: number }[]
 ): Promise<number> {
-  const seed = new Date(
-    Math.max(startDate.getTime(), createdAt.getTime())
-  );
   const today = new Date();
+
+  // Seed = startDate (tanggal komitmen sewa yang di-set owner saat
+  // approve). Sebelumnya kami pakai max(startDate, createdAt) untuk
+  // cegah bill retroaktif "aneh", tapi itu memecah use case sah:
+  // owner sering approve tenant beberapa hari SETELAH tenant benar-
+  // benar masuk (mis. approve 15 Juli tapi tenant masuk 30 Juni).
+  // Dengan max(), Juni-nya di-skip dan tenant tidak punya tagihan
+  // apa pun sampai anniversary Juli tiba.
+  //
+  // Cap anti-abuse: max 24 bulan lookback. Kalau owner iseng set
+  // startDate bertahun-tahun lalu, tetap batasi supaya tidak
+  // membanjiri DB dengan tagihan retroaktif. Loop bawah masih di-cap
+  // ke 36 iterasi sebagai safety-net kedua.
+  void createdAt; // sudah tidak dipakai lagi; sinyal jelas ke reviewer
+  const twentyFourMonthsAgo = new Date(
+    today.getFullYear(),
+    today.getMonth() - 24,
+    1
+  );
+  const seed = new Date(
+    Math.max(startDate.getTime(), twentyFourMonthsAgo.getTime())
+  );
 
   const existingKeys = new Set(
     existing.map((p) => `${p.periodYear}-${p.periodMonth}`)
