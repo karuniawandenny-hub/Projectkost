@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { EmptyState, PaymentIcon } from "@/components/EmptyState";
 import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { viewerUrl } from "@/lib/viewer";
+import { OverdueBadge } from "@/components/OverdueBadge";
 import { OwnerPaymentsView, type PaymentItem } from "./OwnerPaymentsView";
 
 function rupiah(n: number) {
@@ -116,6 +117,7 @@ export default async function PaymentsPage({
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <StatusBadge status={p.status} />
+                  <OverdueBadge dueDate={p.dueDate} status={p.status as "DUE" | "PENDING" | "VERIFIED" | "REJECTED"} />
                   {p.proofUrl ? (
                     <a
                       href={viewerUrl(p.proofUrl, "Bukti pembayaran")}
@@ -200,6 +202,7 @@ export default async function PaymentsPage({
     kosName: p.tenancy.room.kos.name,
     roomName: p.tenancy.room.name,
     reviewedAt: p.reviewedAt ? p.reviewedAt.toISOString() : null,
+    dueDate: p.dueDate ? p.dueDate.toISOString() : null,
   });
 
   const pending = payments.filter((p) => p.status === "PENDING").map(toItem);

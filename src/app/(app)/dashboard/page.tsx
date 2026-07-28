@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
+import { OverdueBadge } from "@/components/OverdueBadge";
 import { MissingPhoneBanner } from "../MissingPhoneBanner";
 import { InfoKosCarousel, type InfoItem } from "./InfoKosCarousel";
 import {
@@ -361,7 +362,7 @@ async function OwnerDashboard({
           )}
           {paymentsRecent.map((p) => (
             <div key={p.id} className="py-3 flex items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-medium">
                   {p.tenancy.tenant.name} — {p.tenancy.room.kos.name} /{" "}
                   {p.tenancy.room.name}
@@ -370,7 +371,14 @@ async function OwnerDashboard({
                   {MONTH_LABELS[p.periodMonth - 1]} {p.periodYear} • {rupiah(p.amount)}
                 </div>
               </div>
-              <StatusBadge status={p.status} />
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <StatusBadge status={p.status} />
+                <OverdueBadge
+                  dueDate={p.dueDate}
+                  status={p.status as "DUE" | "PENDING" | "VERIFIED" | "REJECTED"}
+                  size="xs"
+                />
+              </div>
             </div>
           ))}
         </div>

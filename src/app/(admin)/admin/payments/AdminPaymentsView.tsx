@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { viewerUrl } from "@/lib/viewer";
+import { OverdueBadge } from "@/components/OverdueBadge";
 import { TestControls } from "./TestControls";
 
 const MONTHS = [
@@ -335,8 +336,13 @@ function AdminPaymentRow({ p }: { p: AdminPaymentItem }) {
             )}
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
           <StatusBadge status={p.status} />
+          <OverdueBadge
+            dueDate={p.dueDateISO}
+            status={p.status as "DUE" | "PENDING" | "VERIFIED" | "REJECTED"}
+            size="xs"
+          />
           {p.proofUrl && (
             <a
               href={viewerUrl(p.proofUrl, "Bukti pembayaran")}

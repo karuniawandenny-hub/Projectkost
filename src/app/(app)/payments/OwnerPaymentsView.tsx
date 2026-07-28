@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { viewerUrl } from "@/lib/viewer";
+import { OverdueBadge } from "@/components/OverdueBadge";
+import { computeOverdue } from "@/lib/overdue";
 import { verifyPayment, verifyPaymentManual } from "./actions";
 
 const MONTHS = [
@@ -46,6 +48,7 @@ export type PaymentItem = {
   kosName: string;
   roomName: string;
   reviewedAt: string | null;
+  dueDate: string | null;
 };
 
 export function OwnerPaymentsView({
@@ -98,6 +101,12 @@ export function OwnerPaymentsView({
     const verifiedAmount = history
       .filter((p) => p.status === "VERIFIED")
       .reduce((s, p) => s + p.amount, 0);
+    // Telat > 7 hari = level "critical" — hitung dari DUE + REJECTED
+    // di periode yang sedang ditampilkan. REJECTED juga counted karena
+    // bukti mereka ditolak dan belum kirim ulang.
+    const criticalOverdue = [...due, ...history.filter((p) => p.status === "REJECTED")]
+      .map((p) => computeOverdue(p.dueDate ?? "", p.status))
+      .filter((info): info is NonNullable<typeof info> => !!info && info.level === "critical").length;
     return {
       pendingCount: pending.length,
       pendingAmount,
@@ -105,6 +114,7 @@ export function OwnerPaymentsView({
       dueAmount,
       historyCount: history.length,
       verifiedAmount,
+      criticalOverdue,
     };
   }, [pending, due, history]);
 
@@ -146,7 +156,7 @@ export function OwnerPaymentsView({
             />
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatTile
             label="Menunggu verifikasi"
             value={String(stats.pendingCount)}
@@ -159,6 +169,16 @@ export function OwnerPaymentsView({
             label="Tagihan terbuka"
             value={String(stats.dueCount)}
             sub={stats.dueCount > 0 ? rupiahShort(stats.dueAmount) : "—"}
+          />
+          <StatTile
+            label="Terlambat >7 hari"
+            value={String(stats.criticalOverdue)}
+            sub={
+              stats.criticalOverdue > 0
+                ? "Perlu follow-up segera"
+                : "Semua on-track"
+            }
+            tone={stats.criticalOverdue > 0 ? "red" : "neutral"}
           />
           <StatTile
             label={`Terverifikasi (${periodLabel})`}
@@ -425,11 +445,12 @@ function DueRow({ p }: { p: PaymentItem }) {
     <div className="px-3 py-3 hover:bg-slate-50/60">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <div className="font-medium text-slate-800">
-            {p.tenantName}{" "}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-slate-800">{p.tenantName}</span>
             <span className="text-xs font-normal text-slate-500">
               · Kamar {p.roomName}
             </span>
+            <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
           </div>
           <div className="text-xs text-slate-500">
             {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
@@ -496,6 +517,9 @@ function HistoryRow({ p }: { p: PaymentItem }) {
                 Ditolak
               </span>
             )}
+            {isRejected && (
+              <OverdueBadge dueDate={p.dueDate} status={p.status} size="xs" />
+            )}
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
             {MONTHS[p.periodMonth - 1]} {p.periodYear} · {rupiah(p.amount)}
@@ -537,20 +561,24 @@ function StatTile({
   label: string;
   value: string;
   sub?: string;
-  tone?: "green" | "amber" | "neutral";
+  tone?: "green" | "amber" | "red" | "neutral";
 }) {
   const bg =
     tone === "green"
       ? "bg-emerald-50 border-emerald-200"
       : tone === "amber"
         ? "bg-amber-50 border-amber-200"
-        : "bg-slate-50 border-slate-200";
+        : tone === "red"
+          ? "bg-red-50 border-red-200"
+          : "bg-slate-50 border-slate-200";
   const valueColor =
     tone === "green"
       ? "text-emerald-700"
       : tone === "amber"
         ? "text-amber-700"
-        : "text-slate-800";
+        : tone === "red"
+          ? "text-red-700"
+          : "text-slate-800";
   return (
     <div className={`rounded-lg border ${bg} px-3 py-2`}>
       <div className="text-[11px] font-medium text-slate-500">{label}</div>
