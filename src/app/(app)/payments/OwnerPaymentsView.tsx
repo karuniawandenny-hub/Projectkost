@@ -445,9 +445,10 @@ function PendingTable({
           <tbody className="divide-y divide-slate-100">
             {items.map((p, idx) => {
               const isOpen = expandedId === p.id;
+              const zebra = idx % 2 === 1 ? "bg-slate-50/70" : "bg-white";
               return (
                 <Fragment key={p.id}>
-                  <tr className="hover:bg-slate-50/60">
+                  <tr className={`${zebra} hover:bg-slate-100`}>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                       {idx + 1}
                     </td>
@@ -491,7 +492,7 @@ function PendingTable({
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr className="bg-slate-50">
+                    <tr className="bg-amber-50/70">
                       <td colSpan={7} className="px-3 py-3">
                         {p.note && (
                           <div className="mb-2 text-xs text-slate-600">
@@ -642,9 +643,10 @@ function DueTable({
           <tbody className="divide-y divide-slate-100">
             {items.map((p, idx) => {
               const isOpen = expandedId === p.id;
+              const zebra = idx % 2 === 1 ? "bg-slate-50/70" : "bg-white";
               return (
                 <Fragment key={p.id}>
-                  <tr className="hover:bg-slate-50/60">
+                  <tr className={`${zebra} hover:bg-slate-100`}>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                       {idx + 1}
                     </td>
@@ -683,7 +685,7 @@ function DueTable({
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr className="bg-amber-50">
+                    <tr className="bg-amber-50/80">
                       <td colSpan={7} className="px-3 py-3">
                         <DueActionForm p={p} />
                       </td>
@@ -830,8 +832,12 @@ function HistoryTable({
               const isVerified = p.status === "VERIFIED";
               const isRejected = p.status === "REJECTED";
               const isManual = !!p.reviewNote?.startsWith("[MANUAL]");
+              const zebra = idx % 2 === 1 ? "bg-slate-50/70" : "bg-white";
               return (
-                <tr key={p.id} className="hover:bg-slate-50/60">
+                <tr
+                  key={p.id}
+                  className={`${zebra} hover:bg-slate-100`}
+                >
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs text-slate-500">
                     {idx + 1}
                   </td>
