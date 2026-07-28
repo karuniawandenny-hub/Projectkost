@@ -8,13 +8,21 @@
  *  - PENDING (bukti sudah dikirim, menunggu verifikasi) TIDAK dihitung
  *    telat — bola sudah di tangan owner.
  *  - VERIFIED sudah lunas, tidak relevan.
- *  - Grace period: H+1 (tepat sehari setelah due date sudah "telat 1
- *    hari"). Owner memilih tegas — tidak ada toleransi otomatis.
+ *  - Grace period: 1 hari toleransi. Kalau due date 30 Juli, penghuni
+ *    yang bayar tanggal 31 Juli masih dianggap on-time. Badge "Terlambat"
+ *    baru muncul dari H+2 (1 Agustus dst).
  *  - Rentang warna:
- *      1-3 hari  = amber (perlu perhatian)
+ *      2-3 hari  = amber (perlu perhatian)
  *      4-7 hari  = orange (perlu follow-up)
  *      >7 hari   = red (masalah serius)
  */
+
+/**
+ * Grace period dalam hari. Ubah nilai ini kalau owner mau lebih lunak
+ * atau lebih tegas — semua tempat yang pakai OverdueBadge otomatis
+ * ikut berubah, tidak perlu edit banyak file.
+ */
+export const OVERDUE_GRACE_DAYS = 1;
 
 export type OverdueStatus = "DUE" | "PENDING" | "VERIFIED" | "REJECTED";
 
@@ -49,7 +57,8 @@ export function computeOverdue(
 
   const diffMs = nowMid.getTime() - dueMid.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays < 1) return null;
+  // Belum lewat masa toleransi (grace) → belum dianggap telat.
+  if (diffDays <= OVERDUE_GRACE_DAYS) return null;
 
   const level: OverdueLevel =
     diffDays > 7 ? "critical" : diffDays > 3 ? "urgent" : "warn";
