@@ -227,13 +227,29 @@ export async function ensureBillsForAllActive() {
 /**
  * Generate tagihan untuk tenancy yang dimiliki user tertentu (sebagai
  * tenant atau owner). Dipanggil lazy saat user buka dashboard/payments.
+ *
+ * Terima 2 parameter:
+ *  - userId: id user yang membuka halaman (untuk match tenantId)
+ *  - effectiveOwnerId: id OWNER yang di-scope. Untuk role OWNER = userId
+ *    sendiri; untuk role MANAGER = managedByOwnerId. Ini penting supaya
+ *    MANAGER buka /payments juga trigger auto-generate tagihan tenancy
+ *    di kos yang mereka kelola. Sebelumnya MANAGER hanya passing
+ *    managerId, dan karena kos.ownerId != managerId, tidak ada tenancy
+ *    yang match → tagihan bulanan tidak ter-generate.
+ *
+ * Kalau effectiveOwnerId sama dengan userId (role OWNER), perilaku
+ * tidak berubah.
  */
-export async function ensureBillsForUser(userId: string): Promise<number> {
+export async function ensureBillsForUser(
+  userId: string,
+  effectiveOwnerId?: string
+): Promise<number> {
+  const ownerScopeId = effectiveOwnerId ?? userId;
   const { billsCreated } = await ensureBillsFor({
     status: "ACTIVE",
     OR: [
       { tenantId: userId },
-      { room: { kos: { ownerId: userId } } },
+      { room: { kos: { ownerId: ownerScopeId } } },
     ],
   });
   return billsCreated;

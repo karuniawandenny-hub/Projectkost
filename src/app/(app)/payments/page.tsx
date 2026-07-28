@@ -40,9 +40,13 @@ export default async function PaymentsPage({
   if (!user) redirect("/login");
   const justUploadedId = searchParams?.uploaded;
   // Lazy auto-generate tagihan saat halaman pembayaran dibuka.
+  // Pass effectiveOwnerId supaya MANAGER buka /payments juga trigger
+  // generate untuk kos yang mereka kelola (bug fix: sebelumnya MANAGER
+  // hanya passing managerId → kos.ownerId != managerId → nothing to
+  // generate → tagihan bulan berjalan tidak muncul untuk mereka).
   try {
     const { ensureBillsForUser } = await import("@/lib/billing");
-    await ensureBillsForUser(user.id);
+    await ensureBillsForUser(user.id, getEffectiveOwnerId(user));
   } catch {
     // ignore
   }

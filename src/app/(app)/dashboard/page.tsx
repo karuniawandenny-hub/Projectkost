@@ -59,7 +59,10 @@ export default async function DashboardPage() {
   // Idempoten (skip kalau sudah ada). Tidak blocking — kalau gagal,
   // dashboard tetap render.
   try {
-    await ensureBillsForUser(user.id);
+    // Pass effectiveOwnerId supaya MANAGER buka dashboard juga trigger
+    // auto-generate tagihan untuk kos yang mereka kelola (bukan hanya
+    // tagihan yang milik userId=managerId secara harfiah).
+    await ensureBillsForUser(user.id, getEffectiveOwnerId(user));
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("ensureBillsForUser error:", e);
