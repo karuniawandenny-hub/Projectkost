@@ -137,8 +137,14 @@ export async function setDefaultSignature(
   formData: FormData
 ): Promise<SetDefaultSignatureState> {
   const me = await requireUser();
-  if (!canManageKos(me) && me.role !== "ADMIN") {
-    return { error: "Hanya pemilik/pengelola yang bisa set TTD default." };
+  // TTD default = tandatangan pribadi. Hanya OWNER asli & ADMIN. MANAGER
+  // (anggota tim) tidak boleh set TTD karena tidak berwenang tandatangan
+  // kontrak sewa atas nama pemilik.
+  if (me.role !== "OWNER" && me.role !== "ADMIN") {
+    return {
+      error:
+        "Sebagai anggota tim, Anda tidak bisa mengatur tandatangan default — fitur ini khusus untuk pemilik kos.",
+    };
   }
 
   const dataUrl = String(formData.get("signature") ?? "");
@@ -214,7 +220,9 @@ export async function setDefaultSignature(
  */
 export async function clearDefaultSignature(): Promise<void> {
   const me = await requireUser();
-  if (!canManageKos(me) && me.role !== "ADMIN") return;
+  // Batasi ke OWNER asli & ADMIN — sama seperti setDefaultSignature,
+  // MANAGER tidak punya wewenang tandatangan jadi tidak perlu akses.
+  if (me.role !== "OWNER" && me.role !== "ADMIN") return;
 
   const existing = await prisma.user.findUnique({
     where: { id: me.id },

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireUser, getEffectiveOwnerId } from "@/lib/session";
 import { formatDateID } from "@/lib/billing";
 import { PrintButton } from "@/components/PrintButton";
 import { BackButton } from "@/components/BackButton";
@@ -59,15 +59,24 @@ export default async function ContractPage({
   if (!tenancy) notFound();
 
   const isTenant = tenancy.tenant.id === me.id;
+  // isOwner = pemilik ASLI kos ini (bukan MANAGER). Kontrak sewa adalah
+  // dokumen legal antar dua pribadi — MANAGER tidak boleh tandatangan
+  // atas nama owner.
   const isOwner = tenancy.room.kos.owner.id === me.id;
+  // isManagerOfKos = anggota tim yang di-invite owner untuk mengelola.
+  // Boleh LIHAT kontrak (transparansi tim), tapi tidak boleh tandatangan.
+  const isManagerOfKos =
+    me.role === "MANAGER" &&
+    tenancy.room.kos.owner.id === getEffectiveOwnerId(me);
   const isAdmin = me.role === "ADMIN";
-  if (!isTenant && !isOwner && !isAdmin) notFound();
+  if (!isTenant && !isOwner && !isManagerOfKos && !isAdmin) notFound();
 
   const contractNo = `KB-KT-${tenancy.id.slice(-8).toUpperCase()}`;
   const dueAnniversary = new Date(tenancy.startDate).getDate();
 
   // Apakah viewer saat ini perlu diingatkan tanda tangan? Hanya tampil
   // kalau dia yang berwenang ttd di kolom yang masih kosong.
+  // MANAGER dan ADMIN tidak masuk banner ini walau kolom masih kosong.
   const ownerNeedsToSign = isOwner && !tenancy.ownerSignatureUrl;
   const tenantNeedsToSign = isTenant && !tenancy.tenantSignatureUrl;
 
@@ -100,6 +109,15 @@ export default async function ContractPage({
                 Lompat ke tanda tangan ↓
               </a>
             </div>
+          </div>
+        )}
+
+        {isManagerOfKos && (
+          <div className="border-b border-blue-200 bg-blue-50 px-6 py-3 text-sm text-blue-900 no-print">
+            👁️ Anda melihat kontrak ini sebagai <strong>anggota tim pengelola</strong>.
+            Anda bisa membaca &amp; mencetak, tapi <strong>tidak dapat
+            menandatangani</strong> — tandatangan pihak pertama harus dilakukan
+            langsung oleh pemilik kos.
           </div>
         )}
 
@@ -254,6 +272,7 @@ export default async function ContractPage({
                 role="OWNER"
                 signedUrl={tenancy.ownerSignatureUrl ?? null}
                 signedAt={tenancy.ownerSignedAt ?? null}
+                canSign={isOwner}
                 defaultSignatureUrl={
                   isOwner ? tenancy.room.kos.owner.defaultSignatureUrl : null
                 }
@@ -269,6 +288,7 @@ export default async function ContractPage({
                 role="TENANT"
                 signedUrl={tenancy.tenantSignatureUrl ?? null}
                 signedAt={tenancy.tenantSignedAt ?? null}
+                canSign={isTenant}
                 defaultSignatureUrl={null}
               />
               <div className="mt-1 font-semibold">{tenancy.tenant.name}</div>

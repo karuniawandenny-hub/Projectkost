@@ -185,12 +185,19 @@ export function SignatureBlock({
   role,
   signedUrl,
   signedAt,
+  canSign = true,
   defaultSignatureUrl,
 }: {
   tenancyId: string;
   role: "TENANT" | "OWNER";
   signedUrl: string | null;
   signedAt: Date | null;
+  /** Apakah viewer saat ini berhak tandatangan di kolom ini.
+   *  - role=OWNER: true kalau viewer = pemilik ASLI kos. MANAGER (anggota
+   *    tim) & ADMIN dapat false — mereka hanya melihat.
+   *  - role=TENANT: true kalau viewer = penghuni pemilik tenancy.
+   *  Kalau false, komponen tampil read-only tanpa kanvas & tombol. */
+  canSign?: boolean;
   /** TTD default owner. Hanya di-pass dari page ketika viewer adalah
    *  owner sendiri (bukan tenant/admin) dan role="OWNER". */
   defaultSignatureUrl?: string | null;
@@ -225,13 +232,37 @@ export function SignatureBlock({
             })}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="mt-1 text-xs text-slate-500 hover:underline no-print"
+        {canSign && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="mt-1 text-xs text-slate-500 hover:underline no-print"
+          >
+            Tandatangan ulang
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Viewer tidak berhak tandatangan (mis. MANAGER / ADMIN / tenant lihat
+  // kolom owner). Tampil placeholder read-only tanpa kanvas & tombol —
+  // agar tidak ada risiko MANAGER mengklik tandatangan atas nama owner.
+  if (!canSign) {
+    return (
+      <div className="text-sm">
+        <div className="mb-1 text-center text-slate-500">
+          {role === "OWNER" ? "PIHAK PERTAMA" : "PIHAK KEDUA"}
+        </div>
+        <div
+          className="mx-auto flex h-[80px] w-full max-w-[240px] items-center justify-center rounded border border-dashed border-slate-300 bg-slate-50 text-center text-xs text-slate-400 no-print"
+          aria-label="Belum ditandatangani"
         >
-          Tandatangan ulang
-        </button>
+          Menunggu tandatangan
+          <br />
+          {role === "OWNER" ? "pemilik kos" : "penghuni"}
+        </div>
+        <div className="mt-1 hidden border-b border-slate-400 print:block" />
       </div>
     );
   }

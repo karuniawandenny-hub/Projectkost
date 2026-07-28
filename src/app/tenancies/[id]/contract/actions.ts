@@ -65,8 +65,20 @@ export async function signContract(
   if (!tenancy) return { error: "Tenancy tidak ditemukan." };
 
   const isTenant = tenancy.tenant.id === me.id;
-  const isOwner = tenancy.room.kos.ownerId === getEffectiveOwnerId(me);
+  // CATATAN LEGAL: tandatangan owner hanya boleh dilakukan oleh pemilik
+  // ASLI kos. MANAGER (anggota tim yang di-invite owner) DILARANG
+  // tandatangan atas nama owner walaupun secara operasional mereka
+  // punya akses manage kos ini. Karena itu kita cek `me.id === ownerId`
+  // langsung, BUKAN pakai getEffectiveOwnerId.
+  const isOwner = tenancy.room.kos.ownerId === me.id;
   if (!isTenant && !isOwner) {
+    // Pesan spesifik untuk MANAGER supaya jelas kenapa ditolak.
+    if (me.role === "MANAGER") {
+      return {
+        error:
+          "Sebagai anggota tim, Anda tidak dapat menandatangani kontrak atas nama pemilik. Tandatangan pihak pertama harus dilakukan oleh pemilik kos sendiri.",
+      };
+    }
     return { error: "Anda tidak berwenang menandatangani kontrak ini." };
   }
 

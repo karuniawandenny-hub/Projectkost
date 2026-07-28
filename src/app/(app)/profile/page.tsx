@@ -13,8 +13,12 @@ export default async function ProfilePage() {
   if (!user) redirect("/login");
   const notifPrefs = await getMyNotifPrefs();
 
-  // Owner/manager: ambil defaultSignatureUrl dari DB
-  const defaultSignatureUrl = canManageKos(user)
+  // TTD default hanya untuk OWNER (bukan MANAGER). Kontrak
+  // ditandatangani secara pribadi oleh pemilik kos — anggota tim tidak
+  // punya wewenang legal untuk itu, jadi mereka tidak perlu (dan tidak
+  // boleh) set TTD default.
+  const isOwner = user.role === "OWNER";
+  const defaultSignatureUrl = isOwner
     ? (
         await prisma.user.findUnique({
           where: { id: user.id },
@@ -61,7 +65,7 @@ export default async function ProfilePage() {
         <PhoneEditForm currentPhone={user.phone} />
       </div>
 
-      {canManageKos(user) && (
+      {isOwner && (
         <div className="card">
           <h2 className="text-lg font-semibold">Tandatangan default</h2>
           <p className="mt-1 mb-3 text-sm text-slate-600">
