@@ -92,12 +92,20 @@ export default async function TenantsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Penghuni</h1>
-        <p className="text-slate-600">
-          Setujui pengajuan penghuni, assign ke kamar, dan kelola penghuni
-          aktif Anda di satu tempat.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Penghuni</h1>
+          <p className="text-slate-600">
+            Setujui pengajuan penghuni, assign ke kamar, dan kelola penghuni
+            aktif Anda di satu tempat.
+          </p>
+        </div>
+        <Link
+          href="/tenants/register"
+          className="btn-primary shrink-0 whitespace-nowrap"
+        >
+          + Daftarkan Penghuni
+        </Link>
       </div>
 
       {/* ===== Section: Pengajuan menunggu (dokumen lengkap) ===== */}

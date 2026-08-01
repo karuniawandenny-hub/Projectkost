@@ -12,6 +12,7 @@ export type AuditAction =
   | "USER.APPROVE"
   | "USER.REJECT"
   | "USER.DELETE"
+  | "USER.OWNER_REGISTER"
   // Tenancy
   | "TENANCY.CREATE"
   | "TENANCY.END"
@@ -93,6 +94,7 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   "USER.APPROVE": "Setujui pendaftaran",
   "USER.REJECT": "Tolak pendaftaran",
   "USER.DELETE": "Hapus akun",
+  "USER.OWNER_REGISTER": "Daftarkan penghuni oleh pemilik",
   "TENANCY.CREATE": "Tambah penghuni ke kamar",
   "TENANCY.END": "Akhiri kontrak penghuni",
   "ROOM.DELETE": "Hapus kamar",

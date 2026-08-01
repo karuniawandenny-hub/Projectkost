@@ -10,6 +10,8 @@ import { sendTenantAssignedEmail, buildTenantAssignedWaText } from "@/lib/email"
 import { sendWAWithTemplate } from "@/lib/wa-templates";
 import { deleteUploadByUrl, deleteUploadsByUrls, saveUploadedFile } from "@/lib/upload";
 import { logAudit } from "@/lib/audit";
+import { hashPassword, normalizeEmail, isValidEmail } from "@/lib/password";
+import { normalizePhone } from "@/lib/phone";
 
 function originFromHeaders(): string {
   const h = headers();
@@ -608,4 +610,229 @@ export async function rejectTenant(
   revalidatePath("/tenants");
   revalidatePath("/admin/users");
   return { success: `${target.name} ditolak.` };
+}
+
+export type OwnerRegisterTenantState = { error?: string; success?: string };
+
+/**
+ * Pemilik mendaftarkan penghuni SEKALIGUS menempatkan ke kamar dan
+ * mulai kontrak. All-in-one — cocok untuk penghuni "gaptek" yang tidak
+ * bisa self-register.
+ *
+ * Alur:
+ *  1. Owner isi form: nama, email, password, HP, KTP+selfie, kamar,
+ *     tanggal mulai.
+ *  2. Server buat User (role TENANT, status ACTIVE, onboardedAt=now),
+ *     create Tenancy ACTIVE, ubah Room ke OCCUPIED, generate tagihan
+ *     pertama — semua dalam satu transaksi.
+ *  3. Kirim welcome email + WA (tanpa password — password di-share
+ *     verbal oleh owner sesuai keputusan design).
+ */
+export async function ownerRegisterTenant(
+  _prev: OwnerRegisterTenantState,
+  formData: FormData
+): Promise<OwnerRegisterTenantState> {
+  const me = await requireOwnerOrAdmin();
+
+  const name = String(formData.get("name") ?? "").trim();
+  const emailRaw = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const roomId = String(formData.get("roomId") ?? "");
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
+
+  // Validasi field text.
+  if (name.length < 2) return { error: "Nama wajib diisi (min 2 karakter)." };
+  const email = normalizeEmail(emailRaw);
+  if (!isValidEmail(email)) return { error: "Email tidak valid." };
+  if (password.length < 8) return { error: "Password minimal 8 karakter." };
+  if (!phoneRaw) return { error: "Nomor HP wajib diisi." };
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) {
+    return { error: "Nomor HP tidak valid. Gunakan format 08xxxxxxxxxx." };
+  }
+  if (!roomId) return { error: "Pilih kamar terlebih dahulu." };
+  if (!startDateRaw) return { error: "Tanggal mulai wajib diisi." };
+
+  const parsed = new Date(startDateRaw);
+  if (isNaN(parsed.getTime())) {
+    return { error: "Format tanggal mulai tidak valid." };
+  }
+  const startDate = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate()
+  );
+
+  // Validasi KTP + selfie sebelum apapun. Sama seperti register self-
+  // service tenant — akun penghuni tidak pernah dibuat tanpa dokumen
+  // lengkap.
+  const ktp = formData.get("ktp");
+  const selfie = formData.get("selfie");
+  if (!(ktp instanceof File) || ktp.size === 0) {
+    return { error: "Foto KTP wajib diupload." };
+  }
+  if (!(selfie instanceof File) || selfie.size === 0) {
+    return { error: "Foto selfie penghuni wajib diupload." };
+  }
+
+  // Cek email tidak duplikat.
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return { error: "Email sudah terdaftar. Gunakan email lain." };
+
+  // Cek kamar valid & owned by this owner + belum terisi.
+  const room = await prisma.room.findFirst({
+    where: canManageKos(me)
+      ? { id: roomId, kos: { ownerId: getEffectiveOwnerId(me) } }
+      : { id: roomId },
+    include: { kos: { select: { id: true, name: true, ownerId: true } } },
+  });
+  if (!room) return { error: "Kamar tidak ditemukan / bukan milik Anda." };
+  if (room.status === "OCCUPIED") return { error: "Kamar sudah terisi." };
+
+  // Upload dokumen DULU sebelum create user, sama pattern seperti
+  // register self-service. Kalau upload sukses tapi create user gagal
+  // (mis. race email unique), cleanup file yatim.
+  const tempKey = `by-owner-${Date.now()}-${email
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .slice(0, 20)}`;
+  let ktpUrl: string | null = null;
+  let selfieUrl: string | null = null;
+  try {
+    ktpUrl = await saveUploadedFile(ktp, `users/${tempKey}/ktp`);
+    selfieUrl = await saveUploadedFile(selfie, `users/${tempKey}/selfie`);
+  } catch (e) {
+    await deleteUploadsByUrls([ktpUrl, selfieUrl]);
+    return {
+      error: e instanceof Error ? e.message : "Gagal upload dokumen. Coba lagi.",
+    };
+  }
+
+  const passwordHash = await hashPassword(password);
+  const now = new Date();
+
+  // Bikin user + tenancy + occupy room dalam satu interactive
+  // transaction. Interactive (callback) diperlukan supaya bisa chain
+  // hasil user.id ke tenancy.create — array-form $transaction tidak
+  // support cross-step reference.
+  let created: { user: { id: string; name: string }; tenancyId: string };
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          name,
+          role: "TENANT",
+          status: "ACTIVE",
+          phone,
+          ktpPhotoUrl: ktpUrl,
+          selfiePhotoUrl: selfieUrl,
+          onboardedAt: now,
+        },
+      });
+      const tenancy = await tx.tenancy.create({
+        data: {
+          tenantId: user.id,
+          roomId: room.id,
+          startDate,
+        },
+      });
+      await tx.room.update({
+        where: { id: room.id },
+        data: { status: "OCCUPIED" },
+      });
+      return { user: { id: user.id, name: user.name }, tenancyId: tenancy.id };
+    });
+  } catch (e) {
+    await deleteUploadsByUrls([ktpUrl, selfieUrl]);
+    return {
+      error:
+        e instanceof Error && e.message.includes("Unique")
+          ? "Email sudah terdaftar. Gunakan email lain."
+          : "Gagal membuat akun penghuni. Coba lagi.",
+    };
+  }
+
+  // Generate tagihan pertama langsung supaya owner tidak perlu tunggu
+  // load /payments untuk melihat tagihan bulan ini.
+  await ensureBillsForOneTenancy(created.tenancyId);
+
+  await logAudit({
+    actorId: me.id,
+    actorName: me.name,
+    action: "USER.OWNER_REGISTER",
+    entityType: "User",
+    entityId: created.user.id,
+    metadata: {
+      tenantName: created.user.name,
+      email,
+      kosName: room.kos.name,
+      roomName: room.name,
+      startDate: startDate.toISOString(),
+      tenancyId: created.tenancyId,
+    },
+  });
+
+  const startStr = startDate.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  // Notifikasi in-app ke penghuni. Mereka mungkin tidak akan pernah
+  // buka app sampai owner beritahu, tapi record tetap ada.
+  await notify({
+    userId: created.user.id,
+    type: "TENANT_APPROVED_ASSIGNED",
+    title: "Akun dibuat oleh pemilik kos",
+    message: `Pemilik kos ${me.name} mendaftarkan Anda dan menempatkan di ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startStr}. Silakan tanya password login ke pemilik.`,
+    link: "/dashboard",
+  });
+
+  // Welcome email + WA — tanpa password (owner share verbal).
+  const welcomeParams = {
+    tenantName: created.user.name,
+    kosName: room.kos.name,
+    roomName: room.name,
+    startDate,
+    monthlyPrice: room.monthlyPrice,
+    loginUrl: `${originFromHeaders()}/login`,
+  };
+  try {
+    await sendTenantAssignedEmail(email, welcomeParams);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[ownerRegisterTenant] welcome email gagal:", e);
+  }
+  try {
+    await sendWAWithTemplate({
+      phone,
+      text: buildTenantAssignedWaText(welcomeParams),
+      template: {
+        name: "tenant_assigned",
+        params: [
+          created.user.name,
+          room.name,
+          room.kos.name,
+          startStr,
+          "Rp " + room.monthlyPrice.toLocaleString("id-ID"),
+        ],
+      },
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error("[ownerRegisterTenant] welcome WA gagal:", e);
+  }
+
+  revalidatePath("/tenants");
+  revalidatePath("/dashboard");
+  revalidatePath("/kos");
+  revalidatePath(`/kos/${room.kos.id}`);
+  revalidatePath("/payments");
+  revalidatePath("/admin/users");
+
+  return {
+    success: `${created.user.name} berhasil didaftarkan & ditempatkan di ${room.kos.name} - Kamar ${room.name}. Beritahu penghuni untuk login pakai email ${email} dan password yang Anda set.`,
+  };
 }
