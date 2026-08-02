@@ -7,6 +7,12 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireUser, canManageKos, getEffectiveOwnerId } from "@/lib/session";
 import { normalizePhone } from "@/lib/phone";
+import {
+  hashPassword,
+  verifyPassword,
+  normalizeEmail,
+  isValidEmail,
+} from "@/lib/password";
 import { deleteUploadByUrl } from "@/lib/upload";
 import { logAudit } from "@/lib/audit";
 import {
@@ -246,4 +252,109 @@ export async function clearDefaultSignature(): Promise<void> {
   });
 
   revalidatePath("/profile");
+}
+
+// =========================================================================
+// Ubah password sendiri
+// =========================================================================
+
+export type UpdatePasswordState = { error?: string; success?: string };
+
+/**
+ * User ganti password sendiri. Wajib isi password lama untuk konfirmasi
+ * identitas — walaupun user sudah login, ini best practice supaya kalau
+ * ada yang meninggalkan session terbuka, orang lain tidak bisa reset
+ * password diam-diam.
+ */
+export async function updateOwnPassword(
+  _prev: UpdatePasswordState,
+  formData: FormData
+): Promise<UpdatePasswordState> {
+  const me = await requireUser();
+  const currentPassword = String(formData.get("currentPassword") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  if (!currentPassword) return { error: "Password lama wajib diisi." };
+  if (newPassword.length < 4) {
+    return { error: "Password baru minimal 4 karakter." };
+  }
+  if (newPassword !== confirm) {
+    return { error: "Konfirmasi password baru tidak cocok." };
+  }
+  if (currentPassword === newPassword) {
+    return { error: "Password baru sama dengan password lama." };
+  }
+
+  // Fetch user record fresh — requireUser return session data yang
+  // mungkin tidak include passwordHash.
+  const user = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { passwordHash: true },
+  });
+  if (!user) return { error: "Sesi tidak valid. Silakan login ulang." };
+
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) return { error: "Password lama salah." };
+
+  const newHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: me.id },
+    data: { passwordHash: newHash },
+  });
+
+  revalidatePath("/profile");
+  return { success: "Password berhasil diubah." };
+}
+
+// =========================================================================
+// Ubah email sendiri
+// =========================================================================
+
+export type UpdateEmailState = { error?: string; success?: string };
+
+/**
+ * User ganti email sendiri. Wajib format email valid + unik antar user.
+ * Wajib password konfirmasi supaya orang lain (yang kebetulan pinjam
+ * HP) tidak bisa hijack akun via email swap.
+ */
+export async function updateOwnEmail(
+  _prev: UpdateEmailState,
+  formData: FormData
+): Promise<UpdateEmailState> {
+  const me = await requireUser();
+  const newEmailRaw = String(formData.get("newEmail") ?? "");
+  const password = String(formData.get("password") ?? "");
+
+  const newEmail = normalizeEmail(newEmailRaw);
+  if (!isValidEmail(newEmail)) return { error: "Email baru tidak valid." };
+  if (!password) return { error: "Password wajib diisi untuk konfirmasi." };
+
+  const user = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { email: true, passwordHash: true },
+  });
+  if (!user) return { error: "Sesi tidak valid. Silakan login ulang." };
+
+  if (user.email === newEmail) {
+    return { error: "Email baru sama dengan email saat ini." };
+  }
+
+  const ok = await verifyPassword(password, user.passwordHash);
+  if (!ok) return { error: "Password salah." };
+
+  // Cek email unik.
+  const dup = await prisma.user.findUnique({
+    where: { email: newEmail },
+    select: { id: true },
+  });
+  if (dup) return { error: "Email sudah dipakai user lain." };
+
+  await prisma.user.update({
+    where: { id: me.id },
+    data: { email: newEmail },
+  });
+
+  revalidatePath("/profile");
+  return { success: `Email berhasil diubah ke ${newEmail}.` };
 }

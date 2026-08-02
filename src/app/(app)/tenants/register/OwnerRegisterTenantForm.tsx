@@ -19,6 +19,166 @@ function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
 }
 
+/**
+ * Bangun pesan welcome untuk WhatsApp — sengaja text tebal & readable
+ * di WA (line breaks, spacing, bullets pakai •). Isi mengikuti brief
+ * pemilik: identitas akun, kamar, ubah password/email, save contact
+ * untuk Asisten AI, dan fitur aplikasi yang bisa dipakai.
+ */
+function buildWelcomeWaText(r: {
+  tenantName: string;
+  phone: string;
+  kosName: string;
+  roomName: string;
+  startDate: string;
+  monthlyPrice: number;
+  password: string;
+}): string {
+  const startStr = new Date(r.startDate).toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  return [
+    `Halo ${r.tenantName}, saat ini akun Anda telah dibuat oleh pemilik.`,
+    "",
+    `Anda telah di-assign di *${r.kosName}* — *Kamar ${r.roomName}*.`,
+    `Mulai sewa: ${startStr}`,
+    `Tagihan: Rp ${r.monthlyPrice.toLocaleString("id-ID")}/bulan`,
+    "",
+    "*Cara login aplikasi:*",
+    `• Nomor HP: ${r.phone}`,
+    `• Password: ${r.password}`,
+    "",
+    "Silahkan ubah password dan email Anda setelah login pertama (menu Profil).",
+    "",
+    "*Simpan nomor ini dengan nama \"Kos Baiti\"* untuk mengaktifkan Asisten AI.",
+    "",
+    "Gunakan aplikasi untuk:",
+    "• Mengajukan komplain",
+    "• Mendapatkan kuitansi pembayaran",
+    "• Mendapatkan kontrak sewa",
+    "• dan lain-lain.",
+    "",
+    "Terima kasih 🙏",
+  ].join("\n");
+}
+
+/**
+ * Bikin URL wa.me — format wa.me menerima nomor tanpa "+", jadi kita
+ * strip semua non-digit. Pesan di-encode ke URL.
+ */
+function buildWaMeUrl(phone: string, text: string): string {
+  const digits = phone.replace(/[^0-9]/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+}
+
+function SuccessPanel({
+  registered,
+  message,
+  onRegisterAnother,
+  onGoToList,
+}: {
+  registered: NonNullable<OwnerRegisterTenantState["registered"]>;
+  message: string;
+  onRegisterAnother: () => void;
+  onGoToList: () => void;
+}) {
+  const waText = useMemo(() => buildWelcomeWaText(registered), [registered]);
+  const waUrl = useMemo(
+    () => buildWaMeUrl(registered.phone, waText),
+    [registered.phone, waText]
+  );
+  const [waClicked, setWaClicked] = useState(false);
+
+  return (
+    <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
+      <div className="flex items-start gap-3">
+        <span className="text-3xl">✓</span>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold text-emerald-800">
+            Penghuni berhasil didaftarkan
+          </h2>
+          <p className="mt-1 text-sm text-emerald-800">{message}</p>
+
+          {/* ===== Panel utama: kirim WA ===== */}
+          <div className="mt-4 rounded-md border-2 border-emerald-400 bg-white p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <span className="text-lg">📱</span> Kirim pesan welcome ke penghuni
+            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              Klik tombol di bawah untuk membuka WhatsApp dengan pesan sudah
+              disiapkan. Tinggal tekan kirim di aplikasi WA Anda. Pesan
+              berisi info login, cara pakai aplikasi, dan saran simpan
+              kontak.
+            </p>
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setWaClicked(true)}
+              className="mt-3 inline-flex items-center gap-2 rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600"
+            >
+              <span className="text-base">💬</span>
+              Kirim via WhatsApp ke {registered.phone}
+            </a>
+            {waClicked && (
+              <p className="mt-2 text-xs text-emerald-700">
+                ✓ WhatsApp dibuka. Kalau chat tidak muncul, cek: nomor
+                sudah aktif WhatsApp?
+              </p>
+            )}
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                Lihat/salin pesan
+              </summary>
+              <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-50 p-2 text-xs text-slate-700">
+                {waText}
+              </pre>
+            </details>
+          </div>
+
+          {/* ===== Info dokumen ===== */}
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            <div className="font-semibold">Catatan:</div>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              <li>
+                Foto KTP + selfie belum ada — bisa upload nanti dari /tenants
+                (oleh Anda) atau penghuni sendiri via /onboarding setelah
+                login.
+              </li>
+              <li>
+                Password default:{" "}
+                <code className="rounded bg-white px-1 font-mono">
+                  {DEFAULT_PASSWORD}
+                </code>
+                . Sarankan penghuni ganti sendiri di menu Profil.
+              </li>
+            </ul>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onRegisterAnother}
+              className="btn-primary"
+            >
+              Daftarkan penghuni lain
+            </button>
+            <button
+              type="button"
+              onClick={onGoToList}
+              className="btn-secondary"
+            >
+              Ke daftar penghuni
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OwnerRegisterTenantForm({
   kosOptions,
 }: {
@@ -27,55 +187,14 @@ export function OwnerRegisterTenantForm({
   const router = useRouter();
   const [state, action] = useFormState(ownerRegisterTenant, initialState);
 
-  if (state.success) {
+  if (state.success && state.registered) {
     return (
-      <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
-        <div className="flex items-start gap-3">
-          <span className="text-3xl">✓</span>
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold text-emerald-800">
-              Penghuni berhasil didaftarkan
-            </h2>
-            <p className="mt-1 text-sm text-emerald-800">{state.success}</p>
-            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              <div className="font-semibold">Langkah selanjutnya:</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                <li>
-                  Beritahu penghuni: login pakai nomor HP-nya, password{" "}
-                  <code className="rounded bg-white px-1 font-mono">
-                    {DEFAULT_PASSWORD}
-                  </code>
-                </li>
-                <li>
-                  Foto KTP + selfie belum ada — bisa upload nanti dari halaman
-                  /tenants (oleh Anda) atau penghuni upload sendiri via
-                  /onboarding.
-                </li>
-                <li>
-                  Sarankan penghuni ganti password di /profile setelah login
-                  pertama.
-                </li>
-              </ul>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => router.refresh()}
-                className="btn-primary"
-              >
-                Daftarkan penghuni lain
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/tenants")}
-                className="btn-secondary"
-              >
-                Ke daftar penghuni
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SuccessPanel
+        registered={state.registered}
+        message={state.success}
+        onRegisterAnother={() => router.refresh()}
+        onGoToList={() => router.push("/tenants")}
+      />
     );
   }
 

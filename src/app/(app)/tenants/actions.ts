@@ -612,7 +612,21 @@ export async function rejectTenant(
   return { success: `${target.name} ditolak.` };
 }
 
-export type OwnerRegisterTenantState = { error?: string; success?: string };
+export type OwnerRegisterTenantState = {
+  error?: string;
+  success?: string;
+  /** Konteks lengkap untuk client render tombol "Kirim via WhatsApp". */
+  registered?: {
+    tenantName: string;
+    phone: string;
+    kosName: string;
+    roomName: string;
+    startDate: string;
+    monthlyPrice: number;
+    /** Password yang dipakai owner — untuk disebutkan di pesan WA. */
+    password: string;
+  };
+};
 
 /**
  * Pemilik mendaftarkan penghuni SEKALIGUS menempatkan ke kamar dan
@@ -775,46 +789,20 @@ export async function ownerRegisterTenant(
     year: "numeric",
   });
 
-  // Notifikasi in-app ke penghuni. Mereka mungkin tidak akan pernah
-  // buka app sampai owner beritahu, tapi record tetap ada.
+  // Notifikasi in-app ke penghuni — record tetap ada meskipun mereka
+  // mungkin belum pernah buka app.
   await notify({
     userId: created.user.id,
     type: "TENANT_APPROVED_ASSIGNED",
     title: "Akun dibuat oleh pemilik kos",
-    message: `Pemilik kos ${me.name} mendaftarkan Anda dan menempatkan di ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startStr}. Silakan tanya password login ke pemilik.`,
+    message: `Pemilik kos ${me.name} mendaftarkan Anda dan menempatkan di ${room.kos.name} - Kamar ${room.name}. Mulai sewa: ${startStr}.`,
     link: "/dashboard",
   });
 
-  // Welcome email + WA — tanpa password (owner share verbal).
-  const welcomeParams = {
-    tenantName: created.user.name,
-    kosName: room.kos.name,
-    roomName: room.name,
-    startDate,
-    monthlyPrice: room.monthlyPrice,
-    loginUrl: `${originFromHeaders()}/login`,
-  };
-  // Skip email — email fiktif (@baitikos.local), tidak ada inbox nyata.
-  // WA lewat karena phone sudah divalidasi & real.
-  try {
-    await sendWAWithTemplate({
-      phone,
-      text: buildTenantAssignedWaText(welcomeParams),
-      template: {
-        name: "tenant_assigned",
-        params: [
-          created.user.name,
-          room.name,
-          room.kos.name,
-          startStr,
-          "Rp " + room.monthlyPrice.toLocaleString("id-ID"),
-        ],
-      },
-    });
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("[ownerRegisterTenant] welcome WA gagal:", e);
-  }
+  // Auto-send WA sengaja SKIP. Owner akan klik tombol "Kirim via
+  // WhatsApp" di panel sukses — pesan dikirim dari nomor pribadi owner
+  // sendiri (100% delivery, tanpa template Meta, kontak WA owner ↔
+  // penghuni langsung terbentuk).
 
   revalidatePath("/tenants");
   revalidatePath("/dashboard");
@@ -824,6 +812,15 @@ export async function ownerRegisterTenant(
   revalidatePath("/admin/users");
 
   return {
-    success: `${created.user.name} berhasil didaftarkan & ditempatkan di ${room.kos.name} - Kamar ${room.name}. Beritahu penghuni untuk login pakai nomor HP ${phone} dan password yang Anda set (default: "baitikos").`,
+    success: `${created.user.name} berhasil didaftarkan & ditempatkan di ${room.kos.name} - Kamar ${room.name}.`,
+    registered: {
+      tenantName: created.user.name,
+      phone,
+      kosName: room.kos.name,
+      roomName: room.name,
+      startDate: startDate.toISOString(),
+      monthlyPrice: room.monthlyPrice,
+      password,
+    },
   };
 }

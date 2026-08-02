@@ -6,6 +6,8 @@ import { PushToggle } from "@/components/PushToggle";
 import { PhoneEditForm } from "./PhoneEditForm";
 import { NotifPrefsForm } from "./NotifPrefsForm";
 import { DefaultSignatureForm } from "./DefaultSignatureForm";
+import { ChangePasswordForm } from "./ChangePasswordForm";
+import { ChangeEmailForm } from "./ChangeEmailForm";
 import { getMyNotifPrefs } from "./actions";
 
 export default async function ProfilePage() {
@@ -63,6 +65,22 @@ export default async function ProfilePage() {
       <div className="card">
         <h2 className="mb-3 text-lg font-semibold">Kontak WhatsApp</h2>
         <PhoneEditForm currentPhone={user.phone} />
+      </div>
+
+      <div className="card">
+        <h2 className="mb-1 text-lg font-semibold">Ubah password</h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Ganti password login Anda. Wajib isi password lama untuk konfirmasi.
+        </p>
+        <ChangePasswordForm />
+      </div>
+
+      <div className="card">
+        <h2 className="mb-1 text-lg font-semibold">Ubah email</h2>
+        <p className="mb-3 text-sm text-slate-600">
+          Ganti alamat email untuk login & notifikasi.
+        </p>
+        <ChangeEmailForm currentEmail={user.email} />
       </div>
 
       {isOwner && (
