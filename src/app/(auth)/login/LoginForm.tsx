@@ -21,14 +21,14 @@ export function LoginForm() {
     <form action={formAction} className="mt-6 space-y-4">
       <div>
         <label className="label" htmlFor="identifier">
-          Email atau username
+          Nomor HP, email, atau username
         </label>
         <input
           id="identifier"
           name="identifier"
           type="text"
           className="input"
-          placeholder="anda@email.com / admin"
+          placeholder="08xxxxxxxxxx / anda@email.com / admin"
           required
           autoFocus
           autoComplete="username"

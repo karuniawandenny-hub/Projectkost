@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { normalizeEmail, isValidEmail, verifyPassword } from "@/lib/password";
+import { normalizePhone } from "@/lib/phone";
 import { createSession } from "@/lib/session";
 import type { Role } from "@/lib/enums";
 
@@ -16,10 +17,16 @@ export async function loginAction(
   const password = String(formData.get("password") ?? "");
 
   const identifier = identifierRaw.trim();
-  if (!identifier) return { error: "Email atau username wajib diisi." };
+  if (!identifier) return { error: "HP / email / username wajib diisi." };
   if (password.length === 0) return { error: "Password wajib diisi." };
 
-  // Kalau mengandung "@" -> anggap email. Selain itu -> anggap username.
+  // Aturan lookup identifier — dicoba berurutan sampai ketemu:
+  //   1. Kalau mengandung "@" → email (path paling common untuk user
+  //      lama yang self-register).
+  //   2. Kalau bisa dinormalisasi jadi nomor HP valid → cari via
+  //      User.phone. Ini path baru untuk penghuni yang didaftarkan
+  //      pemilik (email fiktif, tidak dipakai).
+  //   3. Selain itu → username lowercase.
   const isEmail = identifier.includes("@");
   let user;
   if (isEmail) {
@@ -27,16 +34,22 @@ export async function loginAction(
     if (!isValidEmail(email)) return { error: "Email tidak valid." };
     user = await prisma.user.findUnique({ where: { email } });
   } else {
-    user = await prisma.user.findUnique({
-      where: { username: identifier.toLowerCase() },
-    });
+    const asPhone = normalizePhone(identifier);
+    if (asPhone) {
+      user = await prisma.user.findFirst({ where: { phone: asPhone } });
+    }
+    if (!user) {
+      user = await prisma.user.findUnique({
+        where: { username: identifier.toLowerCase() },
+      });
+    }
   }
 
   // Jangan beritahu apakah identifier ada — cegah enumerasi akun.
-  if (!user) return { error: "Email/username atau password salah." };
+  if (!user) return { error: "Kredensial salah." };
 
   const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return { error: "Email/username atau password salah." };
+  if (!ok) return { error: "Kredensial salah." };
 
   if (user.status === "PENDING") {
     // TENANT yang PENDING masih boleh login agar bisa onboarding / lihat

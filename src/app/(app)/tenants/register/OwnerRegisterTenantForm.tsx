@@ -13,6 +13,8 @@ export type KosOption = {
 
 const initialState: OwnerRegisterTenantState = {};
 
+const DEFAULT_PASSWORD = "baitikos";
+
 function rupiah(n: number) {
   return "Rp " + n.toLocaleString("id-ID");
 }
@@ -25,7 +27,6 @@ export function OwnerRegisterTenantForm({
   const router = useRouter();
   const [state, action] = useFormState(ownerRegisterTenant, initialState);
 
-  // Kalau sukses, tampilkan panel success + tombol "Daftarkan lagi" / "Ke daftar".
   if (state.success) {
     return (
       <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-4">
@@ -36,6 +37,26 @@ export function OwnerRegisterTenantForm({
               Penghuni berhasil didaftarkan
             </h2>
             <p className="mt-1 text-sm text-emerald-800">{state.success}</p>
+            <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              <div className="font-semibold">Langkah selanjutnya:</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                <li>
+                  Beritahu penghuni: login pakai nomor HP-nya, password{" "}
+                  <code className="rounded bg-white px-1 font-mono">
+                    {DEFAULT_PASSWORD}
+                  </code>
+                </li>
+                <li>
+                  Foto KTP + selfie belum ada — bisa upload nanti dari halaman
+                  /tenants (oleh Anda) atau penghuni upload sendiri via
+                  /onboarding.
+                </li>
+                <li>
+                  Sarankan penghuni ganti password di /profile setelah login
+                  pertama.
+                </li>
+              </ul>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -74,8 +95,6 @@ function RegisterFormFields({
     kosOptions[0]?.id ?? ""
   );
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
-  const [ktpFileName, setKtpFileName] = useState<string>("");
-  const [selfieFileName, setSelfieFileName] = useState<string>("");
 
   const rooms = useMemo(
     () => kosOptions.find((k) => k.id === selectedKosId)?.rooms ?? [],
@@ -86,7 +105,6 @@ function RegisterFormFields({
     [rooms, selectedRoomId]
   );
 
-  // Default tanggal hari ini (YYYY-MM-DD).
   const todayIso = new Date().toISOString().slice(0, 10);
 
   return (
@@ -119,113 +137,44 @@ function RegisterFormFields({
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Email login <span className="text-red-600">*</span>
-            </label>
-            <input
-              name="email"
-              type="email"
-              required
-              className="input mt-1 h-10 w-full"
-              placeholder="penghuni@contoh.com"
-              autoComplete="off"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Kalau penghuni tidak punya email, buatkan email fiktif (mis.
-              nama.hpxxx@kosbaiti.local) — yang penting unik.
-            </p>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Nomor HP <span className="text-red-600">*</span>
-            </label>
-            <input
-              name="phone"
-              type="tel"
-              required
-              className="input mt-1 h-10 w-full"
-              placeholder="08xxxxxxxxxx"
-              autoComplete="off"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Dipakai untuk reminder pembayaran via WhatsApp.
-            </p>
-          </div>
+        <div>
+          <label className="text-sm font-medium text-slate-700">
+            Nomor HP (WhatsApp aktif) <span className="text-red-600">*</span>
+          </label>
+          <input
+            name="phone"
+            type="tel"
+            required
+            className="input mt-1 h-10 w-full"
+            placeholder="08xxxxxxxxxx"
+            autoComplete="off"
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Nomor ini dipakai untuk login penghuni & reminder pembayaran via
+            WhatsApp. Wajib nomor aktif.
+          </p>
         </div>
 
         <div>
           <label className="text-sm font-medium text-slate-700">
-            Password login <span className="text-red-600">*</span>
+            Password login
           </label>
           <input
             name="password"
             type="text"
             required
-            minLength={8}
+            minLength={4}
+            defaultValue={DEFAULT_PASSWORD}
             className="input mt-1 h-10 w-full font-mono"
-            placeholder="min 8 karakter"
             autoComplete="off"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Anda yang tentukan. Beritahu penghuni secara langsung/verbal supaya
-            mereka bisa login. Penghuni bisa ganti password nanti di /profile.
+            Default: <code className="rounded bg-slate-100 px-1">
+              {DEFAULT_PASSWORD}
+            </code>{" "}
+            (bisa Anda ubah). Sarankan penghuni untuk mengganti password
+            sendiri di /profile setelah login pertama.
           </p>
-        </div>
-      </fieldset>
-
-      {/* ===== Dokumen ===== */}
-      <fieldset className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
-        <legend className="px-2 text-sm font-semibold text-slate-700">
-          Dokumen (wajib)
-        </legend>
-        <p className="text-xs text-slate-600">
-          Foto KTP fisik penghuni + foto selfie penghuni saat mereka datang.
-          Anda bisa langsung ambil foto pakai kamera HP di form ini.
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Foto KTP <span className="text-red-600">*</span>
-            </label>
-            <input
-              name="ktp"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              required
-              onChange={(e) => setKtpFileName(e.target.files?.[0]?.name ?? "")}
-              className="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-            />
-            {ktpFileName && (
-              <p className="mt-1 text-xs text-emerald-700">✓ {ktpFileName}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-slate-700">
-              Foto selfie <span className="text-red-600">*</span>
-            </label>
-            <input
-              name="selfie"
-              type="file"
-              accept="image/*"
-              capture="user"
-              required
-              onChange={(e) =>
-                setSelfieFileName(e.target.files?.[0]?.name ?? "")
-              }
-              className="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-            />
-            {selfieFileName && (
-              <p className="mt-1 text-xs text-emerald-700">
-                ✓ {selfieFileName}
-              </p>
-            )}
-          </div>
         </div>
       </fieldset>
 
@@ -295,8 +244,7 @@ function RegisterFormFields({
               className="input mt-1 h-10 w-full"
             />
             <p className="mt-1 text-xs text-slate-500">
-              Tagihan bulanan otomatis dibuat mulai tanggal ini. Jatuh tempo
-              tiap bulan ikut hari yang sama.
+              Tagihan bulanan otomatis dibuat mulai tanggal ini.
             </p>
           </div>
 
@@ -311,6 +259,15 @@ function RegisterFormFields({
           )}
         </div>
       </fieldset>
+
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+        <div className="font-semibold">Catatan tentang dokumen:</div>
+        <p className="mt-1">
+          Foto KTP + selfie <strong>tidak wajib</strong> saat mendaftarkan.
+          Bisa dilengkapi nanti — oleh Anda di halaman /tenants, atau oleh
+          penghuni sendiri via halaman /onboarding.
+        </p>
+      </div>
 
       <SubmitButton />
     </form>

@@ -619,14 +619,17 @@ export type OwnerRegisterTenantState = { error?: string; success?: string };
  * mulai kontrak. All-in-one — cocok untuk penghuni "gaptek" yang tidak
  * bisa self-register.
  *
- * Alur:
- *  1. Owner isi form: nama, email, password, HP, KTP+selfie, kamar,
- *     tanggal mulai.
- *  2. Server buat User (role TENANT, status ACTIVE, onboardedAt=now),
- *     create Tenancy ACTIVE, ubah Room ke OCCUPIED, generate tagihan
- *     pertama — semua dalam satu transaksi.
- *  3. Kirim welcome email + WA (tanpa password — password di-share
- *     verbal oleh owner sesuai keputusan design).
+ * Design decisions:
+ *  - HP wajib (dipakai sebagai identity login) & harus unik antar user.
+ *  - Email auto-generate dari HP: `<phone>@baitikos.local`. Owner
+ *    tidak perlu isi email; tenant login pakai HP.
+ *  - Password default = "baitikos" (dari form). Owner boleh ubah, tapi
+ *    default-nya seragam supaya owner mudah share verbal.
+ *  - KTP + selfie TIDAK wajib di step ini — bisa dilengkapi nanti oleh
+ *    owner (via /tenants) atau tenant sendiri (via /onboarding).
+ *  - onboardedAt di-set null: kelengkapan dokumen belum selesai.
+ *  - Tenancy langsung ACTIVE + Room langsung OCCUPIED — owner tidak
+ *    perlu approve lagi.
  */
 export async function ownerRegisterTenant(
   _prev: OwnerRegisterTenantState,
@@ -635,17 +638,14 @@ export async function ownerRegisterTenant(
   const me = await requireOwnerOrAdmin();
 
   const name = String(formData.get("name") ?? "").trim();
-  const emailRaw = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   const roomId = String(formData.get("roomId") ?? "");
   const startDateRaw = String(formData.get("startDate") ?? "").trim();
 
-  // Validasi field text.
+  // Validasi field.
   if (name.length < 2) return { error: "Nama wajib diisi (min 2 karakter)." };
-  const email = normalizeEmail(emailRaw);
-  if (!isValidEmail(email)) return { error: "Email tidak valid." };
-  if (password.length < 8) return { error: "Password minimal 8 karakter." };
+  if (password.length < 4) return { error: "Password minimal 4 karakter." };
   if (!phoneRaw) return { error: "Nomor HP wajib diisi." };
   const phone = normalizePhone(phoneRaw);
   if (!phone) {
@@ -664,21 +664,36 @@ export async function ownerRegisterTenant(
     parsed.getDate()
   );
 
-  // Validasi KTP + selfie sebelum apapun. Sama seperti register self-
-  // service tenant — akun penghuni tidak pernah dibuat tanpa dokumen
-  // lengkap.
-  const ktp = formData.get("ktp");
-  const selfie = formData.get("selfie");
-  if (!(ktp instanceof File) || ktp.size === 0) {
-    return { error: "Foto KTP wajib diupload." };
-  }
-  if (!(selfie instanceof File) || selfie.size === 0) {
-    return { error: "Foto selfie penghuni wajib diupload." };
+  // Cek HP tidak dipakai user lain — HP jadi identity login, harus unik.
+  const existingByPhone = await prisma.user.findFirst({
+    where: { phone },
+    select: { id: true, name: true, role: true },
+  });
+  if (existingByPhone) {
+    return {
+      error: `Nomor HP ini sudah terdaftar atas nama ${existingByPhone.name}. Gunakan nomor lain atau minta pemilik lain hapus akun tersebut.`,
+    };
   }
 
-  // Cek email tidak duplikat.
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return { error: "Email sudah terdaftar. Gunakan email lain." };
+  // Auto-generate email dari HP supaya schema tetap konsisten (email
+  // NOT NULL + UNIQUE). Owner tidak perlu isi. Format:
+  // <phone-tanpa-simbol>@baitikos.local — deterministic & unik selama
+  // phone unik.
+  const email = normalizeEmail(`${phone.replace(/[^0-9]/g, "")}@baitikos.local`);
+  if (!isValidEmail(email)) {
+    // Practically impossible sinced phone sudah lolos normalizePhone,
+    // tapi guard tetap ada untuk defensive.
+    return { error: "Gagal generate email dari HP. Cek format nomor HP." };
+  }
+
+  // Kalau ada race condition atau data legacy, email auto-generated
+  // mungkin sudah dipakai (mis. dari registrasi owner sebelumnya).
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    return {
+      error: `Nomor HP ini sudah pernah didaftarkan (email otomatis ${email} sudah ada). Coba refresh atau hubungi admin.`,
+    };
+  }
 
   // Cek kamar valid & owned by this owner + belum terisi.
   const room = await prisma.room.findFirst({
@@ -690,31 +705,11 @@ export async function ownerRegisterTenant(
   if (!room) return { error: "Kamar tidak ditemukan / bukan milik Anda." };
   if (room.status === "OCCUPIED") return { error: "Kamar sudah terisi." };
 
-  // Upload dokumen DULU sebelum create user, sama pattern seperti
-  // register self-service. Kalau upload sukses tapi create user gagal
-  // (mis. race email unique), cleanup file yatim.
-  const tempKey = `by-owner-${Date.now()}-${email
-    .replace(/[^a-zA-Z0-9]/g, "_")
-    .slice(0, 20)}`;
-  let ktpUrl: string | null = null;
-  let selfieUrl: string | null = null;
-  try {
-    ktpUrl = await saveUploadedFile(ktp, `users/${tempKey}/ktp`);
-    selfieUrl = await saveUploadedFile(selfie, `users/${tempKey}/selfie`);
-  } catch (e) {
-    await deleteUploadsByUrls([ktpUrl, selfieUrl]);
-    return {
-      error: e instanceof Error ? e.message : "Gagal upload dokumen. Coba lagi.",
-    };
-  }
-
   const passwordHash = await hashPassword(password);
-  const now = new Date();
 
   // Bikin user + tenancy + occupy room dalam satu interactive
-  // transaction. Interactive (callback) diperlukan supaya bisa chain
-  // hasil user.id ke tenancy.create — array-form $transaction tidak
-  // support cross-step reference.
+  // transaction. onboardedAt di-set null: dokumen belum lengkap,
+  // owner atau tenant lengkapi nanti.
   let created: { user: { id: string; name: string }; tenancyId: string };
   try {
     created = await prisma.$transaction(async (tx) => {
@@ -726,9 +721,10 @@ export async function ownerRegisterTenant(
           role: "TENANT",
           status: "ACTIVE",
           phone,
-          ktpPhotoUrl: ktpUrl,
-          selfiePhotoUrl: selfieUrl,
-          onboardedAt: now,
+          // KTP + selfie sengaja null — akan diupload nanti.
+          ktpPhotoUrl: null,
+          selfiePhotoUrl: null,
+          onboardedAt: null,
         },
       });
       const tenancy = await tx.tenancy.create({
@@ -745,11 +741,10 @@ export async function ownerRegisterTenant(
       return { user: { id: user.id, name: user.name }, tenancyId: tenancy.id };
     });
   } catch (e) {
-    await deleteUploadsByUrls([ktpUrl, selfieUrl]);
     return {
       error:
         e instanceof Error && e.message.includes("Unique")
-          ? "Email sudah terdaftar. Gunakan email lain."
+          ? "Data sudah terdaftar (kemungkinan HP atau email bentrok). Coba lagi."
           : "Gagal membuat akun penghuni. Coba lagi.",
     };
   }
@@ -799,12 +794,8 @@ export async function ownerRegisterTenant(
     monthlyPrice: room.monthlyPrice,
     loginUrl: `${originFromHeaders()}/login`,
   };
-  try {
-    await sendTenantAssignedEmail(email, welcomeParams);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("[ownerRegisterTenant] welcome email gagal:", e);
-  }
+  // Skip email — email fiktif (@baitikos.local), tidak ada inbox nyata.
+  // WA lewat karena phone sudah divalidasi & real.
   try {
     await sendWAWithTemplate({
       phone,
@@ -833,6 +824,6 @@ export async function ownerRegisterTenant(
   revalidatePath("/admin/users");
 
   return {
-    success: `${created.user.name} berhasil didaftarkan & ditempatkan di ${room.kos.name} - Kamar ${room.name}. Beritahu penghuni untuk login pakai email ${email} dan password yang Anda set.`,
+    success: `${created.user.name} berhasil didaftarkan & ditempatkan di ${room.kos.name} - Kamar ${room.name}. Beritahu penghuni untuk login pakai nomor HP ${phone} dan password yang Anda set (default: "baitikos").`,
   };
 }
